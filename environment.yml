@@ -2,21 +2,21 @@ name: qute
 
 channels:
   - pytorch
-  - fastchan
   - defaults
 
 dependencies:
-  - python=3.9
-  - pip>=21.0
-  - tifffile>=2021.3.5
-  - cudatoolkit=11.3
+  - python=3.10
+  - pip
+  - natsort
+  - tifffile
   - pytorch::pytorch
   - pytorch::torchvision
   - pytorch::torchaudio
-  - fastchan::fastai
-
+  - cudatoolkit=11.3
+  - pyyaml
   - pip:
       - pytorch-lightning
       - lightning-bolts
+      - lightning-flash[image]
       - monai
 
