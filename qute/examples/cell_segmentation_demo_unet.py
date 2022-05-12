@@ -64,8 +64,12 @@ if __name__ == "__main__":
     predict_out_folder = data_module.data_dir / f"predictions_{now}"
     predict_out_folder.mkdir(parents=True, exist_ok=True)
 
-    for filename, prediction in zip(data_module.test_labels, predictions):
-        out_filename = predict_out_folder / f"predict_{filename.name}"
-        imwrite(out_filename, prediction.cpu().detach().numpy())
+    i = 0
+    for prediction_batch in predictions:
+        prediction_batch_cpu = prediction_batch.cpu().detach().numpy()
+        for j in range(prediction_batch_cpu.shape[0]):
+            out_filename = predict_out_folder / f"prediction_{data_module.test_labels[i].name}"
+            imwrite(out_filename, prediction_batch_cpu[j])
+            i += 1
 
-    print(f"Saved {len(predictions)} images to {predict_out_folder}.")
+    print(f"Saved {i} images to {predict_out_folder}.")
