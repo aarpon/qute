@@ -1,4 +1,4 @@
-name: qute
+name: qute-env
 
 channels:
   - pytorch

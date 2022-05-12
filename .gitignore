@@ -1,3 +1,5 @@
+/.vscode/
 /.idea/
-/lightning_logs/
+/qute.egg-info/
+lightning_logs/
 __pycache__/

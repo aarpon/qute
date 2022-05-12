@@ -17,19 +17,30 @@ from zipfile import ZipFile
 import requests
 
 
-def get_cell_segmentation_dataset(root_data_dir: Union[Path, str] = None, three_classes: bool = True):
+def get_cell_segmentation_dataset(download_dir: Union[Path, str] = None, three_classes: bool = True):
     """If not yet present, download and expands segmentation demo dataset.
-    @param: three_classes = bool
+    
+    Parameters
+    ----------
+
+    download_dir: Path | str = Path()
+        Directory where the cell segmentation datasets will be downloaded and extracted.
+
+    three_classes = bool
         If True, the segmentation demo with three classes (Background, Object, Border) will be downloaded;
         if False, the segmentation demo with two classes (Background, Object).
-    Return path of the extracted segmentation demo dataset.
+    
+    Returns
+    -------
+
+    path: Path of the extracted segmentation demo dataset.
     """
 
     # Data folder
-    if root_data_dir is None:
+    if download_dir is None:
         data_folder = Path.home() / ".qute" / "data"
     else:
-        data_folder = Path(root_data_dir).resolve()
+        data_folder = Path(download_dir).resolve()
 
     # Make sure the folder exists
     data_folder.mkdir(parents=True, exist_ok=True)
@@ -87,16 +98,30 @@ def get_cell_segmentation_dataset(root_data_dir: Union[Path, str] = None, three_
     return demo_folder
 
 
-def get_cell_restoration_dataset(root_data_dir: Union[Path, str] = None):
+def get_cell_restoration_dataset(download_dir: Union[Path, str] = None):
     """If not yet present, download and expands restoration demo dataset.
-    Return path of the extracted restoration demo dataset.
+    
+    Parameters
+    ----------
+
+    download_dir: Path | str = Path()
+        Directory where the cell segmentation datasets will be downloaded and extracted.
+
+    three_classes = bool
+        If True, the segmentation demo with three classes (Background, Object, Border) will be downloaded;
+        if False, the segmentation demo with two classes (Background, Object).
+    
+    Returns
+    -------
+
+    path: Path of the extracted restoration demo dataset.
     """
 
     # Data folder
-    if root_data_dir is None:
+    if download_dir is None:
         data_folder = Path.home() / ".qute" / "data"
     else:
-        data_folder = Path(root_data_dir).resolve()
+        data_folder = Path(download_dir).resolve()
 
     # Make sure the folder exists
     data_folder.mkdir(parents=True, exist_ok=True)
