@@ -2,6 +2,7 @@ name: qute-env
 
 channels:
   - pytorch
+  - conda-forge
   - defaults
 
 dependencies:
@@ -13,10 +14,12 @@ dependencies:
   - pytorch::torchvision
   - pytorch::torchaudio
   - cudatoolkit=11.3
+  - conda-forge::pytorch-lightning
+  - conda-forge::torchmetrics
+  - conda-forge::lightning-flash[image]
   - pyyaml
+  - pdoc3
   - pip:
-      - pytorch-lightning
       - lightning-bolts
-      - lightning-flash[image]
       - monai
 
