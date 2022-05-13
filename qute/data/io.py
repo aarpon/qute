@@ -17,7 +17,7 @@ from zipfile import ZipFile
 import requests
 
 
-def get_cell_segmentation_dataset(download_dir: Union[Path, str] = None, three_classes: bool = True):
+def get_cell_segmentation_demo_dataset(download_dir: Union[Path, str] = None, three_classes: bool = True):
     """If not yet present, download and expands segmentation demo dataset.
     
     Parameters
@@ -98,7 +98,7 @@ def get_cell_segmentation_dataset(download_dir: Union[Path, str] = None, three_c
     return demo_folder
 
 
-def get_cell_restoration_dataset(download_dir: Union[Path, str] = None):
+def get_cell_restoration_demo_dataset(download_dir: Union[Path, str] = None):
     """If not yet present, download and expands restoration demo dataset.
     
     Parameters

@@ -8,3 +8,4 @@
 #   Contributors:
 #       Aaron Ponti - initial API and implementation
 #  ******************************************************************************/
+__doc__ = """Example scripts."""

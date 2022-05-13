@@ -15,6 +15,7 @@ import pytorch_lightning as pl
 from monai.networks.nets import UNet as MonaiUNet
 from monai.losses import GeneralizedDiceLoss
 from torch.optim import AdamW
+import torchmetrics
 
 
 class UNet(pl.LightningModule):
@@ -28,11 +29,14 @@ class UNet(pl.LightningModule):
             channels: tuple = (16, 32, 64, 128),
             strides: tuple = (2, 2, 2),
             criterion=GeneralizedDiceLoss(
-                include_background=True,
+                include_background=False,
                 to_onehot_y=True,
                 softmax=True,
                 batch=True
             ),
+            metrics=torchmetrics.JaccardIndex(
+                num_classes=3,
+                ignore_index=0),
             learning_rate: float = 1e-2,
             optimizer_class=AdamW,
             num_res_units: int = 0
@@ -56,10 +60,17 @@ class UNet(pl.LightningModule):
             Number of neuron per layer.
 
         strides: tuple = (2, 2, 2)
-            Strides for downsampling.
+            Strides for down-sampling.
 
-        criterion=GeneralizedDiceLoss(include_background=True, to_onehot_y=True, softmax=True, batch=True)
+        criterion: GeneralizedDiceLoss(include_background=False, to_onehot_y=True, softmax=True, batch=True)
             Loss function. Please NOTE: the loss function must convert `y` to OneHot and apply softmax.
+            The default loss function applies to a multi-label target where the background class is omitted.
+
+        metrics: JaccardIndex(num_classes=3, ignore_index=0)
+            Metrics used for training, validation, and testing. Set to None to omit.
+
+            The default metrics applies to a three-label target where the background (index = 0) class
+            is omitted from calculation.
 
         learning_rate: float = 1e-2
             Learning rate for optimization.
@@ -74,6 +85,7 @@ class UNet(pl.LightningModule):
         super().__init__()
 
         self.criterion = criterion
+        self.metrics = metrics
         self.lr = learning_rate
         self.optimizer_class = optimizer_class
         self.net = MonaiUNet(
@@ -84,7 +96,7 @@ class UNet(pl.LightningModule):
             strides=strides,
             num_res_units=num_res_units
         )
-        self.save_hyperparameters(ignore=["criterion"])
+        self.save_hyperparameters(ignore=["criterion", "metrics"])
 
     def configure_optimizers(self):
         """Configure and return the optimizer."""
@@ -97,6 +109,8 @@ class UNet(pl.LightningModule):
         y_hat = self.net(x)
         loss = self.criterion(y_hat, y)
         self.log('train_loss', loss, prog_bar=True)
+        if self.metrics is not None:
+            self.log('train_metric', self.metrics(y_hat, y), on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -105,6 +119,8 @@ class UNet(pl.LightningModule):
         y_hat = self.net(x)
         loss = self.criterion(y_hat, y)
         self.log('val_loss', loss)
+        if self.metrics is not None:
+            self.log('val_metric', self.metrics(y_hat, y), on_step=False, on_epoch=True)
         return loss
 
     def test_step(self, batch, batch_idx):
@@ -113,11 +129,13 @@ class UNet(pl.LightningModule):
         y_hat = self.net(x)
         loss = self.criterion(y_hat, y)
         self.log('test_loss', loss)
+        if self.metrics is not None:
+            self.log('test_metric', self.metrics(y_hat, y), on_step=False, on_epoch=True)
         return loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
-        """The predict step creates a label image from the ouput one-hot tensor."""
-        x, y = batch
+        """The predict step creates a label image from the output one-hot tensor."""
+        x, _ = batch
         y_hat = self.net(x)
         label = y_hat.argmax(axis=1)
         return label

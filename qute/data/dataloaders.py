@@ -10,7 +10,7 @@ from torchvision import transforms
 import yaml
 
 from qute.data.datasets import ImageLabelDataset
-from qute.data.io import get_cell_segmentation_dataset
+from qute.data.io import get_cell_segmentation_demo_dataset
 import os
 
 from qute.transforms import MinMaxNormalize
@@ -363,7 +363,7 @@ class CellSegmentationDemo(DataModuleLocalFolder):
         """Prepare the data on main thread."""
 
         # Download and extract the demo dataset if needed.
-        get_cell_segmentation_dataset(self.download_dir, three_classes=self.three_classes)
+        get_cell_segmentation_demo_dataset(self.download_dir, three_classes=self.three_classes)
 
     def setup(self, stage):
         """Set up data on each GPU."""

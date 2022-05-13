@@ -1,0 +1,1122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.8.1" />
+<title>qute.data.dataloaders API documentation</title>
+<meta name="description" content="" />
+<link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
+<link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" rel="stylesheet">
+<style>.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}#sidebar > *:last-child{margin-bottom:2cm}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{margin-top:.6em;font-weight:bold}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary,.git-link-div{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase}.source summary > *{white-space:nowrap;cursor:pointer}.git-link{color:inherit;margin-left:1em}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%;height:100vh;overflow:auto;position:sticky;top:0}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>qute.data.dataloaders</code></h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">from typing import Optional
+from pathlib import Path
+from natsort import natsorted
+import numpy as np
+from numpy.random import default_rng
+import time
+import pytorch_lightning as pl
+from torch.utils.data import DataLoader
+from torchvision import transforms
+import yaml
+
+from qute.data.datasets import ImageLabelDataset
+from qute.data.io import get_cell_segmentation_demo_dataset
+import os
+
+from qute.transforms import MinMaxNormalize
+
+
+class DataModuleLocalFolder(pl.LightningDataModule):
+    &#34;&#34;&#34;DataLoader for local folder containing &#39;images&#39; and &#39;labels&#39; sub-folders.&#34;&#34;&#34;
+
+    def __init__(
+            self,
+            data_dir: Path | str = Path(),
+            num_classes: int = 3,
+            train_fraction: float = 0.7,
+            valid_fraction: float = 0.2,
+            test_fraction: float = 0.1,
+            batch_size: int = 8,
+            patch_size: tuple = (512, 512),
+            num_patches: int = 1,
+            images_transform: Optional[list] = None,
+            labels_transform: Optional[list] = None,
+            images_sub_folder: str = &#34;images&#34;,
+            labels_sub_folder: str = &#34;labels&#34;,
+            seed: int = 42,
+            num_workers: int = os.cpu_count(),
+            pin_memory: bool = True
+    ):
+        &#34;&#34;&#34;
+        Constructor.
+    
+        Parameters
+        ----------
+
+        data_dir: Path | str = Path()
+            Data directory, containing two sub-folders &#34;images&#34; and &#34;labels&#34;. The subfolder names can be overwritten.
+
+        num_classes: int = 3
+            Number of output classes (labels).
+        
+        train_fraction: float = 0.7
+            Fraction of images and corresponding labels that go into the training set.
+
+        valid_fraction: float = 0.2
+            Fraction of images and corresponding labels that go into the validation set.
+
+        test_fraction: float = 0.1
+            Fraction of images and corresponding labels that go into the test set.
+            
+        batch_size: int = 8
+            Size of one batch of image pairs.
+
+        patch_size: tuple = (512, 512)
+            Size of the patch to be extracted (at random positions) from images and labels.
+
+        num_patches: int = 1
+            Number of patches to be extracted from images and labels.
+            PLEASE NOTE: this is currently hard-coded to 1.
+
+        images_transform: Optional[list] = None
+            Transforms to to be applied to the images. If omitted some default transforms will be applied.
+
+        labels_transform: Optional[list] = None
+            Transforms to to be applied to the labels. If omitted some default transforms will be applied.
+
+        images_sub_folder: str = &#34;images&#34;
+            Name of the images sub-folder. It can be used to override the default &#34;images&#34;.
+            
+        labels_sub_folder: str = &#34;labels&#34;
+            Name of the labels sub-folder. It can be used to override the default &#34;labels&#34;.
+
+        seed: int = 42
+            Seed for all random number generators.
+
+        num_workers: int = os.cpu_count()
+            Number of workers to be used in the data loaders.
+
+        pin_memory: bool = True
+            Whether to pin the GPU memory.   
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.data_dir = Path(data_dir).resolve()
+        self.batch_size = batch_size
+        self.patch_size = patch_size
+        self.num_patches = num_patches
+
+        self.num_workers = num_workers
+        self.pin_memory = pin_memory
+
+        self.num_classes = num_classes
+
+        # Set the subfolder names
+        self.images_sub_folder = images_sub_folder
+        self.labels_sub_folder = labels_sub_folder
+
+        # Set the transforms is any are passed
+        self.images_transform = None
+        if images_transform is not None:
+            self.images_transform = images_transform
+        self.labels_transform = None
+        if labels_transform is not None:
+            self.labels_transform = labels_transform
+
+        # Set the seed
+        if seed is None:
+            seed = time.time_ns()
+        self.seed = seed
+
+        # Metadata
+        self.metadata = {}
+
+        # Make sure the fractions add to 1.0
+        total = train_fraction + valid_fraction + test_fraction
+        self.train_fraction = train_fraction / total
+        self.valid_fraction = valid_fraction / total
+        self.test_fraction = test_fraction / total
+
+        # Declare lists of training, validation, and testing images and labels
+        self.images = []
+        self.labels = []
+
+        # Keep track of the file names of the training, validation, and testing sets
+        self.train_images = []
+        self.train_labels = []
+        self.valid_images = []
+        self.valid_labels = []
+        self.test_images = []
+        self.test_labels = []
+
+        # Declare datasets
+        self.train_dataset = None
+        self.valid_dataset = None
+        self.test_dataset = None
+
+    def setup(self, stage):
+        &#34;&#34;&#34;Prepare the data once.&#34;&#34;&#34;
+
+        if self.train_dataset is not None and self.valid_dataset is not None and self.test_dataset is not None:
+            # Data is already prepared
+            return
+
+        # Scan the &#34;images&#34; and &#34;labels&#34; folders
+        self.images = natsorted(list((self.data_dir / self.images_sub_folder).glob(&#34;*.tif&#34;)))
+        self.labels = natsorted(list((self.data_dir / self.labels_sub_folder).glob(&#34;*.tif&#34;)))
+
+        # Parse the metadata file
+        with open(self.data_dir / &#34;metadata.yaml&#34;) as f:
+            self.metadata = yaml.load(f, Loader=yaml.FullLoader)
+
+        # Check that we found some images
+        if len(self.images) == 0:
+            raise Exception(&#34;Could not find any images to process.&#34;)
+
+        # Check that there are as many images as labels
+        if len(self.images) != len(self.labels):
+            raise Exception(&#34;The number of images does not match the number of labels.&#34;)
+
+        # Shuffle a copy of the file names
+        rng = default_rng(seed=self.seed)
+        shuffled_indices = rng.permutation(len(self.images))
+        shuffled_images = np.array(self.images.copy())[shuffled_indices].tolist()
+        shuffled_labels = np.array(self.labels.copy())[shuffled_indices].tolist()
+
+        # Partition images and labels into training, validation and testing datasets
+        train_len = round(self.train_fraction * len(shuffled_images))
+        len_rest = len(shuffled_images) - train_len
+        updated_valid_fraction = self.valid_fraction / (self.valid_fraction + self.test_fraction)
+        valid_len = round(updated_valid_fraction * len_rest)
+        test_len = len_rest - valid_len
+
+        # Split the sets
+        self.train_images = shuffled_images[:train_len]
+        self.train_labels = shuffled_labels[:train_len]
+        self.valid_images = shuffled_images[train_len:-test_len]
+        self.valid_labels = shuffled_labels[train_len:-test_len]
+        self.test_images = shuffled_images[-test_len:]
+        self.test_labels = shuffled_labels[-test_len:]
+
+        assert len(self.train_images) + len(self.valid_images) + len(self.test_images) == len(shuffled_images), \
+            &#34;Something went wrong with the partitioning!&#34;
+
+        # If no transforms are set, put the defaults here
+        if self.images_transform is None:
+            self.images_transform = transforms.Compose([
+                transforms.ToTensor(),
+                MinMaxNormalize(
+                    min_intensity=self.metadata[&#34;min_intensity&#34;],
+                    max_intensity=self.metadata[&#34;max_intensity&#34;]
+                )
+            ])
+
+        if self.labels_transform is None:
+            self.labels_transform = transforms.Compose([
+                transforms.ToTensor()
+            ])
+
+        # Create the training dataset
+        self.train_dataset = ImageLabelDataset(
+            self.train_images,
+            self.train_labels,
+            patch_size=self.patch_size,
+            num_patches=self.num_patches,
+            transform=self.images_transform,
+            target_transform=self.labels_transform
+        )
+
+        # Create the validation dataset
+        self.valid_dataset = ImageLabelDataset(
+            self.valid_images,
+            self.valid_labels,
+            patch_size=self.patch_size,
+            num_patches=self.num_patches,
+            transform=self.images_transform,
+            target_transform=self.labels_transform
+        )
+
+        # Create the testing dataset
+        self.test_dataset = ImageLabelDataset(
+            self.test_images,
+            self.test_labels,
+            patch_size=self.patch_size,
+            num_patches=self.num_patches,
+            transform=self.images_transform,
+            target_transform=self.labels_transform
+        )
+
+    def train_dataloader(self):
+        &#34;&#34;&#34;Return DataLoader for Training data.&#34;&#34;&#34;
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory
+        )
+
+    def val_dataloader(self):
+        &#34;&#34;&#34;Return DataLoader for Validation data.&#34;&#34;&#34;
+        return DataLoader(
+            self.valid_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory
+        )
+
+    def test_dataloader(self):
+        &#34;&#34;&#34;Return DataLoader for Testing data.&#34;&#34;&#34;
+        return DataLoader(
+            self.test_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory
+        )
+
+
+class CellSegmentationDemo(DataModuleLocalFolder):
+    &#34;&#34;&#34;DataLoader for the Cell Segmentation Demo.&#34;&#34;&#34;
+
+    def __init__(
+            self,
+            download_dir: Path | str = Path.home() / &#34;.qute&#34; / &#34;data&#34;,
+            three_classes: bool = True,
+            train_fraction: float = 0.7,
+            valid_fraction: float = 0.2,
+            test_fraction: float = 0.1,
+            batch_size: int = 8,
+            patch_size: tuple = (512, 512),
+            num_patches: int = 1,
+            images_transform: Optional[list] = None,
+            labels_transform: Optional[list] = None,
+            images_sub_folder: str = &#34;images&#34;,
+            labels_sub_folder: str = &#34;labels&#34;,
+            seed: int = 42,
+            num_workers: int = os.cpu_count(),
+            pin_memory: bool = True
+    ):
+        &#34;&#34;&#34;
+        Constructor.
+    
+        Parameters
+        ----------
+
+        download_dir: Path | str = Path()
+            Directory where the cell segmentation datasets will be downloaded and extracted.
+
+        three_classes: bool = True
+            Whether to download and extract the demo dataset with 3 labels (classes), or the one with two.
+        
+        train_fraction: float = 0.7
+            Fraction of images and corresponding labels that go into the training set.
+
+        valid_fraction: float = 0.2
+            Fraction of images and corresponding labels that go into the validation set.
+
+        test_fraction: float = 0.1
+            Fraction of images and corresponding labels that go into the test set.
+            
+        batch_size: int = 8
+            Size of one batch of image pairs.
+
+        patch_size: tuple = (512, 512)
+            Size of the patch to be extracted (at random positions) from images and labels.
+
+        num_patches: int = 1
+            Number of patches to be extracted from images and labels.
+            PLEASE NOTE: this is currently hard-coded to 1.
+
+        images_transform: Optional[list] = None
+            Transforms to to be applied to the images. If omitted some default transforms will be applied.
+
+        labels_transform: Optional[list] = None
+            Transforms to to be applied to the labels. If omitted some default transforms will be applied.
+
+        images_sub_folder: str = &#34;images&#34;
+            Name of the images sub-folder. It can be used to override the default &#34;images&#34;.
+            
+        labels_sub_folder: str = &#34;labels&#34;
+            Name of the labels sub-folder. It can be used to override the default &#34;labels&#34;.
+
+        seed: int = 42
+            Seed for all random number generators.
+
+        num_workers: int = os.cpu_count()
+            Number of workers to be used in the data loaders.
+
+        pin_memory: bool = True
+            Whether to pin the GPU memory.   
+        &#34;&#34;&#34;
+
+        # Download directory is parent of the actual data_dir that we pass to the parent class
+        self.download_dir = Path(download_dir).resolve()
+
+        # Make the number of classes explicit
+        self.three_classes = three_classes
+        if self.three_classes:
+            self.num_classes = 3
+        else:
+            self.num_classes = 2
+        data_dir = self.download_dir / f&#34;demo_segmentation_{self.num_classes}_classes&#34;
+
+        # Call base constructor
+        super().__init__(
+            data_dir=data_dir, num_classes=self.num_classes, train_fraction=train_fraction,
+            valid_fraction=valid_fraction, test_fraction=test_fraction, batch_size=batch_size,
+            patch_size=patch_size, num_patches=num_patches, images_transform=images_transform,
+            labels_transform=labels_transform, images_sub_folder=images_sub_folder,
+            labels_sub_folder=labels_sub_folder, seed=seed, num_workers=num_workers, 
+            pin_memory=pin_memory
+        )
+
+    def prepare_data(self):
+        &#34;&#34;&#34;Prepare the data on main thread.&#34;&#34;&#34;
+
+        # Download and extract the demo dataset if needed.
+        get_cell_segmentation_demo_dataset(self.download_dir, three_classes=self.three_classes)
+
+    def setup(self, stage):
+        &#34;&#34;&#34;Set up data on each GPU.&#34;&#34;&#34;
+        # Call parent setup()
+        return super().setup(stage)</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-classes">Classes</h2>
+<dl>
+<dt id="qute.data.dataloaders.CellSegmentationDemo"><code class="flex name class">
+<span>class <span class="ident">CellSegmentationDemo</span></span>
+<span>(</span><span>download_dir: pathlib.Path | str = PosixPath('/home/pontia/.qute/data'), three_classes: bool = True, train_fraction: float = 0.7, valid_fraction: float = 0.2, test_fraction: float = 0.1, batch_size: int = 8, patch_size: tuple = (512, 512), num_patches: int = 1, images_transform: Optional[list] = None, labels_transform: Optional[list] = None, images_sub_folder: str = 'images', labels_sub_folder: str = 'labels', seed: int = 42, num_workers: int = 8, pin_memory: bool = True)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>DataLoader for the Cell Segmentation Demo.</p>
+<p>Constructor.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>download_dir</code></strong> :&ensp;<code>Path | str = Path()</code></dt>
+<dd>Directory where the cell segmentation datasets will be downloaded and extracted.</dd>
+<dt><strong><code>three_classes</code></strong> :&ensp;<code>bool = True</code></dt>
+<dd>Whether to download and extract the demo dataset with 3 labels (classes), or the one with two.</dd>
+<dt><strong><code>train_fraction</code></strong> :&ensp;<code>float = 0.7</code></dt>
+<dd>Fraction of images and corresponding labels that go into the training set.</dd>
+<dt><strong><code>valid_fraction</code></strong> :&ensp;<code>float = 0.2</code></dt>
+<dd>Fraction of images and corresponding labels that go into the validation set.</dd>
+<dt><strong><code>test_fraction</code></strong> :&ensp;<code>float = 0.1</code></dt>
+<dd>Fraction of images and corresponding labels that go into the test set.</dd>
+<dt><strong><code>batch_size</code></strong> :&ensp;<code>int = 8</code></dt>
+<dd>Size of one batch of image pairs.</dd>
+<dt><strong><code>patch_size</code></strong> :&ensp;<code>tuple = (512, 512)</code></dt>
+<dd>Size of the patch to be extracted (at random positions) from images and labels.</dd>
+<dt><strong><code>num_patches</code></strong> :&ensp;<code>int = 1</code></dt>
+<dd>Number of patches to be extracted from images and labels.
+PLEASE NOTE: this is currently hard-coded to 1.</dd>
+<dt><strong><code>images_transform</code></strong> :&ensp;<code>Optional[list] = None</code></dt>
+<dd>Transforms to to be applied to the images. If omitted some default transforms will be applied.</dd>
+<dt><strong><code>labels_transform</code></strong> :&ensp;<code>Optional[list] = None</code></dt>
+<dd>Transforms to to be applied to the labels. If omitted some default transforms will be applied.</dd>
+<dt><strong><code>images_sub_folder</code></strong> :&ensp;<code>str = "images"</code></dt>
+<dd>Name of the images sub-folder. It can be used to override the default "images".</dd>
+<dt><strong><code>labels_sub_folder</code></strong> :&ensp;<code>str = "labels"</code></dt>
+<dd>Name of the labels sub-folder. It can be used to override the default "labels".</dd>
+<dt><strong><code>seed</code></strong> :&ensp;<code>int = 42</code></dt>
+<dd>Seed for all random number generators.</dd>
+<dt><strong><code>num_workers</code></strong> :&ensp;<code>int = os.cpu_count()</code></dt>
+<dd>Number of workers to be used in the data loaders.</dd>
+<dt><strong><code>pin_memory</code></strong> :&ensp;<code>bool = True</code></dt>
+<dd>Whether to pin the GPU memory.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class CellSegmentationDemo(DataModuleLocalFolder):
+    &#34;&#34;&#34;DataLoader for the Cell Segmentation Demo.&#34;&#34;&#34;
+
+    def __init__(
+            self,
+            download_dir: Path | str = Path.home() / &#34;.qute&#34; / &#34;data&#34;,
+            three_classes: bool = True,
+            train_fraction: float = 0.7,
+            valid_fraction: float = 0.2,
+            test_fraction: float = 0.1,
+            batch_size: int = 8,
+            patch_size: tuple = (512, 512),
+            num_patches: int = 1,
+            images_transform: Optional[list] = None,
+            labels_transform: Optional[list] = None,
+            images_sub_folder: str = &#34;images&#34;,
+            labels_sub_folder: str = &#34;labels&#34;,
+            seed: int = 42,
+            num_workers: int = os.cpu_count(),
+            pin_memory: bool = True
+    ):
+        &#34;&#34;&#34;
+        Constructor.
+    
+        Parameters
+        ----------
+
+        download_dir: Path | str = Path()
+            Directory where the cell segmentation datasets will be downloaded and extracted.
+
+        three_classes: bool = True
+            Whether to download and extract the demo dataset with 3 labels (classes), or the one with two.
+        
+        train_fraction: float = 0.7
+            Fraction of images and corresponding labels that go into the training set.
+
+        valid_fraction: float = 0.2
+            Fraction of images and corresponding labels that go into the validation set.
+
+        test_fraction: float = 0.1
+            Fraction of images and corresponding labels that go into the test set.
+            
+        batch_size: int = 8
+            Size of one batch of image pairs.
+
+        patch_size: tuple = (512, 512)
+            Size of the patch to be extracted (at random positions) from images and labels.
+
+        num_patches: int = 1
+            Number of patches to be extracted from images and labels.
+            PLEASE NOTE: this is currently hard-coded to 1.
+
+        images_transform: Optional[list] = None
+            Transforms to to be applied to the images. If omitted some default transforms will be applied.
+
+        labels_transform: Optional[list] = None
+            Transforms to to be applied to the labels. If omitted some default transforms will be applied.
+
+        images_sub_folder: str = &#34;images&#34;
+            Name of the images sub-folder. It can be used to override the default &#34;images&#34;.
+            
+        labels_sub_folder: str = &#34;labels&#34;
+            Name of the labels sub-folder. It can be used to override the default &#34;labels&#34;.
+
+        seed: int = 42
+            Seed for all random number generators.
+
+        num_workers: int = os.cpu_count()
+            Number of workers to be used in the data loaders.
+
+        pin_memory: bool = True
+            Whether to pin the GPU memory.   
+        &#34;&#34;&#34;
+
+        # Download directory is parent of the actual data_dir that we pass to the parent class
+        self.download_dir = Path(download_dir).resolve()
+
+        # Make the number of classes explicit
+        self.three_classes = three_classes
+        if self.three_classes:
+            self.num_classes = 3
+        else:
+            self.num_classes = 2
+        data_dir = self.download_dir / f&#34;demo_segmentation_{self.num_classes}_classes&#34;
+
+        # Call base constructor
+        super().__init__(
+            data_dir=data_dir, num_classes=self.num_classes, train_fraction=train_fraction,
+            valid_fraction=valid_fraction, test_fraction=test_fraction, batch_size=batch_size,
+            patch_size=patch_size, num_patches=num_patches, images_transform=images_transform,
+            labels_transform=labels_transform, images_sub_folder=images_sub_folder,
+            labels_sub_folder=labels_sub_folder, seed=seed, num_workers=num_workers, 
+            pin_memory=pin_memory
+        )
+
+    def prepare_data(self):
+        &#34;&#34;&#34;Prepare the data on main thread.&#34;&#34;&#34;
+
+        # Download and extract the demo dataset if needed.
+        get_cell_segmentation_demo_dataset(self.download_dir, three_classes=self.three_classes)
+
+    def setup(self, stage):
+        &#34;&#34;&#34;Set up data on each GPU.&#34;&#34;&#34;
+        # Call parent setup()
+        return super().setup(stage)</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="qute.data.dataloaders.DataModuleLocalFolder" href="#qute.data.dataloaders.DataModuleLocalFolder">DataModuleLocalFolder</a></li>
+<li>pytorch_lightning.core.datamodule.LightningDataModule</li>
+<li>pytorch_lightning.core.hooks.CheckpointHooks</li>
+<li>pytorch_lightning.core.hooks.DataHooks</li>
+<li>pytorch_lightning.core.mixins.hparams_mixin.HyperparametersMixin</li>
+</ul>
+<h3>Methods</h3>
+<dl>
+<dt id="qute.data.dataloaders.CellSegmentationDemo.prepare_data"><code class="name flex">
+<span>def <span class="ident">prepare_data</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Prepare the data on main thread.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def prepare_data(self):
+    &#34;&#34;&#34;Prepare the data on main thread.&#34;&#34;&#34;
+
+    # Download and extract the demo dataset if needed.
+    get_cell_segmentation_demo_dataset(self.download_dir, three_classes=self.three_classes)</code></pre>
+</details>
+</dd>
+<dt id="qute.data.dataloaders.CellSegmentationDemo.setup"><code class="name flex">
+<span>def <span class="ident">setup</span></span>(<span>self, stage)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Set up data on each GPU.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def setup(self, stage):
+    &#34;&#34;&#34;Set up data on each GPU.&#34;&#34;&#34;
+    # Call parent setup()
+    return super().setup(stage)</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="qute.data.dataloaders.DataModuleLocalFolder" href="#qute.data.dataloaders.DataModuleLocalFolder">DataModuleLocalFolder</a></b></code>:
+<ul class="hlist">
+<li><code><a title="qute.data.dataloaders.DataModuleLocalFolder.test_dataloader" href="#qute.data.dataloaders.DataModuleLocalFolder.test_dataloader">test_dataloader</a></code></li>
+<li><code><a title="qute.data.dataloaders.DataModuleLocalFolder.train_dataloader" href="#qute.data.dataloaders.DataModuleLocalFolder.train_dataloader">train_dataloader</a></code></li>
+<li><code><a title="qute.data.dataloaders.DataModuleLocalFolder.val_dataloader" href="#qute.data.dataloaders.DataModuleLocalFolder.val_dataloader">val_dataloader</a></code></li>
+</ul>
+</li>
+</ul>
+</dd>
+<dt id="qute.data.dataloaders.DataModuleLocalFolder"><code class="flex name class">
+<span>class <span class="ident">DataModuleLocalFolder</span></span>
+<span>(</span><span>data_dir: pathlib.Path | str = PosixPath('.'), num_classes: int = 3, train_fraction: float = 0.7, valid_fraction: float = 0.2, test_fraction: float = 0.1, batch_size: int = 8, patch_size: tuple = (512, 512), num_patches: int = 1, images_transform: Optional[list] = None, labels_transform: Optional[list] = None, images_sub_folder: str = 'images', labels_sub_folder: str = 'labels', seed: int = 42, num_workers: int = 8, pin_memory: bool = True)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>DataLoader for local folder containing 'images' and 'labels' sub-folders.</p>
+<p>Constructor.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>data_dir</code></strong> :&ensp;<code>Path | str = Path()</code></dt>
+<dd>Data directory, containing two sub-folders "images" and "labels". The subfolder names can be overwritten.</dd>
+<dt><strong><code>num_classes</code></strong> :&ensp;<code>int = 3</code></dt>
+<dd>Number of output classes (labels).</dd>
+<dt><strong><code>train_fraction</code></strong> :&ensp;<code>float = 0.7</code></dt>
+<dd>Fraction of images and corresponding labels that go into the training set.</dd>
+<dt><strong><code>valid_fraction</code></strong> :&ensp;<code>float = 0.2</code></dt>
+<dd>Fraction of images and corresponding labels that go into the validation set.</dd>
+<dt><strong><code>test_fraction</code></strong> :&ensp;<code>float = 0.1</code></dt>
+<dd>Fraction of images and corresponding labels that go into the test set.</dd>
+<dt><strong><code>batch_size</code></strong> :&ensp;<code>int = 8</code></dt>
+<dd>Size of one batch of image pairs.</dd>
+<dt><strong><code>patch_size</code></strong> :&ensp;<code>tuple = (512, 512)</code></dt>
+<dd>Size of the patch to be extracted (at random positions) from images and labels.</dd>
+<dt><strong><code>num_patches</code></strong> :&ensp;<code>int = 1</code></dt>
+<dd>Number of patches to be extracted from images and labels.
+PLEASE NOTE: this is currently hard-coded to 1.</dd>
+<dt><strong><code>images_transform</code></strong> :&ensp;<code>Optional[list] = None</code></dt>
+<dd>Transforms to to be applied to the images. If omitted some default transforms will be applied.</dd>
+<dt><strong><code>labels_transform</code></strong> :&ensp;<code>Optional[list] = None</code></dt>
+<dd>Transforms to to be applied to the labels. If omitted some default transforms will be applied.</dd>
+<dt><strong><code>images_sub_folder</code></strong> :&ensp;<code>str = "images"</code></dt>
+<dd>Name of the images sub-folder. It can be used to override the default "images".</dd>
+<dt><strong><code>labels_sub_folder</code></strong> :&ensp;<code>str = "labels"</code></dt>
+<dd>Name of the labels sub-folder. It can be used to override the default "labels".</dd>
+<dt><strong><code>seed</code></strong> :&ensp;<code>int = 42</code></dt>
+<dd>Seed for all random number generators.</dd>
+<dt><strong><code>num_workers</code></strong> :&ensp;<code>int = os.cpu_count()</code></dt>
+<dd>Number of workers to be used in the data loaders.</dd>
+<dt><strong><code>pin_memory</code></strong> :&ensp;<code>bool = True</code></dt>
+<dd>Whether to pin the GPU memory.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class DataModuleLocalFolder(pl.LightningDataModule):
+    &#34;&#34;&#34;DataLoader for local folder containing &#39;images&#39; and &#39;labels&#39; sub-folders.&#34;&#34;&#34;
+
+    def __init__(
+            self,
+            data_dir: Path | str = Path(),
+            num_classes: int = 3,
+            train_fraction: float = 0.7,
+            valid_fraction: float = 0.2,
+            test_fraction: float = 0.1,
+            batch_size: int = 8,
+            patch_size: tuple = (512, 512),
+            num_patches: int = 1,
+            images_transform: Optional[list] = None,
+            labels_transform: Optional[list] = None,
+            images_sub_folder: str = &#34;images&#34;,
+            labels_sub_folder: str = &#34;labels&#34;,
+            seed: int = 42,
+            num_workers: int = os.cpu_count(),
+            pin_memory: bool = True
+    ):
+        &#34;&#34;&#34;
+        Constructor.
+    
+        Parameters
+        ----------
+
+        data_dir: Path | str = Path()
+            Data directory, containing two sub-folders &#34;images&#34; and &#34;labels&#34;. The subfolder names can be overwritten.
+
+        num_classes: int = 3
+            Number of output classes (labels).
+        
+        train_fraction: float = 0.7
+            Fraction of images and corresponding labels that go into the training set.
+
+        valid_fraction: float = 0.2
+            Fraction of images and corresponding labels that go into the validation set.
+
+        test_fraction: float = 0.1
+            Fraction of images and corresponding labels that go into the test set.
+            
+        batch_size: int = 8
+            Size of one batch of image pairs.
+
+        patch_size: tuple = (512, 512)
+            Size of the patch to be extracted (at random positions) from images and labels.
+
+        num_patches: int = 1
+            Number of patches to be extracted from images and labels.
+            PLEASE NOTE: this is currently hard-coded to 1.
+
+        images_transform: Optional[list] = None
+            Transforms to to be applied to the images. If omitted some default transforms will be applied.
+
+        labels_transform: Optional[list] = None
+            Transforms to to be applied to the labels. If omitted some default transforms will be applied.
+
+        images_sub_folder: str = &#34;images&#34;
+            Name of the images sub-folder. It can be used to override the default &#34;images&#34;.
+            
+        labels_sub_folder: str = &#34;labels&#34;
+            Name of the labels sub-folder. It can be used to override the default &#34;labels&#34;.
+
+        seed: int = 42
+            Seed for all random number generators.
+
+        num_workers: int = os.cpu_count()
+            Number of workers to be used in the data loaders.
+
+        pin_memory: bool = True
+            Whether to pin the GPU memory.   
+        &#34;&#34;&#34;
+
+        super().__init__()
+        self.data_dir = Path(data_dir).resolve()
+        self.batch_size = batch_size
+        self.patch_size = patch_size
+        self.num_patches = num_patches
+
+        self.num_workers = num_workers
+        self.pin_memory = pin_memory
+
+        self.num_classes = num_classes
+
+        # Set the subfolder names
+        self.images_sub_folder = images_sub_folder
+        self.labels_sub_folder = labels_sub_folder
+
+        # Set the transforms is any are passed
+        self.images_transform = None
+        if images_transform is not None:
+            self.images_transform = images_transform
+        self.labels_transform = None
+        if labels_transform is not None:
+            self.labels_transform = labels_transform
+
+        # Set the seed
+        if seed is None:
+            seed = time.time_ns()
+        self.seed = seed
+
+        # Metadata
+        self.metadata = {}
+
+        # Make sure the fractions add to 1.0
+        total = train_fraction + valid_fraction + test_fraction
+        self.train_fraction = train_fraction / total
+        self.valid_fraction = valid_fraction / total
+        self.test_fraction = test_fraction / total
+
+        # Declare lists of training, validation, and testing images and labels
+        self.images = []
+        self.labels = []
+
+        # Keep track of the file names of the training, validation, and testing sets
+        self.train_images = []
+        self.train_labels = []
+        self.valid_images = []
+        self.valid_labels = []
+        self.test_images = []
+        self.test_labels = []
+
+        # Declare datasets
+        self.train_dataset = None
+        self.valid_dataset = None
+        self.test_dataset = None
+
+    def setup(self, stage):
+        &#34;&#34;&#34;Prepare the data once.&#34;&#34;&#34;
+
+        if self.train_dataset is not None and self.valid_dataset is not None and self.test_dataset is not None:
+            # Data is already prepared
+            return
+
+        # Scan the &#34;images&#34; and &#34;labels&#34; folders
+        self.images = natsorted(list((self.data_dir / self.images_sub_folder).glob(&#34;*.tif&#34;)))
+        self.labels = natsorted(list((self.data_dir / self.labels_sub_folder).glob(&#34;*.tif&#34;)))
+
+        # Parse the metadata file
+        with open(self.data_dir / &#34;metadata.yaml&#34;) as f:
+            self.metadata = yaml.load(f, Loader=yaml.FullLoader)
+
+        # Check that we found some images
+        if len(self.images) == 0:
+            raise Exception(&#34;Could not find any images to process.&#34;)
+
+        # Check that there are as many images as labels
+        if len(self.images) != len(self.labels):
+            raise Exception(&#34;The number of images does not match the number of labels.&#34;)
+
+        # Shuffle a copy of the file names
+        rng = default_rng(seed=self.seed)
+        shuffled_indices = rng.permutation(len(self.images))
+        shuffled_images = np.array(self.images.copy())[shuffled_indices].tolist()
+        shuffled_labels = np.array(self.labels.copy())[shuffled_indices].tolist()
+
+        # Partition images and labels into training, validation and testing datasets
+        train_len = round(self.train_fraction * len(shuffled_images))
+        len_rest = len(shuffled_images) - train_len
+        updated_valid_fraction = self.valid_fraction / (self.valid_fraction + self.test_fraction)
+        valid_len = round(updated_valid_fraction * len_rest)
+        test_len = len_rest - valid_len
+
+        # Split the sets
+        self.train_images = shuffled_images[:train_len]
+        self.train_labels = shuffled_labels[:train_len]
+        self.valid_images = shuffled_images[train_len:-test_len]
+        self.valid_labels = shuffled_labels[train_len:-test_len]
+        self.test_images = shuffled_images[-test_len:]
+        self.test_labels = shuffled_labels[-test_len:]
+
+        assert len(self.train_images) + len(self.valid_images) + len(self.test_images) == len(shuffled_images), \
+            &#34;Something went wrong with the partitioning!&#34;
+
+        # If no transforms are set, put the defaults here
+        if self.images_transform is None:
+            self.images_transform = transforms.Compose([
+                transforms.ToTensor(),
+                MinMaxNormalize(
+                    min_intensity=self.metadata[&#34;min_intensity&#34;],
+                    max_intensity=self.metadata[&#34;max_intensity&#34;]
+                )
+            ])
+
+        if self.labels_transform is None:
+            self.labels_transform = transforms.Compose([
+                transforms.ToTensor()
+            ])
+
+        # Create the training dataset
+        self.train_dataset = ImageLabelDataset(
+            self.train_images,
+            self.train_labels,
+            patch_size=self.patch_size,
+            num_patches=self.num_patches,
+            transform=self.images_transform,
+            target_transform=self.labels_transform
+        )
+
+        # Create the validation dataset
+        self.valid_dataset = ImageLabelDataset(
+            self.valid_images,
+            self.valid_labels,
+            patch_size=self.patch_size,
+            num_patches=self.num_patches,
+            transform=self.images_transform,
+            target_transform=self.labels_transform
+        )
+
+        # Create the testing dataset
+        self.test_dataset = ImageLabelDataset(
+            self.test_images,
+            self.test_labels,
+            patch_size=self.patch_size,
+            num_patches=self.num_patches,
+            transform=self.images_transform,
+            target_transform=self.labels_transform
+        )
+
+    def train_dataloader(self):
+        &#34;&#34;&#34;Return DataLoader for Training data.&#34;&#34;&#34;
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory
+        )
+
+    def val_dataloader(self):
+        &#34;&#34;&#34;Return DataLoader for Validation data.&#34;&#34;&#34;
+        return DataLoader(
+            self.valid_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory
+        )
+
+    def test_dataloader(self):
+        &#34;&#34;&#34;Return DataLoader for Testing data.&#34;&#34;&#34;
+        return DataLoader(
+            self.test_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory
+        )</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li>pytorch_lightning.core.datamodule.LightningDataModule</li>
+<li>pytorch_lightning.core.hooks.CheckpointHooks</li>
+<li>pytorch_lightning.core.hooks.DataHooks</li>
+<li>pytorch_lightning.core.mixins.hparams_mixin.HyperparametersMixin</li>
+</ul>
+<h3>Subclasses</h3>
+<ul class="hlist">
+<li><a title="qute.data.dataloaders.CellSegmentationDemo" href="#qute.data.dataloaders.CellSegmentationDemo">CellSegmentationDemo</a></li>
+</ul>
+<h3>Methods</h3>
+<dl>
+<dt id="qute.data.dataloaders.DataModuleLocalFolder.setup"><code class="name flex">
+<span>def <span class="ident">setup</span></span>(<span>self, stage)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Prepare the data once.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def setup(self, stage):
+    &#34;&#34;&#34;Prepare the data once.&#34;&#34;&#34;
+
+    if self.train_dataset is not None and self.valid_dataset is not None and self.test_dataset is not None:
+        # Data is already prepared
+        return
+
+    # Scan the &#34;images&#34; and &#34;labels&#34; folders
+    self.images = natsorted(list((self.data_dir / self.images_sub_folder).glob(&#34;*.tif&#34;)))
+    self.labels = natsorted(list((self.data_dir / self.labels_sub_folder).glob(&#34;*.tif&#34;)))
+
+    # Parse the metadata file
+    with open(self.data_dir / &#34;metadata.yaml&#34;) as f:
+        self.metadata = yaml.load(f, Loader=yaml.FullLoader)
+
+    # Check that we found some images
+    if len(self.images) == 0:
+        raise Exception(&#34;Could not find any images to process.&#34;)
+
+    # Check that there are as many images as labels
+    if len(self.images) != len(self.labels):
+        raise Exception(&#34;The number of images does not match the number of labels.&#34;)
+
+    # Shuffle a copy of the file names
+    rng = default_rng(seed=self.seed)
+    shuffled_indices = rng.permutation(len(self.images))
+    shuffled_images = np.array(self.images.copy())[shuffled_indices].tolist()
+    shuffled_labels = np.array(self.labels.copy())[shuffled_indices].tolist()
+
+    # Partition images and labels into training, validation and testing datasets
+    train_len = round(self.train_fraction * len(shuffled_images))
+    len_rest = len(shuffled_images) - train_len
+    updated_valid_fraction = self.valid_fraction / (self.valid_fraction + self.test_fraction)
+    valid_len = round(updated_valid_fraction * len_rest)
+    test_len = len_rest - valid_len
+
+    # Split the sets
+    self.train_images = shuffled_images[:train_len]
+    self.train_labels = shuffled_labels[:train_len]
+    self.valid_images = shuffled_images[train_len:-test_len]
+    self.valid_labels = shuffled_labels[train_len:-test_len]
+    self.test_images = shuffled_images[-test_len:]
+    self.test_labels = shuffled_labels[-test_len:]
+
+    assert len(self.train_images) + len(self.valid_images) + len(self.test_images) == len(shuffled_images), \
+        &#34;Something went wrong with the partitioning!&#34;
+
+    # If no transforms are set, put the defaults here
+    if self.images_transform is None:
+        self.images_transform = transforms.Compose([
+            transforms.ToTensor(),
+            MinMaxNormalize(
+                min_intensity=self.metadata[&#34;min_intensity&#34;],
+                max_intensity=self.metadata[&#34;max_intensity&#34;]
+            )
+        ])
+
+    if self.labels_transform is None:
+        self.labels_transform = transforms.Compose([
+            transforms.ToTensor()
+        ])
+
+    # Create the training dataset
+    self.train_dataset = ImageLabelDataset(
+        self.train_images,
+        self.train_labels,
+        patch_size=self.patch_size,
+        num_patches=self.num_patches,
+        transform=self.images_transform,
+        target_transform=self.labels_transform
+    )
+
+    # Create the validation dataset
+    self.valid_dataset = ImageLabelDataset(
+        self.valid_images,
+        self.valid_labels,
+        patch_size=self.patch_size,
+        num_patches=self.num_patches,
+        transform=self.images_transform,
+        target_transform=self.labels_transform
+    )
+
+    # Create the testing dataset
+    self.test_dataset = ImageLabelDataset(
+        self.test_images,
+        self.test_labels,
+        patch_size=self.patch_size,
+        num_patches=self.num_patches,
+        transform=self.images_transform,
+        target_transform=self.labels_transform
+    )</code></pre>
+</details>
+</dd>
+<dt id="qute.data.dataloaders.DataModuleLocalFolder.test_dataloader"><code class="name flex">
+<span>def <span class="ident">test_dataloader</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return DataLoader for Testing data.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def test_dataloader(self):
+    &#34;&#34;&#34;Return DataLoader for Testing data.&#34;&#34;&#34;
+    return DataLoader(
+        self.test_dataset,
+        batch_size=self.batch_size,
+        num_workers=self.num_workers,
+        pin_memory=self.pin_memory
+    )</code></pre>
+</details>
+</dd>
+<dt id="qute.data.dataloaders.DataModuleLocalFolder.train_dataloader"><code class="name flex">
+<span>def <span class="ident">train_dataloader</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return DataLoader for Training data.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def train_dataloader(self):
+    &#34;&#34;&#34;Return DataLoader for Training data.&#34;&#34;&#34;
+    return DataLoader(
+        self.train_dataset,
+        batch_size=self.batch_size,
+        num_workers=self.num_workers,
+        pin_memory=self.pin_memory
+    )</code></pre>
+</details>
+</dd>
+<dt id="qute.data.dataloaders.DataModuleLocalFolder.val_dataloader"><code class="name flex">
+<span>def <span class="ident">val_dataloader</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return DataLoader for Validation data.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def val_dataloader(self):
+    &#34;&#34;&#34;Return DataLoader for Validation data.&#34;&#34;&#34;
+    return DataLoader(
+        self.valid_dataset,
+        batch_size=self.batch_size,
+        num_workers=self.num_workers,
+        pin_memory=self.pin_memory
+    )</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="qute.data" href="index.html">qute.data</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-classes">Classes</a></h3>
+<ul>
+<li>
+<h4><code><a title="qute.data.dataloaders.CellSegmentationDemo" href="#qute.data.dataloaders.CellSegmentationDemo">CellSegmentationDemo</a></code></h4>
+<ul class="">
+<li><code><a title="qute.data.dataloaders.CellSegmentationDemo.prepare_data" href="#qute.data.dataloaders.CellSegmentationDemo.prepare_data">prepare_data</a></code></li>
+<li><code><a title="qute.data.dataloaders.CellSegmentationDemo.setup" href="#qute.data.dataloaders.CellSegmentationDemo.setup">setup</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="qute.data.dataloaders.DataModuleLocalFolder" href="#qute.data.dataloaders.DataModuleLocalFolder">DataModuleLocalFolder</a></code></h4>
+<ul class="">
+<li><code><a title="qute.data.dataloaders.DataModuleLocalFolder.setup" href="#qute.data.dataloaders.DataModuleLocalFolder.setup">setup</a></code></li>
+<li><code><a title="qute.data.dataloaders.DataModuleLocalFolder.test_dataloader" href="#qute.data.dataloaders.DataModuleLocalFolder.test_dataloader">test_dataloader</a></code></li>
+<li><code><a title="qute.data.dataloaders.DataModuleLocalFolder.train_dataloader" href="#qute.data.dataloaders.DataModuleLocalFolder.train_dataloader">train_dataloader</a></code></li>
+<li><code><a title="qute.data.dataloaders.DataModuleLocalFolder.val_dataloader" href="#qute.data.dataloaders.DataModuleLocalFolder.val_dataloader">val_dataloader</a></code></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.8.1</a>.</p>
+</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad()</script>
+</body>
+</html>

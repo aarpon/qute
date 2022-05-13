@@ -14,6 +14,8 @@ from tifffile import imwrite
 import pytorch_lightning as pl
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+from monai.losses import GeneralizedDiceLoss
+import torchmetrics
 from qute.data.dataloaders import CellSegmentationDemo
 from qute.models.unet import UNet
 
@@ -35,7 +37,11 @@ if __name__ == "__main__":
     early_stopping = EarlyStopping(monitor="val_loss")
     model_checkpoint = ModelCheckpoint(monitor="val_loss")
 
-    # @TODO: Add metrics.
+    # Loss
+    criterion=GeneralizedDiceLoss(include_background=True, to_onehot_y=True, softmax=True, batch=True)
+
+    # Metrics
+    metrics=torchmetrics.JaccardIndex(num_classes=3, ignore_index=0)
 
     # Instantiate the Trainer
     trainer = pl.Trainer(
