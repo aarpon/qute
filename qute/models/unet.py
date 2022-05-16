@@ -23,7 +23,7 @@ class UNet(pl.LightningModule):
 
     def __init__(
             self,
-            dimensions: int = 2,
+            spatial_dims: int = 2,
             in_channels: int = 1,
             out_channels: int = 3,
             channels: tuple = (16, 32, 64, 128),
@@ -47,7 +47,7 @@ class UNet(pl.LightningModule):
         Parameters
         ----------
 
-        dimensions: int = 2
+        spatial_dims: int = 2
             Whether 2D or 3D data.
 
         in_channels: int = 1
@@ -89,7 +89,7 @@ class UNet(pl.LightningModule):
         self.lr = learning_rate
         self.optimizer_class = optimizer_class
         self.net = MonaiUNet(
-            dimensions=dimensions,
+            spatial_dims=spatial_dims,
             in_channels=in_channels,
             out_channels=out_channels,
             channels=channels,
