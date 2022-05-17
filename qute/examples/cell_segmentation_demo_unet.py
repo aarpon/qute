@@ -31,7 +31,7 @@ if __name__ == "__main__":
     data_module = CellSegmentationDemo(seed=SEED)
 
     # Model
-    model = UNet()
+    model = UNet(num_res_units=4)
 
     # Callbacks
     early_stopping = EarlyStopping(monitor="val_loss")

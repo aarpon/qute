@@ -6,7 +6,7 @@ from numpy.random import default_rng
 import time
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
-from torchvision import transforms
+from torchvision.transforms import ToTensor, Compose
 import yaml
 
 from qute.data.datasets import ImageLabelDataset
@@ -28,7 +28,6 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             test_fraction: float = 0.1,
             batch_size: int = 8,
             patch_size: tuple = (512, 512),
-            num_patches: int = 1,
             images_transform: Optional[list] = None,
             labels_transform: Optional[list] = None,
             images_sub_folder: str = "images",
@@ -64,10 +63,6 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         patch_size: tuple = (512, 512)
             Size of the patch to be extracted (at random positions) from images and labels.
 
-        num_patches: int = 1
-            Number of patches to be extracted from images and labels.
-            PLEASE NOTE: this is currently hard-coded to 1.
-
         images_transform: Optional[list] = None
             Transforms to to be applied to the images. If omitted some default transforms will be applied.
 
@@ -94,7 +89,6 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         self.data_dir = Path(data_dir).resolve()
         self.batch_size = batch_size
         self.patch_size = patch_size
-        self.num_patches = num_patches
 
         self.num_workers = num_workers
         self.pin_memory = pin_memory
@@ -193,8 +187,8 @@ class DataModuleLocalFolder(pl.LightningDataModule):
 
         # If no transforms are set, put the defaults here
         if self.images_transform is None:
-            self.images_transform = transforms.Compose([
-                transforms.ToTensor(),
+            self.images_transform = Compose([
+                ToTensor(),
                 MinMaxNormalize(
                     min_intensity=self.metadata["min_intensity"],
                     max_intensity=self.metadata["max_intensity"]
@@ -202,8 +196,8 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             ])
 
         if self.labels_transform is None:
-            self.labels_transform = transforms.Compose([
-                transforms.ToTensor()
+            self.labels_transform = Compose([
+                ToTensor()
             ])
 
         # Create the training dataset
@@ -211,7 +205,6 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             self.train_images,
             self.train_labels,
             patch_size=self.patch_size,
-            num_patches=self.num_patches,
             transform=self.images_transform,
             target_transform=self.labels_transform
         )
@@ -221,7 +214,6 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             self.valid_images,
             self.valid_labels,
             patch_size=self.patch_size,
-            num_patches=self.num_patches,
             transform=self.images_transform,
             target_transform=self.labels_transform
         )
@@ -231,7 +223,6 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             self.test_images,
             self.test_labels,
             patch_size=self.patch_size,
-            num_patches=self.num_patches,
             transform=self.images_transform,
             target_transform=self.labels_transform
         )
@@ -276,7 +267,6 @@ class CellSegmentationDemo(DataModuleLocalFolder):
             test_fraction: float = 0.1,
             batch_size: int = 8,
             patch_size: tuple = (512, 512),
-            num_patches: int = 1,
             images_transform: Optional[list] = None,
             labels_transform: Optional[list] = None,
             images_sub_folder: str = "images",
@@ -311,10 +301,6 @@ class CellSegmentationDemo(DataModuleLocalFolder):
 
         patch_size: tuple = (512, 512)
             Size of the patch to be extracted (at random positions) from images and labels.
-
-        num_patches: int = 1
-            Number of patches to be extracted from images and labels.
-            PLEASE NOTE: this is currently hard-coded to 1.
 
         images_transform: Optional[list] = None
             Transforms to to be applied to the images. If omitted some default transforms will be applied.
@@ -353,10 +339,9 @@ class CellSegmentationDemo(DataModuleLocalFolder):
         super().__init__(
             data_dir=data_dir, num_classes=self.num_classes, train_fraction=train_fraction,
             valid_fraction=valid_fraction, test_fraction=test_fraction, batch_size=batch_size,
-            patch_size=patch_size, num_patches=num_patches, images_transform=images_transform,
-            labels_transform=labels_transform, images_sub_folder=images_sub_folder,
-            labels_sub_folder=labels_sub_folder, seed=seed, num_workers=num_workers, 
-            pin_memory=pin_memory
+            patch_size=patch_size, images_transform=images_transform, labels_transform=labels_transform,
+            images_sub_folder=images_sub_folder, labels_sub_folder=labels_sub_folder, seed=seed,
+            num_workers=num_workers, pin_memory=pin_memory
         )
 
     def prepare_data(self):
