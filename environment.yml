@@ -6,7 +6,7 @@ channels:
   - defaults
 
 dependencies:
-  - python=3.10
+  - python=3.9
   - pip
   - natsort
   - tifffile
@@ -17,9 +17,9 @@ dependencies:
   - conda-forge::pytorch-lightning
   - conda-forge::torchmetrics
   - conda-forge::lightning-flash[image]
+  - conda-forge::ray-tune
   - pyyaml
   - pdoc3
   - pip:
       - lightning-bolts
       - monai
-

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 from pathlib import Path
 from natsort import natsorted
 import numpy as np
@@ -21,7 +21,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
 
     def __init__(
             self,
-            data_dir: Path | str = Path(),
+            data_dir: Union[Path, str] = Path(),
             num_classes: int = 3,
             train_fraction: float = 0.7,
             valid_fraction: float = 0.2,
@@ -260,7 +260,7 @@ class CellSegmentationDemo(DataModuleLocalFolder):
 
     def __init__(
             self,
-            download_dir: Path | str = Path.home() / ".qute" / "data",
+            download_dir: Union[Path, str] = Path.home() / ".qute" / "data",
             three_classes: bool = True,
             train_fraction: float = 0.7,
             valid_fraction: float = 0.2,
