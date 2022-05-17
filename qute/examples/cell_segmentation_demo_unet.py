@@ -30,18 +30,18 @@ if __name__ == "__main__":
     # Data module
     data_module = CellSegmentationDemo(seed=SEED)
 
+    # Loss
+    criterion = GeneralizedDiceLoss(include_background=True, to_onehot_y=True, softmax=True, batch=True)
+
+    # Metrics
+    metrics = torchmetrics.JaccardIndex(num_classes=3, ignore_index=0)
+
     # Model
-    model = UNet(num_res_units=4)
+    model = UNet(num_res_units=4, criterion=criterion, metrics=metrics)
 
     # Callbacks
     early_stopping = EarlyStopping(monitor="val_loss")
     model_checkpoint = ModelCheckpoint(monitor="val_loss")
-
-    # Loss
-    criterion=GeneralizedDiceLoss(include_background=True, to_onehot_y=True, softmax=True, batch=True)
-
-    # Metrics
-    metrics=torchmetrics.JaccardIndex(num_classes=3, ignore_index=0)
 
     # Instantiate the Trainer
     trainer = pl.Trainer(

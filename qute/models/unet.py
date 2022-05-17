@@ -19,7 +19,11 @@ import torchmetrics
 
 
 class UNet(pl.LightningModule):
-    """Wrap MONAI's UNet architecture into a PyTorch Lightning module."""
+    """Wrap MONAI's UNet architecture into a PyTorch Lightning module.
+    
+    The default settings are compatible with a classification task, where
+    a single-channel input image is transformed into a three-class label image.
+    """
 
     def __init__(
             self,
@@ -63,14 +67,17 @@ class UNet(pl.LightningModule):
             Strides for down-sampling.
 
         criterion: GeneralizedDiceLoss(include_background=False, to_onehot_y=True, softmax=True, batch=True)
-            Loss function. Please NOTE: the loss function must convert `y` to OneHot and apply softmax.
-            The default loss function applies to a multi-label target where the background class is omitted.
+            Loss function. Please NOTE: for classification, the loss function must convert `y` to OneHot and 
+            apply softmax. The default loss function applies to a multi-label target where the background class 
+            is omitted.
 
         metrics: JaccardIndex(num_classes=3, ignore_index=0)
             Metrics used for training, validation, and testing. Set to None to omit.
 
             The default metrics applies to a three-label target where the background (index = 0) class
             is omitted from calculation.
+
+            Set to None to omit calculating and reporting it.
 
         learning_rate: float = 1e-2
             Learning rate for optimization.
@@ -108,30 +115,36 @@ class UNet(pl.LightningModule):
         x, y = batch
         y_hat = self.net(x)
         loss = self.criterion(y_hat, y)
-        self.log('train_loss', loss, prog_bar=True)
+        self.log('train_loss', loss, prog_bar=True, on_epoch=True)
         if self.metrics is not None:
-            self.log('train_metric', self.metrics(y_hat, y), on_step=False, on_epoch=True)
+            self.log('train_metric', self.metrics(y_hat, y), on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         """Perform a validation step."""
         x, y = batch
         y_hat = self.net(x)
-        loss = self.criterion(y_hat, y)
-        self.log('val_loss', loss)
-        if self.metrics is not None:
-            self.log('val_metric', self.metrics(y_hat, y), on_step=False, on_epoch=True)
-        return loss
+        val_loss = self.criterion(y_hat, y)
+        self.log('val_loss', val_loss, on_step=True, on_epoch=True)
+        if self.metrics is None:
+            return {"val_loss": val_loss}
+        else:
+            val_metric = self.metrics(y_hat, y)
+            self.log('val_metric', val_metric, on_epoch=True)
+            return {"val_loss": val_loss, "val_metric": val_metric}
 
     def test_step(self, batch, batch_idx):
         """Perform a test step."""
         x, y = batch
         y_hat = self.net(x)
-        loss = self.criterion(y_hat, y)
-        self.log('test_loss', loss)
-        if self.metrics is not None:
-            self.log('test_metric', self.metrics(y_hat, y), on_step=False, on_epoch=True)
-        return loss
+        test_loss = self.criterion(y_hat, y)
+        self.log('test_loss', test_loss)
+        if self.metrics is None:
+            return {"test_loss": test_loss}
+        else:
+            test_metric = self.metrics(y_hat, y)
+            self.log('test_metric', test_metric)
+            return {"test_loss": test_loss, "test_metric": test_metric}
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """The predict step creates a label image from the output one-hot tensor."""
