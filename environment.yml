@@ -17,9 +17,9 @@ dependencies:
   - conda-forge::pytorch-lightning
   - conda-forge::torchmetrics
   - conda-forge::lightning-flash[image]
-  - conda-forge::ray-tune
   - pyyaml
   - pdoc3
   - pip:
       - lightning-bolts
       - monai
+      - ray[tune]==1.11.0rc0
