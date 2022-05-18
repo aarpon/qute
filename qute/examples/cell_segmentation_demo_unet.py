@@ -10,6 +10,7 @@
 #  ******************************************************************************/
 
 from datetime import datetime
+import sys
 from tifffile import imwrite
 import pytorch_lightning as pl
 from pytorch_lightning import seed_everything
@@ -28,13 +29,25 @@ if __name__ == "__main__":
     seed_everything(SEED, workers=True)
 
     # Data module
-    data_module = CellSegmentationDemo(seed=SEED)
+    data_module = CellSegmentationDemo(
+        seed=SEED,
+        batch_size=12,
+        patch_size=(256, 256)
+    )
 
     # Loss
-    criterion = GeneralizedDiceLoss(include_background=True, to_onehot_y=True, softmax=True, batch=True)
+    criterion = GeneralizedDiceLoss(
+        include_background=True,
+        to_onehot_y=True,
+        softmax=True,
+        batch=True
+    )
 
     # Metrics
-    metrics = torchmetrics.JaccardIndex(num_classes=3, ignore_index=0)
+    metrics = torchmetrics.JaccardIndex(
+        num_classes=3,
+        ignore_index=0
+    )
 
     # Model
     model = UNet(num_res_units=4, criterion=criterion, metrics=metrics)
@@ -46,14 +59,17 @@ if __name__ == "__main__":
     # Instantiate the Trainer
     trainer = pl.Trainer(
         gpus=1,
-        precision=16,
+        precision=32,
         callbacks=[early_stopping, model_checkpoint],
         max_epochs=500,
         log_every_n_steps=1
     )
     trainer.logger._default_hp_metric = False
 
-    # Train
+    # Find the best learning rate
+    # trainer.tune(model, datamodule=data_module)
+
+    # Train with the optimal learning rate found above
     trainer.fit(model, data_module)
 
     # Load weights from best model
@@ -79,3 +95,5 @@ if __name__ == "__main__":
             i += 1
 
     print(f"Saved {i} images to {predict_out_folder}.")
+
+    sys.exit(0)
