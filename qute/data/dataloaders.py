@@ -10,7 +10,7 @@ from torchvision.transforms import ToTensor, Compose
 import yaml
 
 from qute.data.datasets import ImageLabelDataset
-from qute.data.io import get_cell_segmentation_demo_dataset
+from qute.data.io import get_cell_restoration_demo_dataset, get_cell_segmentation_demo_dataset
 import os
 
 from qute.transforms import MinMaxNormalize
@@ -349,6 +349,97 @@ class CellSegmentationDemo(DataModuleLocalFolder):
 
         # Download and extract the demo dataset if needed.
         get_cell_segmentation_demo_dataset(self.download_dir, three_classes=self.three_classes)
+
+    def setup(self, stage):
+        """Set up data on each GPU."""
+        # Call parent setup()
+        return super().setup(stage)
+
+class CellRestorationDemo(DataModuleLocalFolder):
+    """DataLoader for the Cell Restoration Demo."""
+
+    def __init__(
+            self,
+            download_dir: Union[Path, str] = Path.home() / ".qute" / "data",
+            train_fraction: float = 0.7,
+            valid_fraction: float = 0.2,
+            test_fraction: float = 0.1,
+            batch_size: int = 8,
+            patch_size: tuple = (512, 512),
+            images_transform: Optional[list] = None,
+            labels_transform: Optional[list] = None,
+            images_sub_folder: str = "images",
+            labels_sub_folder: str = "targets",
+            seed: int = 42,
+            num_workers: int = os.cpu_count(),
+            pin_memory: bool = True
+    ):
+        """
+        Constructor.
+    
+        Parameters
+        ----------
+
+        download_dir: Path | str = Path()
+            Directory where the cell segmentation datasets will be downloaded and extracted.
+
+        train_fraction: float = 0.7
+            Fraction of images and corresponding labels that go into the training set.
+
+        valid_fraction: float = 0.2
+            Fraction of images and corresponding labels that go into the validation set.
+
+        test_fraction: float = 0.1
+            Fraction of images and corresponding labels that go into the test set.
+            
+        batch_size: int = 8
+            Size of one batch of image pairs.
+
+        patch_size: tuple = (512, 512)
+            Size of the patch to be extracted (at random positions) from images and labels.
+
+        images_transform: Optional[list] = None
+            Transforms to to be applied to the images. If omitted some default transforms will be applied.
+
+        labels_transform: Optional[list] = None
+            Transforms to to be applied to the labels. If omitted some default transforms will be applied.
+
+        images_sub_folder: str = "images"
+            Name of the images sub-folder. It can be used to override the default "images".
+            
+        labels_sub_folder: str = "targets"
+            Name of the labels sub-folder. It can be used to override the default "labels".
+
+        seed: int = 42
+            Seed for all random number generators.
+
+        num_workers: int = os.cpu_count()
+            Number of workers to be used in the data loaders.
+
+        pin_memory: bool = True
+            Whether to pin the GPU memory.   
+        """
+
+        # Download directory is parent of the actual data_dir that we pass to the parent class
+        self.download_dir = Path(download_dir).resolve()
+
+        # Data directory
+        data_dir = self.download_dir / f"demo_restoration"
+
+        # Call base constructor
+        super().__init__(
+            data_dir=data_dir, train_fraction=train_fraction, valid_fraction=valid_fraction,
+            test_fraction=test_fraction, batch_size=batch_size, patch_size=patch_size,
+            images_transform=images_transform, labels_transform=labels_transform,
+            images_sub_folder=images_sub_folder, labels_sub_folder=labels_sub_folder, seed=seed,
+            num_workers=num_workers, pin_memory=pin_memory
+        )
+
+    def prepare_data(self):
+        """Prepare the data on main thread."""
+
+        # Download and extract the demo dataset if needed.
+        get_cell_restoration_demo_dataset(self.download_dir)
 
     def setup(self, stage):
         """Set up data on each GPU."""
