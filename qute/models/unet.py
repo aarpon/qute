@@ -93,7 +93,7 @@ class UNet(pl.LightningModule):
 
         self.criterion = criterion
         self.metrics = metrics
-        self.lr = learning_rate
+        self.learning_rate = learning_rate
         self.optimizer_class = optimizer_class
         self.net = MonaiUNet(
             spatial_dims=spatial_dims,
@@ -107,7 +107,7 @@ class UNet(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configure and return the optimizer."""
-        optimizer = self.optimizer_class(self.parameters(), lr=self.lr)
+        optimizer = self.optimizer_class(self.parameters(), lr=self.learning_rate)
         return optimizer
 
     def training_step(self, batch, batch_idx):
@@ -115,9 +115,9 @@ class UNet(pl.LightningModule):
         x, y = batch
         y_hat = self.net(x)
         loss = self.criterion(y_hat, y)
-        self.log('train_loss', loss, prog_bar=True, on_epoch=True)
+        self.log('train_loss', loss, prog_bar=True, on_step=True, on_epoch=True)
         if self.metrics is not None:
-            self.log('train_metric', self.metrics(y_hat, y), on_epoch=True)
+            self.log('train_metric', self.metrics(y_hat, y), on_step=True, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -130,7 +130,7 @@ class UNet(pl.LightningModule):
             return {"val_loss": val_loss}
         else:
             val_metric = self.metrics(y_hat, y)
-            self.log('val_metric', val_metric, on_epoch=True)
+            self.log('val_metric', val_metric, on_step=True, on_epoch=True)
             return {"val_loss": val_loss, "val_metric": val_metric}
 
     def test_step(self, batch, batch_idx):
