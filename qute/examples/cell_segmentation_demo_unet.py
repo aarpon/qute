@@ -58,7 +58,8 @@ if __name__ == "__main__":
 
     # Instantiate the Trainer
     trainer = pl.Trainer(
-        gpus=1,
+        accelerator="gpu",
+        devices=1,
         precision=32,
         callbacks=[early_stopping, model_checkpoint],
         max_epochs=500,
