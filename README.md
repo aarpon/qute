@@ -6,7 +6,6 @@ Leverages and extends several [PyTorch](https://pytorch.org)-based framework and
 * [PyTorch Lightning](https://www.pytorchlightning.ai/)
   * [torchmetrics](https://github.com/PyTorchLightning/metrics)
   * [Lightning Bolts](https://github.com/PyTorchLightning/lightning-bolts)
-  * [Lightning Flash](https://github.com/PyTorchLightning/lightning-flash)
 * [MONAI](https://monai.io)
 
 ## Installation
@@ -14,7 +13,7 @@ Leverages and extends several [PyTorch](https://pytorch.org)-based framework and
 ```bash
 $ git clone https://github.com/aarpon/qute
 $ cd qute
-$ conda env create -f ./environment.yml
+$ conda create -n qute-env python
 $ conda activate qute-env
 $ pip install -e .
 ```
