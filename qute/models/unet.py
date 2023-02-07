@@ -35,7 +35,7 @@ class UNet(pl.LightningModule):
         criterion=GeneralizedDiceLoss(
             include_background=False, to_onehot_y=True, softmax=True, batch=True
         ),
-        metrics=torchmetrics.JaccardIndex(num_classes=3, ignore_index=0),
+        metrics=torchmetrics.JaccardIndex(task="multiclass", num_classes=3, ignore_index=0),
         learning_rate: float = 1e-2,
         optimizer_class=AdamW,
         num_res_units: int = 0,

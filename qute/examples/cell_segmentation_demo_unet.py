@@ -37,7 +37,7 @@ if __name__ == "__main__":
     )
 
     # Metrics
-    metrics = torchmetrics.JaccardIndex(num_classes=3, ignore_index=0)
+    metrics = torchmetrics.JaccardIndex(task="multiclass", num_classes=3, ignore_index=0)
 
     # Model
     model = UNet(num_res_units=4, criterion=criterion, metrics=metrics)
