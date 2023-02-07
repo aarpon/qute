@@ -1,18 +1,21 @@
-from typing import Optional, Union
-from pathlib import Path
-from natsort import natsorted
-import numpy as np
-from numpy.random import default_rng
+import os
 import time
+from pathlib import Path
+from typing import Optional, Union
+
+import numpy as np
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader
-from torchvision.transforms import ToTensor, Compose
 import yaml
+from natsort import natsorted
+from numpy.random import default_rng
+from torch.utils.data import DataLoader
+from torchvision.transforms import Compose, ToTensor
 
 from qute.data.datasets import ImageLabelDataset
-from qute.data.io import get_cell_restoration_demo_dataset, get_cell_segmentation_demo_dataset
-import os
-
+from qute.data.io import (
+    get_cell_restoration_demo_dataset,
+    get_cell_segmentation_demo_dataset,
+)
 from qute.transforms import MinMaxNormalize
 
 
@@ -20,25 +23,25 @@ class DataModuleLocalFolder(pl.LightningDataModule):
     """DataLoader for local folder containing 'images' and 'labels' sub-folders."""
 
     def __init__(
-            self,
-            data_dir: Union[Path, str] = Path(),
-            num_classes: int = 3,
-            train_fraction: float = 0.7,
-            valid_fraction: float = 0.2,
-            test_fraction: float = 0.1,
-            batch_size: int = 8,
-            patch_size: tuple = (512, 512),
-            images_transform: Optional[list] = None,
-            labels_transform: Optional[list] = None,
-            images_sub_folder: str = "images",
-            labels_sub_folder: str = "labels",
-            seed: int = 42,
-            num_workers: int = os.cpu_count(),
-            pin_memory: bool = True
+        self,
+        data_dir: Union[Path, str] = Path(),
+        num_classes: int = 3,
+        train_fraction: float = 0.7,
+        valid_fraction: float = 0.2,
+        test_fraction: float = 0.1,
+        batch_size: int = 8,
+        patch_size: tuple = (512, 512),
+        images_transform: Optional[list] = None,
+        labels_transform: Optional[list] = None,
+        images_sub_folder: str = "images",
+        labels_sub_folder: str = "labels",
+        seed: int = 42,
+        num_workers: int = os.cpu_count(),
+        pin_memory: bool = True,
     ):
         """
         Constructor.
-    
+
         Parameters
         ----------
 
@@ -47,7 +50,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
 
         num_classes: int = 3
             Number of output classes (labels).
-        
+
         train_fraction: float = 0.7
             Fraction of images and corresponding labels that go into the training set.
 
@@ -56,7 +59,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
 
         test_fraction: float = 0.1
             Fraction of images and corresponding labels that go into the test set.
-            
+
         batch_size: int = 8
             Size of one batch of image pairs.
 
@@ -71,7 +74,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
 
         images_sub_folder: str = "images"
             Name of the images sub-folder. It can be used to override the default "images".
-            
+
         labels_sub_folder: str = "labels"
             Name of the labels sub-folder. It can be used to override the default "labels".
 
@@ -82,7 +85,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             Number of workers to be used in the data loaders.
 
         pin_memory: bool = True
-            Whether to pin the GPU memory.   
+            Whether to pin the GPU memory.
         """
 
         super().__init__()
@@ -141,13 +144,21 @@ class DataModuleLocalFolder(pl.LightningDataModule):
     def setup(self, stage):
         """Prepare the data once."""
 
-        if self.train_dataset is not None and self.valid_dataset is not None and self.test_dataset is not None:
+        if (
+            self.train_dataset is not None
+            and self.valid_dataset is not None
+            and self.test_dataset is not None
+        ):
             # Data is already prepared
             return
 
         # Scan the "images" and "labels" folders
-        self.images = natsorted(list((self.data_dir / self.images_sub_folder).glob("*.tif")))
-        self.labels = natsorted(list((self.data_dir / self.labels_sub_folder).glob("*.tif")))
+        self.images = natsorted(
+            list((self.data_dir / self.images_sub_folder).glob("*.tif"))
+        )
+        self.labels = natsorted(
+            list((self.data_dir / self.labels_sub_folder).glob("*.tif"))
+        )
 
         # Parse the metadata file
         with open(self.data_dir / "metadata.yaml") as f:
@@ -170,7 +181,9 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         # Partition images and labels into training, validation and testing datasets
         train_len = round(self.train_fraction * len(shuffled_images))
         len_rest = len(shuffled_images) - train_len
-        updated_valid_fraction = self.valid_fraction / (self.valid_fraction + self.test_fraction)
+        updated_valid_fraction = self.valid_fraction / (
+            self.valid_fraction + self.test_fraction
+        )
         valid_len = round(updated_valid_fraction * len_rest)
         test_len = len_rest - valid_len
 
@@ -182,23 +195,24 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         self.test_images = shuffled_images[-test_len:]
         self.test_labels = shuffled_labels[-test_len:]
 
-        assert len(self.train_images) + len(self.valid_images) + len(self.test_images) == len(shuffled_images), \
-            "Something went wrong with the partitioning!"
+        assert len(self.train_images) + len(self.valid_images) + len(
+            self.test_images
+        ) == len(shuffled_images), "Something went wrong with the partitioning!"
 
         # If no transforms are set, put the defaults here
         if self.images_transform is None:
-            self.images_transform = Compose([
-                ToTensor(),
-                MinMaxNormalize(
-                    min_intensity=self.metadata["min_intensity"],
-                    max_intensity=self.metadata["max_intensity"]
-                )
-            ])
+            self.images_transform = Compose(
+                [
+                    ToTensor(),
+                    MinMaxNormalize(
+                        min_intensity=self.metadata["min_intensity"],
+                        max_intensity=self.metadata["max_intensity"],
+                    ),
+                ]
+            )
 
         if self.labels_transform is None:
-            self.labels_transform = Compose([
-                ToTensor()
-            ])
+            self.labels_transform = Compose([ToTensor()])
 
         # Create the training dataset
         self.train_dataset = ImageLabelDataset(
@@ -206,7 +220,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             self.train_labels,
             patch_size=self.patch_size,
             transform=self.images_transform,
-            target_transform=self.labels_transform
+            target_transform=self.labels_transform,
         )
 
         # Create the validation dataset
@@ -215,7 +229,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             self.valid_labels,
             patch_size=self.patch_size,
             transform=self.images_transform,
-            target_transform=self.labels_transform
+            target_transform=self.labels_transform,
         )
 
         # Create the testing dataset
@@ -224,7 +238,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             self.test_labels,
             patch_size=self.patch_size,
             transform=self.images_transform,
-            target_transform=self.labels_transform
+            target_transform=self.labels_transform,
         )
 
     def train_dataloader(self):
@@ -233,7 +247,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             self.train_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            pin_memory=self.pin_memory
+            pin_memory=self.pin_memory,
         )
 
     def val_dataloader(self):
@@ -242,7 +256,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             self.valid_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            pin_memory=self.pin_memory
+            pin_memory=self.pin_memory,
         )
 
     def test_dataloader(self):
@@ -251,7 +265,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             self.test_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            pin_memory=self.pin_memory
+            pin_memory=self.pin_memory,
         )
 
 
@@ -259,25 +273,25 @@ class CellSegmentationDemo(DataModuleLocalFolder):
     """DataLoader for the Cell Segmentation Demo."""
 
     def __init__(
-            self,
-            download_dir: Union[Path, str] = Path.home() / ".qute" / "data",
-            three_classes: bool = True,
-            train_fraction: float = 0.7,
-            valid_fraction: float = 0.2,
-            test_fraction: float = 0.1,
-            batch_size: int = 8,
-            patch_size: tuple = (512, 512),
-            images_transform: Optional[list] = None,
-            labels_transform: Optional[list] = None,
-            images_sub_folder: str = "images",
-            labels_sub_folder: str = "labels",
-            seed: int = 42,
-            num_workers: int = os.cpu_count(),
-            pin_memory: bool = True
+        self,
+        download_dir: Union[Path, str] = Path.home() / ".qute" / "data",
+        three_classes: bool = True,
+        train_fraction: float = 0.7,
+        valid_fraction: float = 0.2,
+        test_fraction: float = 0.1,
+        batch_size: int = 8,
+        patch_size: tuple = (512, 512),
+        images_transform: Optional[list] = None,
+        labels_transform: Optional[list] = None,
+        images_sub_folder: str = "images",
+        labels_sub_folder: str = "labels",
+        seed: int = 42,
+        num_workers: int = os.cpu_count(),
+        pin_memory: bool = True,
     ):
         """
         Constructor.
-    
+
         Parameters
         ----------
 
@@ -286,7 +300,7 @@ class CellSegmentationDemo(DataModuleLocalFolder):
 
         three_classes: bool = True
             Whether to download and extract the demo dataset with 3 labels (classes), or the one with two.
-        
+
         train_fraction: float = 0.7
             Fraction of images and corresponding labels that go into the training set.
 
@@ -295,7 +309,7 @@ class CellSegmentationDemo(DataModuleLocalFolder):
 
         test_fraction: float = 0.1
             Fraction of images and corresponding labels that go into the test set.
-            
+
         batch_size: int = 8
             Size of one batch of image pairs.
 
@@ -310,7 +324,7 @@ class CellSegmentationDemo(DataModuleLocalFolder):
 
         images_sub_folder: str = "images"
             Name of the images sub-folder. It can be used to override the default "images".
-            
+
         labels_sub_folder: str = "labels"
             Name of the labels sub-folder. It can be used to override the default "labels".
 
@@ -321,7 +335,7 @@ class CellSegmentationDemo(DataModuleLocalFolder):
             Number of workers to be used in the data loaders.
 
         pin_memory: bool = True
-            Whether to pin the GPU memory.   
+            Whether to pin the GPU memory.
         """
 
         # Download directory is parent of the actual data_dir that we pass to the parent class
@@ -337,46 +351,58 @@ class CellSegmentationDemo(DataModuleLocalFolder):
 
         # Call base constructor
         super().__init__(
-            data_dir=data_dir, num_classes=self.num_classes, train_fraction=train_fraction,
-            valid_fraction=valid_fraction, test_fraction=test_fraction, batch_size=batch_size,
-            patch_size=patch_size, images_transform=images_transform, labels_transform=labels_transform,
-            images_sub_folder=images_sub_folder, labels_sub_folder=labels_sub_folder, seed=seed,
-            num_workers=num_workers, pin_memory=pin_memory
+            data_dir=data_dir,
+            num_classes=self.num_classes,
+            train_fraction=train_fraction,
+            valid_fraction=valid_fraction,
+            test_fraction=test_fraction,
+            batch_size=batch_size,
+            patch_size=patch_size,
+            images_transform=images_transform,
+            labels_transform=labels_transform,
+            images_sub_folder=images_sub_folder,
+            labels_sub_folder=labels_sub_folder,
+            seed=seed,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
         )
 
     def prepare_data(self):
         """Prepare the data on main thread."""
 
         # Download and extract the demo dataset if needed.
-        get_cell_segmentation_demo_dataset(self.download_dir, three_classes=self.three_classes)
+        get_cell_segmentation_demo_dataset(
+            self.download_dir, three_classes=self.three_classes
+        )
 
     def setup(self, stage):
         """Set up data on each GPU."""
         # Call parent setup()
         return super().setup(stage)
 
+
 class CellRestorationDemo(DataModuleLocalFolder):
     """DataLoader for the Cell Restoration Demo."""
 
     def __init__(
-            self,
-            download_dir: Union[Path, str] = Path.home() / ".qute" / "data",
-            train_fraction: float = 0.7,
-            valid_fraction: float = 0.2,
-            test_fraction: float = 0.1,
-            batch_size: int = 8,
-            patch_size: tuple = (512, 512),
-            images_transform: Optional[list] = None,
-            labels_transform: Optional[list] = None,
-            images_sub_folder: str = "images",
-            labels_sub_folder: str = "targets",
-            seed: int = 42,
-            num_workers: int = os.cpu_count(),
-            pin_memory: bool = True
+        self,
+        download_dir: Union[Path, str] = Path.home() / ".qute" / "data",
+        train_fraction: float = 0.7,
+        valid_fraction: float = 0.2,
+        test_fraction: float = 0.1,
+        batch_size: int = 8,
+        patch_size: tuple = (512, 512),
+        images_transform: Optional[list] = None,
+        labels_transform: Optional[list] = None,
+        images_sub_folder: str = "images",
+        labels_sub_folder: str = "targets",
+        seed: int = 42,
+        num_workers: int = os.cpu_count(),
+        pin_memory: bool = True,
     ):
         """
         Constructor.
-    
+
         Parameters
         ----------
 
@@ -391,7 +417,7 @@ class CellRestorationDemo(DataModuleLocalFolder):
 
         test_fraction: float = 0.1
             Fraction of images and corresponding labels that go into the test set.
-            
+
         batch_size: int = 8
             Size of one batch of image pairs.
 
@@ -406,7 +432,7 @@ class CellRestorationDemo(DataModuleLocalFolder):
 
         images_sub_folder: str = "images"
             Name of the images sub-folder. It can be used to override the default "images".
-            
+
         labels_sub_folder: str = "targets"
             Name of the labels sub-folder. It can be used to override the default "labels".
 
@@ -417,7 +443,7 @@ class CellRestorationDemo(DataModuleLocalFolder):
             Number of workers to be used in the data loaders.
 
         pin_memory: bool = True
-            Whether to pin the GPU memory.   
+            Whether to pin the GPU memory.
         """
 
         # Download directory is parent of the actual data_dir that we pass to the parent class
@@ -428,11 +454,19 @@ class CellRestorationDemo(DataModuleLocalFolder):
 
         # Call base constructor
         super().__init__(
-            data_dir=data_dir, train_fraction=train_fraction, valid_fraction=valid_fraction,
-            test_fraction=test_fraction, batch_size=batch_size, patch_size=patch_size,
-            images_transform=images_transform, labels_transform=labels_transform,
-            images_sub_folder=images_sub_folder, labels_sub_folder=labels_sub_folder, seed=seed,
-            num_workers=num_workers, pin_memory=pin_memory
+            data_dir=data_dir,
+            train_fraction=train_fraction,
+            valid_fraction=valid_fraction,
+            test_fraction=test_fraction,
+            batch_size=batch_size,
+            patch_size=patch_size,
+            images_transform=images_transform,
+            labels_transform=labels_transform,
+            images_sub_folder=images_sub_folder,
+            labels_sub_folder=labels_sub_folder,
+            seed=seed,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
         )
 
     def prepare_data(self):

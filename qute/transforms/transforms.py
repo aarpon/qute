@@ -19,7 +19,7 @@ class MinMaxNormalize(Transform):
 
     def __init__(self, min_intensity: int = 0, max_intensity: int = 65535) -> None:
         """Constructor
-        
+
         Parameters
         ----------
 
@@ -27,12 +27,12 @@ class MinMaxNormalize(Transform):
             Minimum intensity to normalize against (optional, default = 0).
         max_intensity: int
             Maximum intensity to normalize against (optional, default = 65535).
-        
+
         Returns
         -------
 
         norm: tensor
-            Normalized tensor.        
+            Normalized tensor.
         """
         self.min_intensity = min_intensity
         self.max_intensity = max_intensity
@@ -55,6 +55,7 @@ class DebugInformer(Transform):
     Simple reporter to be added to a Composed list of Transforms
     to return some information. The data is returned untouched.
     """
+
     def __init__(self, *args, **kwargs):
         """Constructor.
 
@@ -67,7 +68,7 @@ class DebugInformer(Transform):
         super().__init__()
         self.name = ""
         if "name" in kwargs:
-            self.name = kwargs['name']
+            self.name = kwargs["name"]
 
     def __call__(self, data):
         """Call the Transform."""

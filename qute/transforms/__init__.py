@@ -9,4 +9,5 @@
 #       Aaron Ponti - initial API and implementation
 #  ******************************************************************************/
 from .transforms import MinMaxNormalize
+
 __doc__ = """Custom transforms."""

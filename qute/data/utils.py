@@ -9,17 +9,18 @@
 #       Aaron Ponti - initial API and implementation
 #  ******************************************************************************/
 
-from typing import Optional
 import time
+from typing import Optional
+
 import numpy as np
 
 
 def sample(
-        image: np.ndarray,
-        patch_size: tuple,
-        y0: int = None,
-        x0: int = None,
-        seed: Optional[int] = None
+    image: np.ndarray,
+    patch_size: tuple,
+    y0: int = None,
+    x0: int = None,
+    seed: Optional[int] = None,
 ) -> tuple[np.ndarray, int, int]:
     """Returns a (random) subset of given shape from the passed 2D image.
 
@@ -69,4 +70,4 @@ def sample(
         x0 = int(rng.uniform(0, max_x))
 
     # Return the subset and the starting coordinates
-    return image[y0:y0 + patch_size[0], x0:x0 + patch_size[1]], y0, x0
+    return image[y0 : y0 + patch_size[0], x0 : x0 + patch_size[1]], y0, x0

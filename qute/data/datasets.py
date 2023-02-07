@@ -10,22 +10,24 @@
 #  ******************************************************************************/
 
 import numpy as np
-from torch.utils.data import Dataset
 from tifffile import imread
+from torch.utils.data import Dataset
+
 from qute.data.utils import sample
 
 
 class ImageLabelDataset(Dataset):
     """Dataset that maps an gray-value image to a label image."""
+
     def __init__(
-            self,
-            images_path_list: list,
-            labels_path_list: list,
-            patch_size: tuple = (512, 512),
-            img_dtype: np.dtype = np.float32,
-            label_dtype: np.dtype = np.int32,
-            transform=None,
-            target_transform=None
+        self,
+        images_path_list: list,
+        labels_path_list: list,
+        patch_size: tuple = (512, 512),
+        img_dtype: np.dtype = np.float32,
+        label_dtype: np.dtype = np.int32,
+        transform=None,
+        target_transform=None,
     ):
         """
         Constructor.
@@ -53,7 +55,7 @@ class ImageLabelDataset(Dataset):
 
         target_transform=None
             Transforms to be applied to the labels.
-  
+
         """
         self.images = images_path_list
         self.labels = labels_path_list

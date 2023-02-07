@@ -9,17 +9,20 @@
 #       Aaron Ponti - initial API and implementation
 #  ******************************************************************************/
 
-from typing import Union
 from glob import glob
 from pathlib import Path
 from shutil import rmtree
+from typing import Union
 from zipfile import ZipFile
+
 import requests
 
 
-def get_cell_segmentation_demo_dataset(download_dir: Union[Path, str] = None, three_classes: bool = True):
+def get_cell_segmentation_demo_dataset(
+    download_dir: Union[Path, str] = None, three_classes: bool = True
+):
     """If not yet present, download and expands segmentation demo dataset.
-    
+
     Parameters
     ----------
 
@@ -29,7 +32,7 @@ def get_cell_segmentation_demo_dataset(download_dir: Union[Path, str] = None, th
     three_classes = bool
         If True, the segmentation demo with three classes (Background, Object, Border) will be downloaded;
         if False, the segmentation demo with two classes (Background, Object).
-    
+
     Returns
     -------
 
@@ -74,12 +77,11 @@ def get_cell_segmentation_demo_dataset(download_dir: Union[Path, str] = None, th
             (data_folder / f"{dataset_name}.zip").unlink()
 
     if not archive_found:
-
         # Get binary stream
         r = requests.get(f"https://obit.ethz.ch/qute/{dataset_name}.zip")
 
         # Target file
-        with open(data_folder / f"{dataset_name}.zip", 'wb') as f:
+        with open(data_folder / f"{dataset_name}.zip", "wb") as f:
             f.write(r.content)
 
         # Inform
@@ -91,7 +93,7 @@ def get_cell_segmentation_demo_dataset(download_dir: Union[Path, str] = None, th
         rmtree(demo_folder)
 
     # Extract zip file
-    with ZipFile(data_folder / f"{dataset_name}.zip", 'r') as z:
+    with ZipFile(data_folder / f"{dataset_name}.zip", "r") as z:
         # Extract all the contents of zip file
         z.extractall(data_folder)
 
@@ -100,7 +102,7 @@ def get_cell_segmentation_demo_dataset(download_dir: Union[Path, str] = None, th
 
 def get_cell_restoration_demo_dataset(download_dir: Union[Path, str] = None):
     """If not yet present, download and expands restoration demo dataset.
-    
+
     Parameters
     ----------
 
@@ -110,7 +112,7 @@ def get_cell_restoration_demo_dataset(download_dir: Union[Path, str] = None):
     three_classes = bool
         If True, the segmentation demo with three classes (Background, Object, Border) will be downloaded;
         if False, the segmentation demo with two classes (Background, Object).
-    
+
     Returns
     -------
 
@@ -148,23 +150,24 @@ def get_cell_restoration_demo_dataset(download_dir: Union[Path, str] = None):
             (data_folder / "demo_restoration.zip").unlink()
 
     if not archive_found:
-
         # Get binary stream
         r = requests.get("https://obit.ethz.ch/qute/demo_restoration.zip")
 
         # Target file
-        with open(data_folder / "demo_restoration.zip", 'wb') as f:
+        with open(data_folder / "demo_restoration.zip", "wb") as f:
             f.write(r.content)
 
         # Inform
-        print(f"Downloaded 'demo_restoration.zip' ({(data_folder / 'demo_restoration.zip').stat().st_size} bytes).")
+        print(
+            f"Downloaded 'demo_restoration.zip' ({(data_folder / 'demo_restoration.zip').stat().st_size} bytes)."
+        )
 
     # Make sure there are no remnants of previous extractions
     if demo_folder.is_dir():
         rmtree(demo_folder)
 
     # Extract zip file
-    with ZipFile(data_folder / "demo_restoration.zip", 'r') as z:
+    with ZipFile(data_folder / "demo_restoration.zip", "r") as z:
         # Extract all the contents of zip file
         z.extractall(data_folder)
 
