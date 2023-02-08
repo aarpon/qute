@@ -17,6 +17,7 @@ from qute.data.io import (
     get_cell_segmentation_demo_dataset,
 )
 from qute.transforms import MinMaxNormalize
+from monai.transforms import AsDiscrete
 
 
 class DataModuleLocalFolder(pl.LightningDataModule):
@@ -67,10 +68,10 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             Size of the patch to be extracted (at random positions) from images and labels.
 
         images_transform: Optional[list] = None
-            Transforms to to be applied to the images. If omitted some default transforms will be applied.
+            Transforms to be applied to the images. If omitted some default transforms will be applied.
 
         labels_transform: Optional[list] = None
-            Transforms to to be applied to the labels. If omitted some default transforms will be applied.
+            Transforms to be applied to the labels. If omitted some default transforms will be applied.
 
         images_sub_folder: str = "images"
             Name of the images sub-folder. It can be used to override the default "images".
@@ -212,7 +213,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             )
 
         if self.labels_transform is None:
-            self.labels_transform = Compose([ToTensor()])
+            self.labels_transform = Compose([ToTensor(), AsDiscrete(argmax=True, to_onehot=self.num_classes)])
 
         # Create the training dataset
         self.train_dataset = ImageLabelDataset(
@@ -317,10 +318,10 @@ class CellSegmentationDemo(DataModuleLocalFolder):
             Size of the patch to be extracted (at random positions) from images and labels.
 
         images_transform: Optional[list] = None
-            Transforms to to be applied to the images. If omitted some default transforms will be applied.
+            Transforms to be applied to the images. If omitted some default transforms will be applied.
 
         labels_transform: Optional[list] = None
-            Transforms to to be applied to the labels. If omitted some default transforms will be applied.
+            Transforms to be applied to the labels. If omitted some default transforms will be applied.
 
         images_sub_folder: str = "images"
             Name of the images sub-folder. It can be used to override the default "images".
@@ -425,10 +426,10 @@ class CellRestorationDemo(DataModuleLocalFolder):
             Size of the patch to be extracted (at random positions) from images and labels.
 
         images_transform: Optional[list] = None
-            Transforms to to be applied to the images. If omitted some default transforms will be applied.
+            Transforms to be applied to the images. If omitted some default transforms will be applied.
 
         labels_transform: Optional[list] = None
-            Transforms to to be applied to the labels. If omitted some default transforms will be applied.
+            Transforms to be applied to the labels. If omitted some default transforms will be applied.
 
         images_sub_folder: str = "images"
             Name of the images sub-folder. It can be used to override the default "images".
