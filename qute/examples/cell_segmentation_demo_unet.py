@@ -59,20 +59,19 @@ if __name__ == "__main__":
     # trainer.tune(model, datamodule=data_module)
 
     # Train with the optimal learning rate found above
-    #trainer.fit(model, data_module)
+    trainer.fit(model, data_module)
 
     # Print path to best model
-    #print(f"Best model: {model_checkpoint.best_model_path}")
+    print(f"Best model: {model_checkpoint.best_model_path}")
+
+    # Print path to best model
+    print(f"Best model: {model_checkpoint.best_model_path}")
 
     # Print path to best model
     print(f"Best model: {model_checkpoint.best_model_path}")
 
     # Load weights from best model
-    #model = UNet.load_from_checkpoint(model_checkpoint.best_model_path)
-    model = UNet.load_from_checkpoint("/home/pontia/Devel/Projects/qute/qute/examples/lightning_logs/version_10/checkpoints/epoch=454-step=2730.ckpt")
-
-    data_module.prepare_data()
-    data_module.setup("fit")
+    model = UNet.load_from_checkpoint(model_checkpoint.best_model_path)
 
     # Test
     trainer.test(model, dataloaders=data_module.test_dataloader())
