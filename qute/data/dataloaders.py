@@ -6,6 +6,7 @@ from typing import Optional, Union
 import numpy as np
 import pytorch_lightning as pl
 import yaml
+from monai.transforms import AsDiscrete
 from natsort import natsorted
 from numpy.random import default_rng
 from torch.utils.data import DataLoader
@@ -17,7 +18,6 @@ from qute.data.io import (
     get_cell_segmentation_demo_dataset,
 )
 from qute.transforms import MinMaxNormalize
-from monai.transforms import AsDiscrete
 
 
 class DataModuleLocalFolder(pl.LightningDataModule):
@@ -213,7 +213,9 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             )
 
         if self.labels_transform is None:
-            self.labels_transform = Compose([ToTensor(), AsDiscrete(argmax=True, to_onehot=self.num_classes)])
+            self.labels_transform = Compose(
+                [ToTensor(), AsDiscrete(to_onehot=self.num_classes)]
+            )
 
         # Create the training dataset
         self.train_dataset = ImageLabelDataset(

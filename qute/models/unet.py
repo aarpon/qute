@@ -12,9 +12,10 @@
 #  ******************************************************************************/
 
 import pytorch_lightning as pl
-import torchmetrics
-from monai.losses import GeneralizedDiceLoss
+from monai.losses import DiceCELoss, GeneralizedDiceLoss
+from monai.metrics import GeneralizedDiceScore
 from monai.networks.nets import UNet as MonaiUNet
+from monai.transforms import Activations, AsDiscrete, Compose
 from torch.optim import AdamW
 
 
@@ -30,12 +31,11 @@ class UNet(pl.LightningModule):
         spatial_dims: int = 2,
         in_channels: int = 1,
         out_channels: int = 3,
-        channels: tuple = (16, 32, 64, 128),
-        strides: tuple = (2, 2, 2),
-        criterion=GeneralizedDiceLoss(
-            include_background=False, to_onehot_y=True, softmax=True, batch=True
-        ),
-        metrics=torchmetrics.JaccardIndex(task="multiclass", num_classes=3, ignore_index=0),
+        channels: tuple = (16, 32, 64, 128, 256),
+        strides: tuple = (2, 2, 2, 2),
+        criterion=DiceCELoss(include_background=False, to_onehot_y=False, softmax=True),
+        metrics=GeneralizedDiceScore(include_background=False),
+        post_activation=None,
         learning_rate: float = 1e-2,
         optimizer_class=AdamW,
         num_res_units: int = 0,
@@ -61,18 +61,20 @@ class UNet(pl.LightningModule):
         strides: tuple = (2, 2, 2)
             Strides for down-sampling.
 
-        criterion: GeneralizedDiceLoss(include_background=False, to_onehot_y=True, softmax=True, batch=True)
-            Loss function. Please NOTE: for classification, the loss function must convert `y` to OneHot and
-            apply softmax. The default loss function applies to a multi-label target where the background class
-            is omitted.
+        criterion: DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)
+            Loss function. Please NOTE: for classification, the loss function must convert `y` to OneHot.
+            The default loss function applies to a multi-label target where the background class is omitted.
 
-        metrics: JaccardIndex(num_classes=3, ignore_index=0)
+        metrics: GeneralizedDiceScore(include_background=False)
             Metrics used for training, validation, and testing. Set to None to omit.
 
             The default metrics applies to a three-label target where the background (index = 0) class
             is omitted from calculation.
 
             Set to None to omit calculating and reporting it.
+
+        post_activation: None
+            Post activation for the output of the forward pass in the prediction step (only).
 
         learning_rate: float = 1e-2
             Learning rate for optimization.
@@ -90,6 +92,7 @@ class UNet(pl.LightningModule):
         self.metrics = metrics
         self.learning_rate = learning_rate
         self.optimizer_class = optimizer_class
+        self.post_activation = post_activation
         self.net = MonaiUNet(
             spatial_dims=spatial_dims,
             in_channels=in_channels,
@@ -110,11 +113,7 @@ class UNet(pl.LightningModule):
         x, y = batch
         y_hat = self.net(x)
         loss = self.criterion(y_hat, y)
-        self.log("train_loss", loss, prog_bar=True, on_step=True, on_epoch=True)
-        if self.metrics is not None:
-            self.log(
-                "train_metric", self.metrics(y_hat, y), on_step=True, on_epoch=True
-            )
+        self.log("train_loss", loss, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -122,13 +121,7 @@ class UNet(pl.LightningModule):
         x, y = batch
         y_hat = self.net(x)
         val_loss = self.criterion(y_hat, y)
-        self.log("val_loss", val_loss, on_step=True, on_epoch=True)
-        if self.metrics is None:
-            return {"val_loss": val_loss}
-        else:
-            val_metric = self.metrics(y_hat, y)
-            self.log("val_metric", val_metric, on_step=True, on_epoch=True)
-            return {"val_loss": val_loss, "val_metric": val_metric}
+        self.log("val_loss", val_loss)
 
     def test_step(self, batch, batch_idx):
         """Perform a test step."""
@@ -136,16 +129,12 @@ class UNet(pl.LightningModule):
         y_hat = self.net(x)
         test_loss = self.criterion(y_hat, y)
         self.log("test_loss", test_loss)
-        if self.metrics is None:
-            return {"test_loss": test_loss}
-        else:
-            test_metric = self.metrics(y_hat, y)
-            self.log("test_metric", test_metric)
-            return {"test_loss": test_loss, "test_metric": test_metric}
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """The predict step creates a label image from the output one-hot tensor."""
         x, _ = batch
         y_hat = self.net(x)
+        if self.post_activation is not None:
+            y_hat = self.post_activation(y_hat)
         label = y_hat.argmax(axis=1)
         return label

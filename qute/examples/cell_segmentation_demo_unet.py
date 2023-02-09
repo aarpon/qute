@@ -11,10 +11,10 @@
 
 import sys
 from datetime import datetime
-
+import numpy as np
 import pytorch_lightning as pl
-import torchmetrics
-from monai.losses import GeneralizedDiceLoss
+from monai.losses import DiceCELoss, GeneralizedDiceLoss
+from monai.metrics import GeneralizedDiceScore
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from tifffile import imwrite
@@ -29,21 +29,19 @@ if __name__ == "__main__":
     seed_everything(SEED, workers=True)
 
     # Data module
-    data_module = CellSegmentationDemo(seed=SEED, batch_size=12, patch_size=(256, 256))
+    data_module = CellSegmentationDemo(seed=SEED, batch_size=12, patch_size=(512, 512))
 
     # Loss
-    criterion = GeneralizedDiceLoss(
-        include_background=True, to_onehot_y=True, softmax=True, batch=True
-    )
+    criterion = DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)
 
     # Metrics
-    metrics = torchmetrics.JaccardIndex(task="multiclass", num_classes=3, ignore_index=0)
+    metrics = GeneralizedDiceScore(include_background=False)
 
     # Model
     model = UNet(num_res_units=4, criterion=criterion, metrics=metrics)
 
     # Callbacks
-    early_stopping = EarlyStopping(monitor="val_loss")
+    # early_stopping = EarlyStopping(monitor="val_loss")
     model_checkpoint = ModelCheckpoint(monitor="val_loss")
 
     # Instantiate the Trainer
@@ -51,7 +49,7 @@ if __name__ == "__main__":
         accelerator="gpu",
         devices=1,
         precision=32,
-        callbacks=[early_stopping, model_checkpoint],
+        callbacks=[model_checkpoint],
         max_epochs=500,
         log_every_n_steps=1,
     )
@@ -61,10 +59,17 @@ if __name__ == "__main__":
     # trainer.tune(model, datamodule=data_module)
 
     # Train with the optimal learning rate found above
-    trainer.fit(model, data_module)
+    #trainer.fit(model, data_module)
+
+    # Print path to best model
+    #print(f"Best model: {model_checkpoint.best_model_path}")
 
     # Load weights from best model
-    model = UNet.load_from_checkpoint(model_checkpoint.best_model_path)
+    #model = UNet.load_from_checkpoint(model_checkpoint.best_model_path)
+    model = UNet.load_from_checkpoint("/home/pontia/Devel/Projects/qute/qute/examples/lightning_logs/version_10/checkpoints/epoch=454-step=2730.ckpt")
+
+    data_module.prepare_data()
+    data_module.setup("fit")
 
     # Test
     trainer.test(model, dataloaders=data_module.test_dataloader())
@@ -84,7 +89,7 @@ if __name__ == "__main__":
             out_filename = (
                 predict_out_folder / f"prediction_{data_module.test_labels[i].name}"
             )
-            imwrite(out_filename, prediction_batch_cpu[j])
+            imwrite(out_filename, prediction_batch_cpu[j].astype(np.int32))
             i += 1
 
     print(f"Saved {i} images to {predict_out_folder}.")
