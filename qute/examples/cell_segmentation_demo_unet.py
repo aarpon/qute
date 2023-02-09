@@ -64,12 +64,6 @@ if __name__ == "__main__":
     # Print path to best model
     print(f"Best model: {model_checkpoint.best_model_path}")
 
-    # Print path to best model
-    print(f"Best model: {model_checkpoint.best_model_path}")
-
-    # Print path to best model
-    print(f"Best model: {model_checkpoint.best_model_path}")
-
     # Load weights from best model
     model = UNet.load_from_checkpoint(model_checkpoint.best_model_path)
 
