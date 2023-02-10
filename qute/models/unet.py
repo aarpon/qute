@@ -113,7 +113,7 @@ class UNet(pl.LightningModule):
         x, y = batch
         y_hat = self.net(x)
         loss = self.criterion(y_hat, y)
-        self.log("train_loss", loss, prog_bar=True)
+        self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -121,7 +121,7 @@ class UNet(pl.LightningModule):
         x, y = batch
         y_hat = self.net(x)
         val_loss = self.criterion(y_hat, y)
-        self.log("val_loss", val_loss)
+        self.log("val_loss", val_loss, on_step=False, on_epoch=True)
 
     def test_step(self, batch, batch_idx):
         """Perform a test step."""

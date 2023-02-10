@@ -18,8 +18,8 @@ import numpy as np
 def sample(
     image: np.ndarray,
     patch_size: tuple,
-    y0: int = None,
-    x0: int = None,
+    y0: Optional[int] = None,
+    x0: Optional[int] = None,
     seed: Optional[int] = None,
 ) -> tuple[np.ndarray, int, int]:
     """Returns a (random) subset of given shape from the passed 2D image.

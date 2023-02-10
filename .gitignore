@@ -8,3 +8,4 @@ __pycache__/
 *.log
 runs/
 scratch/
+.mypy_cache/

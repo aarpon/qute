@@ -3,7 +3,6 @@ import time
 from pathlib import Path
 from typing import Optional, Union
 
-import mdurl
 import numpy as np
 import pytorch_lightning as pl
 import yaml
@@ -14,7 +13,6 @@ from monai.transforms import (
     LoadImaged,
     RandRotate90d,
     RandSpatialCropd,
-    ScaleIntensityd,
 )
 from natsort import natsorted
 from numpy.random import default_rng
@@ -44,9 +42,9 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         test_transforms_dict: Optional[list] = None,
         images_sub_folder: str = "images",
         labels_sub_folder: str = "labels",
-        image_range_intensities: Optional[tuple] = None,
+        image_range_intensities: Optional[tuple[int, int]] = None,
         seed: int = 42,
-        num_workers: int = os.cpu_count(),
+        num_workers: Optional[int] = os.cpu_count(),
         pin_memory: bool = True,
     ):
         """
@@ -146,22 +144,22 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         self.seed = seed
 
         # Make sure the fractions add to 1.0
-        total = train_fraction + val_fraction + test_fraction
-        self.train_fraction = train_fraction / total
-        self.val_fraction = val_fraction / total
-        self.test_fraction = test_fraction / total
+        total: float = train_fraction + val_fraction + test_fraction
+        self.train_fraction: float = train_fraction / total
+        self.val_fraction: float = val_fraction / total
+        self.test_fraction: float = test_fraction / total
 
         # Declare lists of training, validation, and testing images and labels
-        self.images = []
-        self.labels = []
+        self.images: list[Path] = []
+        self.labels: list[Path] = []
 
         # Keep track of the file names of the training, validation, and testing sets
-        self.train_images = []
-        self.train_labels = []
-        self.val_images = []
-        self.val_labels = []
-        self.test_images = []
-        self.test_labels = []
+        self.train_images: list[Path] = []
+        self.train_labels: list[Path] = []
+        self.val_images: list[Path] = []
+        self.val_labels: list[Path] = []
+        self.test_images: list[Path] = []
+        self.test_labels: list[Path] = []
 
         # Declare datasets
         self.train_dataset = None
@@ -366,7 +364,7 @@ class CellSegmentationDemo(DataModuleLocalFolder):
         images_sub_folder: str = "images",
         labels_sub_folder: str = "labels",
         seed: int = 42,
-        num_workers: int = os.cpu_count(),
+        num_workers: Optional[int] = os.cpu_count(),
         pin_memory: bool = True,
     ):
         """
@@ -490,7 +488,7 @@ class CellRestorationDemo(DataModuleLocalFolder):
         images_sub_folder: str = "images",
         labels_sub_folder: str = "targets",
         seed: int = 42,
-        num_workers: int = os.cpu_count(),
+        num_workers: Optional[int] = os.cpu_count(),
         pin_memory: bool = True,
     ):
         """
