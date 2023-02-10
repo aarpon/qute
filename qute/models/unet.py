@@ -39,6 +39,7 @@ class UNet(pl.LightningModule):
         learning_rate: float = 1e-2,
         optimizer_class=AdamW,
         num_res_units: int = 0,
+        dropout: float = 0.0
     ):
         """
         Constructor.
@@ -84,6 +85,9 @@ class UNet(pl.LightningModule):
 
         num_res_units: int = 0
             Number of residual units for the UNet.
+        
+        dropout: float = 0.0
+            Dropout ratio.
         """
 
         super().__init__()
@@ -100,6 +104,7 @@ class UNet(pl.LightningModule):
             channels=channels,
             strides=strides,
             num_res_units=num_res_units,
+            dropout=dropout
         )
         self.save_hyperparameters(ignore=["criterion", "metrics"])
 
