@@ -42,7 +42,7 @@ if __name__ == "__main__":
     model = UNet(num_res_units=4, criterion=criterion, metrics=metrics)
 
     # Callbacks
-    # early_stopping = EarlyStopping(monitor="val_loss")
+    early_stopping = EarlyStopping(monitor="val_loss")
     model_checkpoint = ModelCheckpoint(monitor="val_loss")
 
     # Instantiate the Trainer
@@ -50,14 +50,14 @@ if __name__ == "__main__":
         accelerator="gpu",
         devices=1,
         precision=32,
-        callbacks=[model_checkpoint],
-        max_epochs=500,
+        callbacks=[early_stopping, model_checkpoint],
+        max_epochs=400,
         log_every_n_steps=1,
     )
     trainer.logger._default_hp_metric = False
 
     # Find the best learning rate
-    # trainer.tune(model, datamodule=data_module)
+    trainer.tune(model, datamodule=data_module)
 
     # Train with the optimal learning rate found above
     trainer.fit(model, data_module)

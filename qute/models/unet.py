@@ -126,7 +126,8 @@ class UNet(pl.LightningModule):
         x, y = batch
         y_hat = self.net(x)
         val_loss = self.criterion(y_hat, y)
-        self.log("val_loss", val_loss, on_step=False, on_epoch=True)
+        self.log("val_loss", val_loss, on_step=False, on_epoch=True, prog_bar=True)
+        return val_loss
 
     def test_step(self, batch, batch_idx):
         """Perform a test step."""
@@ -134,6 +135,7 @@ class UNet(pl.LightningModule):
         y_hat = self.net(x)
         test_loss = self.criterion(y_hat, y)
         self.log("test_loss", test_loss)
+        return test_loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """The predict step creates a label image from the output one-hot tensor."""
