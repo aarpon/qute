@@ -3,21 +3,28 @@ import time
 from pathlib import Path
 from typing import Optional, Union
 
+import mdurl
 import numpy as np
 import pytorch_lightning as pl
 import yaml
-from monai.transforms import AsDiscrete
+from monai.data import Dataset
+from monai.transforms import (
+    AsDiscreted,
+    Compose,
+    LoadImaged,
+    RandRotate90d,
+    RandSpatialCropd,
+    ScaleIntensityd,
+)
 from natsort import natsorted
 from numpy.random import default_rng
 from torch.utils.data import DataLoader
-from torchvision.transforms import Compose, ToTensor
 
-from qute.data.datasets import ImageLabelDataset
 from qute.data.io import (
     get_cell_restoration_demo_dataset,
     get_cell_segmentation_demo_dataset,
 )
-from qute.transforms import MinMaxNormalize
+from qute.transforms import MinMaxNormalized, ToPyTorchOutput
 
 
 class DataModuleLocalFolder(pl.LightningDataModule):
@@ -28,14 +35,16 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         data_dir: Union[Path, str] = Path(),
         num_classes: int = 3,
         train_fraction: float = 0.7,
-        valid_fraction: float = 0.2,
+        val_fraction: float = 0.2,
         test_fraction: float = 0.1,
         batch_size: int = 8,
         patch_size: tuple = (512, 512),
-        images_transform: Optional[list] = None,
-        labels_transform: Optional[list] = None,
+        train_transforms_dict: Optional[list] = None,
+        val_transforms_dict: Optional[list] = None,
+        test_transforms_dict: Optional[list] = None,
         images_sub_folder: str = "images",
         labels_sub_folder: str = "labels",
+        image_range_intensities: Optional[tuple] = None,
         seed: int = 42,
         num_workers: int = os.cpu_count(),
         pin_memory: bool = True,
@@ -55,7 +64,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         train_fraction: float = 0.7
             Fraction of images and corresponding labels that go into the training set.
 
-        valid_fraction: float = 0.2
+        val_fraction: float = 0.2
             Fraction of images and corresponding labels that go into the validation set.
 
         test_fraction: float = 0.1
@@ -67,11 +76,14 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         patch_size: tuple = (512, 512)
             Size of the patch to be extracted (at random positions) from images and labels.
 
-        images_transform: Optional[list] = None
-            Transforms to be applied to the images. If omitted some default transforms will be applied.
+        train_transforms_dict: Optional[list] = None
+            Dictionary transforms to be applied to the training images and labels. If omitted some default transforms will be applied.
 
-        labels_transform: Optional[list] = None
-            Transforms to be applied to the labels. If omitted some default transforms will be applied.
+        val_transforms_dict: Optional[list] = None
+            Dictionary transforms to be applied to the validation images and labels. If omitted some default transforms will be applied.
+
+        test_transforms_dict: Optional[list] = None
+            Dictionary transforms to be applied to the test images and labels. If omitted some default transforms will be applied.
 
         images_sub_folder: str = "images"
             Name of the images sub-folder. It can be used to override the default "images".
@@ -99,30 +111,44 @@ class DataModuleLocalFolder(pl.LightningDataModule):
 
         self.num_classes = num_classes
 
+        # Normalization range
+        if image_range_intensities is None:
+            self.image_range_intensities = (0, 65535)
+        else:
+            self.image_range_intensities = image_range_intensities
+
         # Set the subfolder names
         self.images_sub_folder = images_sub_folder
         self.labels_sub_folder = labels_sub_folder
 
         # Set the transforms is any are passed
-        self.images_transform = None
-        if images_transform is not None:
-            self.images_transform = images_transform
-        self.labels_transform = None
-        if labels_transform is not None:
-            self.labels_transform = labels_transform
+        self.train_transforms_dict = None
+        if train_transforms_dict is not None:
+            self.train_transforms_dict = train_transforms_dict
+        else:
+            self.train_transforms_dict = self.get_train_transforms_dict()
+
+        self.val_transforms_dict = None
+        if val_transforms_dict is not None:
+            self.val_transforms_dict = val_transforms_dict
+        else:
+            self.val_transforms_dict = self.get_val_transforms_dict()
+
+        self.test_transforms_dict = None
+        if test_transforms_dict is not None:
+            self.test_transforms_dict = test_transforms_dict
+        else:
+            self.test_transforms_dict = self.get_test_transforms_dict()
 
         # Set the seed
         if seed is None:
             seed = time.time_ns()
         self.seed = seed
 
-        # Metadata
-        self.metadata = {}
-
         # Make sure the fractions add to 1.0
-        total = train_fraction + valid_fraction + test_fraction
+        total = train_fraction + val_fraction + test_fraction
         self.train_fraction = train_fraction / total
-        self.valid_fraction = valid_fraction / total
+        self.val_fraction = val_fraction / total
         self.test_fraction = test_fraction / total
 
         # Declare lists of training, validation, and testing images and labels
@@ -132,14 +158,14 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         # Keep track of the file names of the training, validation, and testing sets
         self.train_images = []
         self.train_labels = []
-        self.valid_images = []
-        self.valid_labels = []
+        self.val_images = []
+        self.val_labels = []
         self.test_images = []
         self.test_labels = []
 
         # Declare datasets
         self.train_dataset = None
-        self.valid_dataset = None
+        self.val_dataset = None
         self.test_dataset = None
 
     def setup(self, stage):
@@ -147,7 +173,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
 
         if (
             self.train_dataset is not None
-            and self.valid_dataset is not None
+            and self.val_dataset is not None
             and self.test_dataset is not None
         ):
             # Data is already prepared
@@ -160,10 +186,6 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         self.labels = natsorted(
             list((self.data_dir / self.labels_sub_folder).glob("*.tif"))
         )
-
-        # Parse the metadata file
-        with open(self.data_dir / "metadata.yaml") as f:
-            self.metadata = yaml.load(f, Loader=yaml.FullLoader)
 
         # Check that we found some images
         if len(self.images) == 0:
@@ -182,66 +204,47 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         # Partition images and labels into training, validation and testing datasets
         train_len = round(self.train_fraction * len(shuffled_images))
         len_rest = len(shuffled_images) - train_len
-        updated_valid_fraction = self.valid_fraction / (
-            self.valid_fraction + self.test_fraction
+        updated_val_fraction = self.val_fraction / (
+            self.val_fraction + self.test_fraction
         )
-        valid_len = round(updated_valid_fraction * len_rest)
-        test_len = len_rest - valid_len
+        val_len = round(updated_val_fraction * len_rest)
+        test_len = len_rest - val_len
 
         # Split the sets
         self.train_images = shuffled_images[:train_len]
         self.train_labels = shuffled_labels[:train_len]
-        self.valid_images = shuffled_images[train_len:-test_len]
-        self.valid_labels = shuffled_labels[train_len:-test_len]
+        self.val_images = shuffled_images[train_len:-test_len]
+        self.val_labels = shuffled_labels[train_len:-test_len]
         self.test_images = shuffled_images[-test_len:]
         self.test_labels = shuffled_labels[-test_len:]
 
-        assert len(self.train_images) + len(self.valid_images) + len(
+        assert len(self.train_images) + len(self.val_images) + len(
             self.test_images
         ) == len(shuffled_images), "Something went wrong with the partitioning!"
 
-        # If no transforms are set, put the defaults here
-        if self.images_transform is None:
-            self.images_transform = Compose(
-                [
-                    ToTensor(),
-                    MinMaxNormalize(
-                        min_intensity=self.metadata["min_intensity"],
-                        max_intensity=self.metadata["max_intensity"],
-                    ),
-                ]
-            )
-
-        if self.labels_transform is None:
-            self.labels_transform = Compose(
-                [ToTensor(), AsDiscrete(to_onehot=self.num_classes)]
-            )
-
         # Create the training dataset
-        self.train_dataset = ImageLabelDataset(
-            self.train_images,
-            self.train_labels,
-            patch_size=self.patch_size,
-            transform=self.images_transform,
-            target_transform=self.labels_transform,
+        train_files = [
+            {"image": image, "label": label}
+            for image, label in zip(self.train_images, self.train_labels)
+        ]
+        self.train_dataset = Dataset(
+            data=train_files, transform=self.train_transforms_dict
         )
 
         # Create the validation dataset
-        self.valid_dataset = ImageLabelDataset(
-            self.valid_images,
-            self.valid_labels,
-            patch_size=self.patch_size,
-            transform=self.images_transform,
-            target_transform=self.labels_transform,
-        )
+        val_files = [
+            {"image": image, "label": label}
+            for image, label in zip(self.val_images, self.val_labels)
+        ]
+        self.val_dataset = Dataset(data=val_files, transform=self.val_transforms_dict)
 
         # Create the testing dataset
-        self.test_dataset = ImageLabelDataset(
-            self.test_images,
-            self.test_labels,
-            patch_size=self.patch_size,
-            transform=self.images_transform,
-            target_transform=self.labels_transform,
+        test_files = [
+            {"image": image, "label": label}
+            for image, label in zip(self.test_images, self.test_labels)
+        ]
+        self.test_dataset = Dataset(
+            data=test_files, transform=self.test_transforms_dict
         )
 
     def train_dataloader(self):
@@ -256,7 +259,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
     def val_dataloader(self):
         """Return DataLoader for Validation data."""
         return DataLoader(
-            self.valid_dataset,
+            self.val_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
@@ -271,6 +274,79 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             pin_memory=self.pin_memory,
         )
 
+    def get_train_transforms_dict(self):
+        """Define default training set transforms."""
+        train_transforms = Compose(
+            [
+                LoadImaged(
+                    keys=["image", "label"],
+                    reader="PILReader",
+                    image_only=True,
+                    ensure_channel_first=True,
+                    dtype=np.float32,
+                ),
+                MinMaxNormalized(
+                    min_intensity=self.image_range_intensities[0],
+                    max_intensity=self.image_range_intensities[1],
+                ),
+                RandSpatialCropd(
+                    keys=["image", "label"], roi_size=self.patch_size, random_size=False
+                ),
+                RandRotate90d(keys=["image", "label"], prob=1.0, spatial_axes=(0, 1)),
+                AsDiscreted(keys=["label"], to_onehot=self.num_classes),
+                ToPyTorchOutput(),
+            ]
+        )
+        return train_transforms
+
+    def get_val_transforms_dict(self):
+        """Define default validation set transforms."""
+        val_transforms = Compose(
+            [
+                LoadImaged(
+                    keys=["image", "label"],
+                    reader="PILReader",
+                    image_only=True,
+                    ensure_channel_first=True,
+                    dtype=np.float32,
+                ),
+                MinMaxNormalized(
+                    min_intensity=self.image_range_intensities[0],
+                    max_intensity=self.image_range_intensities[1],
+                ),
+                RandSpatialCropd(
+                    keys=["image", "label"], roi_size=self.patch_size, random_size=False
+                ),
+                AsDiscreted(keys=["label"], to_onehot=self.num_classes),
+                ToPyTorchOutput(),
+            ]
+        )
+        return val_transforms
+
+    def get_test_transforms_dict(self):
+        """Define default test set transforms."""
+        test_transforms = Compose(
+            [
+                LoadImaged(
+                    keys=["image", "label"],
+                    reader="PILReader",
+                    image_only=True,
+                    ensure_channel_first=True,
+                    dtype=np.float32,
+                ),
+                MinMaxNormalized(
+                    min_intensity=self.image_range_intensities[0],
+                    max_intensity=self.image_range_intensities[1],
+                ),
+                RandSpatialCropd(
+                    keys=["image", "label"], roi_size=self.patch_size, random_size=False
+                ),
+                AsDiscreted(keys=["label"], to_onehot=self.num_classes),
+                ToPyTorchOutput(),
+            ]
+        )
+        return test_transforms
+
 
 class CellSegmentationDemo(DataModuleLocalFolder):
     """DataLoader for the Cell Segmentation Demo."""
@@ -280,12 +356,13 @@ class CellSegmentationDemo(DataModuleLocalFolder):
         download_dir: Union[Path, str] = Path.home() / ".qute" / "data",
         three_classes: bool = True,
         train_fraction: float = 0.7,
-        valid_fraction: float = 0.2,
+        val_fraction: float = 0.2,
         test_fraction: float = 0.1,
         batch_size: int = 8,
         patch_size: tuple = (512, 512),
-        images_transform: Optional[list] = None,
-        labels_transform: Optional[list] = None,
+        train_transforms_dict: Optional[list] = None,
+        val_transforms_dict: Optional[list] = None,
+        test_transforms_dict: Optional[list] = None,
         images_sub_folder: str = "images",
         labels_sub_folder: str = "labels",
         seed: int = 42,
@@ -307,7 +384,7 @@ class CellSegmentationDemo(DataModuleLocalFolder):
         train_fraction: float = 0.7
             Fraction of images and corresponding labels that go into the training set.
 
-        valid_fraction: float = 0.2
+        val_fraction: float = 0.2
             Fraction of images and corresponding labels that go into the validation set.
 
         test_fraction: float = 0.1
@@ -319,11 +396,14 @@ class CellSegmentationDemo(DataModuleLocalFolder):
         patch_size: tuple = (512, 512)
             Size of the patch to be extracted (at random positions) from images and labels.
 
-        images_transform: Optional[list] = None
-            Transforms to be applied to the images. If omitted some default transforms will be applied.
+        train_transforms_dict: Optional[list] = None
+            Dictionary transforms to be applied to the training images and labels. If omitted some default transforms will be applied.
 
-        labels_transform: Optional[list] = None
-            Transforms to be applied to the labels. If omitted some default transforms will be applied.
+        val_transforms_dict: Optional[list] = None
+            Dictionary transforms to be applied to the validation images and labels. If omitted some default transforms will be applied.
+
+        test_transforms_dict: Optional[list] = None
+            Dictionary transforms to be applied to the test images and labels. If omitted some default transforms will be applied.
 
         images_sub_folder: str = "images"
             Name of the images sub-folder. It can be used to override the default "images".
@@ -352,19 +432,28 @@ class CellSegmentationDemo(DataModuleLocalFolder):
             self.num_classes = 2
         data_dir = self.download_dir / f"demo_segmentation_{self.num_classes}_classes"
 
+        # Parse the metadata file
+        with open(data_dir / "metadata.yaml") as f:
+            metadata = yaml.load(f, Loader=yaml.FullLoader)
+
         # Call base constructor
         super().__init__(
             data_dir=data_dir,
             num_classes=self.num_classes,
             train_fraction=train_fraction,
-            valid_fraction=valid_fraction,
+            val_fraction=val_fraction,
             test_fraction=test_fraction,
             batch_size=batch_size,
             patch_size=patch_size,
-            images_transform=images_transform,
-            labels_transform=labels_transform,
+            train_transforms_dict=train_transforms_dict,
+            val_transforms_dict=val_transforms_dict,
+            test_transforms_dict=test_transforms_dict,
             images_sub_folder=images_sub_folder,
             labels_sub_folder=labels_sub_folder,
+            image_range_intensities=(
+                metadata["min_intensity"],
+                metadata["max_intensity"],
+            ),
             seed=seed,
             num_workers=num_workers,
             pin_memory=pin_memory,
@@ -391,12 +480,13 @@ class CellRestorationDemo(DataModuleLocalFolder):
         self,
         download_dir: Union[Path, str] = Path.home() / ".qute" / "data",
         train_fraction: float = 0.7,
-        valid_fraction: float = 0.2,
+        val_fraction: float = 0.2,
         test_fraction: float = 0.1,
         batch_size: int = 8,
         patch_size: tuple = (512, 512),
-        images_transform: Optional[list] = None,
-        labels_transform: Optional[list] = None,
+        train_transforms_dict: Optional[list] = None,
+        val_transforms_dict: Optional[list] = None,
+        test_transforms_dict: Optional[list] = None,
         images_sub_folder: str = "images",
         labels_sub_folder: str = "targets",
         seed: int = 42,
@@ -415,7 +505,7 @@ class CellRestorationDemo(DataModuleLocalFolder):
         train_fraction: float = 0.7
             Fraction of images and corresponding labels that go into the training set.
 
-        valid_fraction: float = 0.2
+        val_fraction: float = 0.2
             Fraction of images and corresponding labels that go into the validation set.
 
         test_fraction: float = 0.1
@@ -427,11 +517,14 @@ class CellRestorationDemo(DataModuleLocalFolder):
         patch_size: tuple = (512, 512)
             Size of the patch to be extracted (at random positions) from images and labels.
 
-        images_transform: Optional[list] = None
-            Transforms to be applied to the images. If omitted some default transforms will be applied.
+        train_transforms_dict: Optional[list] = None
+            Dictionary transforms to be applied to the training images and labels. If omitted some default transforms will be applied.
 
-        labels_transform: Optional[list] = None
-            Transforms to be applied to the labels. If omitted some default transforms will be applied.
+        val_transforms_dict: Optional[list] = None
+            Dictionary transforms to be applied to the validation images and labels. If omitted some default transforms will be applied.
+
+        test_transforms_dict: Optional[list] = None
+            Dictionary transforms to be applied to the test images and labels. If omitted some default transforms will be applied.
 
         images_sub_folder: str = "images"
             Name of the images sub-folder. It can be used to override the default "images".
@@ -455,18 +548,27 @@ class CellRestorationDemo(DataModuleLocalFolder):
         # Data directory
         data_dir = self.download_dir / f"demo_restoration"
 
+        # Parse the metadata file
+        with open(data_dir / "metadata.yaml") as f:
+            metadata = yaml.load(f, Loader=yaml.FullLoader)
+
         # Call base constructor
         super().__init__(
             data_dir=data_dir,
             train_fraction=train_fraction,
-            valid_fraction=valid_fraction,
+            val_fraction=val_fraction,
             test_fraction=test_fraction,
             batch_size=batch_size,
             patch_size=patch_size,
-            images_transform=images_transform,
-            labels_transform=labels_transform,
+            train_transforms_dict=train_transforms_dict,
+            val_transforms_dict=val_transforms_dict,
+            test_transforms_dict=test_transforms_dict,
             images_sub_folder=images_sub_folder,
             labels_sub_folder=labels_sub_folder,
+            image_range_intensities=(
+                metadata["min_intensity"],
+                metadata["max_intensity"],
+            ),
             seed=seed,
             num_workers=num_workers,
             pin_memory=pin_memory,

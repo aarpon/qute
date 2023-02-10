@@ -11,6 +11,7 @@
 
 import sys
 from datetime import datetime
+
 import numpy as np
 import pytorch_lightning as pl
 from monai.losses import DiceCELoss, GeneralizedDiceLoss
@@ -29,7 +30,7 @@ if __name__ == "__main__":
     seed_everything(SEED, workers=True)
 
     # Data module
-    data_module = CellSegmentationDemo(seed=SEED, batch_size=12, patch_size=(512, 512))
+    data_module = CellSegmentationDemo(seed=SEED, batch_size=24, patch_size=(256, 256))
 
     # Loss
     criterion = DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)

@@ -36,6 +36,7 @@ class MinMaxNormalize(Transform):
         """
         self.min_intensity = min_intensity
         self.max_intensity = max_intensity
+        self.range_intensity = self.max_intensity - self.min_intensity
 
     def __call__(self, image: torch.tensor) -> torch.tensor:
         """
@@ -47,7 +48,61 @@ class MinMaxNormalize(Transform):
         result: tensor
             A stack of images with the same width and height as `label` and with `num_classes` planes.
         """
-        return (image - self.min_intensity) / (self.max_intensity - self.min_intensity)
+        return (image - self.min_intensity) / self.range_intensity
+
+
+class MinMaxNormalized(Transform):
+    """Normalize the "image" tensor to [0, 1] using given min and max absolute intensities from the data dictionary."""
+
+    def __init__(self, min_intensity: int = 0, max_intensity: int = 65535) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+
+        min_intensity: int
+            Minimum intensity to normalize against (optional, default = 0).
+        max_intensity: int
+            Maximum intensity to normalize against (optional, default = 65535).
+        """
+        self.min_intensity = min_intensity
+        self.max_intensity = max_intensity
+        self.range_intensity = self.max_intensity - self.min_intensity
+
+    def __call__(self, data: dict) -> dict:
+        """
+        Apply the transform to the "image" tensor in the data dictionary.
+
+        Returns
+        -------
+
+        Returns
+        -------
+
+        data: dict
+            Updated dictionary with normalized "image" tensor.
+        """
+        data["image"] = (data["image"] - self.min_intensity) / self.range_intensity
+        return data
+
+
+class ToPyTorchOutput(Transform):
+    """
+    Simple converter to pass from the dictionary output of Monai transfors to the expected (image, label) tuple used by PyTorch Lightning.
+    """
+
+    def __init__(
+        self, image_dtype: np.dtype = np.float32, label_dtype: np.dtype = np.int32
+    ):
+        super().__init__()
+        self.image_dtype = image_dtype
+        self.label_dtype = label_dtype
+
+    def __call__(self, data: dict) -> dict:
+        """Unwrap the dictionary."""
+        return data["image"].astype(self.image_dtype), data["label"].astype(
+            self.label_dtype
+        )
 
 
 class DebugInformer(Transform):

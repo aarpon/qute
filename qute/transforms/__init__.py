@@ -8,6 +8,11 @@
 #   Contributors:
 #       Aaron Ponti - initial API and implementation
 #  ******************************************************************************/
-from .transforms import MinMaxNormalize
+from .transforms import (
+    DebugInformer,
+    MinMaxNormalize,
+    MinMaxNormalized,
+    ToPyTorchOutput,
+)
 
 __doc__ = """Custom transforms."""
