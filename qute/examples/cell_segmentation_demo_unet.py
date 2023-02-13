@@ -25,14 +25,14 @@ from qute.data.dataloaders import CellSegmentationDemo
 from qute.models.unet import UNet
 
 SEED = 2022
-BATCH_SIZE = (256, 256)
+PATCH_SIZE = (512, 512)
 
 if __name__ == "__main__":
     # Seeding
     seed_everything(SEED, workers=True)
 
     # Data module
-    data_module = CellSegmentationDemo(seed=SEED, batch_size=24, patch_size=BATCH_SIZE)
+    data_module = CellSegmentationDemo(seed=SEED, batch_size=24, patch_size=PATCH_SIZE)
 
     # Loss
     criterion = DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)
@@ -53,7 +53,7 @@ if __name__ == "__main__":
         devices=1,
         precision=16 if torch.cuda.is_bf16_supported() else 32,
         callbacks=[model_checkpoint],
-        max_epochs=5,
+        max_epochs=250,
         log_every_n_steps=1,
     )
     trainer.logger._default_hp_metric = False
@@ -78,13 +78,15 @@ if __name__ == "__main__":
 
     # Save the full predictions (on the test set)
     model.full_predict(
-        input_folder=data_module.data_dir / "images/",
+        data_loader=data_module.full_predict_dataloader(
+            data_module.data_dir / "images/"
+        ),
         target_folder=data_module.data_dir
         / f"full_predictions_{datetime.now().strftime('%Y%m%d_%H%M%S')}/",
-        image_transforms=data_module.get_predict_transforms(),
         post_transforms=data_module.get_post_transforms(),
-        roi_size=BATCH_SIZE,
+        roi_size=PATCH_SIZE,
         batch_size=4,
+        transpose=True,
     )
 
     sys.exit(0)

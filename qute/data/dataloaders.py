@@ -7,7 +7,7 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import yaml
-from monai.data import Dataset
+from monai.data import ArrayDataset, Dataset
 from monai.transforms import (
     AddChannel,
     AsDiscreted,
@@ -275,6 +275,34 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             pin_memory=self.pin_memory,
         )
 
+    def full_predict_dataloader(
+        self, input_folder: Union[Path, str], fmt_filter: str = "*.tif"
+    ):
+        """Return DataLoader for the full prediction."""
+
+        # Scan for images
+        image_names = natsorted(list(Path(input_folder).glob(fmt_filter)))
+
+        # Create a DataSet
+        pred_dataset = ArrayDataset(
+            image_names,
+            img_transform=self.get_predict_transforms(),
+            seg=np.arange(
+                len(image_names)
+            ).tolist(),  # Little trick to keep track of the file names
+            seg_transform=None,
+            labels=None,
+            label_transform=None,
+        )
+
+        # Return the DataLoader
+        return DataLoader(
+            pred_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory,
+        )
+
     def get_train_transforms_dict(self):
         """Define default training set transforms."""
         train_transforms = Compose(
@@ -362,7 +390,6 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     min_intensity=self.image_range_intensities[0],
                     max_intensity=self.image_range_intensities[1],
                 ),
-                AddChannel(),
             ]
         )
         return predict_transforms

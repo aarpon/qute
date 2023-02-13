@@ -16,6 +16,7 @@ from typing import Tuple, Union
 
 import pytorch_lightning as pl
 import torch
+from monai.data import DataLoader
 from monai.inferers import sliding_window_inference
 from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
@@ -159,12 +160,12 @@ class UNet(pl.LightningModule):
 
     def full_predict(
         self,
-        input_folder: Union[Path, str],
+        data_loader: DataLoader,
         target_folder: Union[Path, str],
-        image_transforms: list,
         post_transforms: list,
         roi_size: Tuple[int, int],
         batch_size: int,
+        transpose: bool = True,
     ):
         """Predict on passed images using given model.
 
@@ -187,16 +188,8 @@ class UNet(pl.LightningModule):
             True if the prediction was successful, False otherwise.
         """
 
-        # Make sure the input folder exists
-        if not Path(input_folder).is_dir():
-            print(f"The folder {input_folder} does not exist. Aborting.")
-            return False
-
         # Make sure the target folder exists
         Path(target_folder).mkdir(parents=True, exist_ok=True)
-
-        # Scan for images
-        image_names = natsorted(list(Path(input_folder).glob("*.tif")))
 
         # Device
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -206,16 +199,10 @@ class UNet(pl.LightningModule):
 
         # Process them
         with torch.no_grad():
-            for i in range(len(image_names)):
-                # Get image name
-                image = image_names[i]
-
-                # Apply transforms
-                image = image_transforms(image)
-
+            for images, indices in data_loader:
                 # Apply sliding inference over ROI size
-                output = sliding_window_inference(
-                    inputs=image,
+                outputs = sliding_window_inference(
+                    inputs=images,
                     roi_size=roi_size,
                     sw_batch_size=batch_size,
                     predictor=self.net,
@@ -223,23 +210,23 @@ class UNet(pl.LightningModule):
                 )
 
                 # Apply post-transforms?
-                output = post_transforms(output)
+                outputs = post_transforms(outputs)
 
                 # Retrieve the image from the GPU (if needed)
-                pred = output.cpu().numpy().squeeze()
+                preds = outputs.cpu().numpy().squeeze()
 
-                # Transpose to undo the effect of monai.transform.LoadImage(d)
-                pred = pred.T
+                for pred, index in zip(preds, indices):
+                    if transpose:
+                        # Transpose to undo the effect of monai.transform.LoadImage(d)
+                        pred = pred.T
 
-                # Save prediction image as tiff file
-                output_name = (
-                    Path(target_folder) / f"pred_{Path(image_names[i]).stem}.tif"
-                )
-                with TiffWriter(output_name) as tif:
-                    tif.save(pred)
+                    # Save prediction image as tiff file
+                    output_name = Path(target_folder) / f"pred_{index.item():04}.tif"
+                    with TiffWriter(output_name) as tif:
+                        tif.save(pred)
 
-                # Inform
-                print(f"Saved {output_name}.")
+                    # Inform
+                    print(f"Saved {output_name}.")
 
         print(f"Prediction completed.")
 
