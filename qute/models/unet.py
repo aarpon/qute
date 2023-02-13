@@ -11,11 +11,20 @@
 #   This file adapted from: https://github.com/hiepph/unet-lightning
 #  ******************************************************************************/
 
+from pathlib import Path
+from typing import Tuple, Union
+
 import pytorch_lightning as pl
+import torch
+from monai.inferers import sliding_window_inference
 from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
 from monai.networks.nets import UNet as MonaiUNet
+from natsort import natsorted
+from tifffile import TiffWriter
 from torch.optim import AdamW
+
+import qute
 
 
 class UNet(pl.LightningModule):
@@ -147,3 +156,92 @@ class UNet(pl.LightningModule):
             y_hat = self.post_activation(y_hat)
         label = y_hat.argmax(axis=1)
         return label
+
+    def full_predict(
+        self,
+        input_folder: Union[Path, str],
+        target_folder: Union[Path, str],
+        image_transforms: list,
+        post_transforms: list,
+        roi_size: Tuple[int, int],
+        batch_size: int,
+    ):
+        """Predict on passed images using given model.
+
+        Parameters
+        ----------
+
+        input_folder: Union[Path|str]
+            Path to the folder that contains the images to predicted from.
+
+        target_folder: Union[Path|str]
+            Path to the folder where to store the predicted images.
+
+        model_path: Union[Path|str]
+            Full path to the model to use.
+
+        Returns
+        -------
+
+        result: bool
+            True if the prediction was successful, False otherwise.
+        """
+
+        # Make sure the input folder exists
+        if not Path(input_folder).is_dir():
+            print(f"The folder {input_folder} does not exist. Aborting.")
+            return False
+
+        # Make sure the target folder exists
+        Path(target_folder).mkdir(parents=True, exist_ok=True)
+
+        # Scan for images
+        image_names = natsorted(list(Path(input_folder).glob("*.tif")))
+
+        # Device
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Switch to evaluation mode
+        self.net.eval()
+
+        # Process them
+        with torch.no_grad():
+            for i in range(len(image_names)):
+                # Get image name
+                image = image_names[i]
+
+                # Apply transforms
+                image = image_transforms(image)
+
+                # Apply sliding inference over ROI size
+                output = sliding_window_inference(
+                    inputs=image,
+                    roi_size=roi_size,
+                    sw_batch_size=batch_size,
+                    predictor=self.net,
+                    device=device,
+                )
+
+                # Apply post-transforms?
+                output = post_transforms(output)
+
+                # Retrieve the image from the GPU (if needed)
+                pred = output.cpu().numpy().squeeze()
+
+                # Transpose to undo the effect of monai.transform.LoadImage(d)
+                pred = pred.T
+
+                # Save prediction image as tiff file
+                output_name = (
+                    Path(target_folder) / f"pred_{Path(image_names[i]).stem}.tif"
+                )
+                with TiffWriter(output_name) as tif:
+                    tif.save(pred)
+
+                # Inform
+                print(f"Saved {output_name}.")
+
+        print(f"Prediction completed.")
+
+        # Return success
+        return True

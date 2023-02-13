@@ -25,13 +25,14 @@ from qute.data.dataloaders import CellSegmentationDemo
 from qute.models.unet import UNet
 
 SEED = 2022
+BATCH_SIZE = (256, 256)
 
 if __name__ == "__main__":
     # Seeding
     seed_everything(SEED, workers=True)
 
     # Data module
-    data_module = CellSegmentationDemo(seed=SEED, batch_size=24, patch_size=(256, 256))
+    data_module = CellSegmentationDemo(seed=SEED, batch_size=24, patch_size=BATCH_SIZE)
 
     # Loss
     criterion = DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)
@@ -52,7 +53,7 @@ if __name__ == "__main__":
         devices=1,
         precision=16 if torch.cuda.is_bf16_supported() else 32,
         callbacks=[model_checkpoint],
-        max_epochs=400,
+        max_epochs=5,
         log_every_n_steps=1,
     )
     trainer.logger._default_hp_metric = False
@@ -75,21 +76,15 @@ if __name__ == "__main__":
     # Predict on the test dataset
     predictions = trainer.predict(model, dataloaders=data_module.test_dataloader())
 
-    # Save the predictions
-    now = datetime.now().strftime("%Y%m%d_%H%M%S")
-    predict_out_folder = data_module.data_dir / f"predictions_{now}"
-    predict_out_folder.mkdir(parents=True, exist_ok=True)
-
-    i = 0
-    for prediction_batch in predictions:
-        prediction_batch_cpu = prediction_batch.cpu().detach().numpy()
-        for j in range(prediction_batch_cpu.shape[0]):
-            out_filename = (
-                predict_out_folder / f"prediction_{data_module.test_labels[i].name}"
-            )
-            imwrite(out_filename, prediction_batch_cpu[j].astype(np.int32))
-            i += 1
-
-    print(f"Saved {i} images to {predict_out_folder}.")
+    # Save the full predictions (on the test set)
+    model.full_predict(
+        input_folder=data_module.data_dir / "images/",
+        target_folder=data_module.data_dir
+        / f"full_predictions_{datetime.now().strftime('%Y%m%d_%H%M%S')}/",
+        image_transforms=data_module.get_predict_transforms(),
+        post_transforms=data_module.get_post_transforms(),
+        roi_size=BATCH_SIZE,
+        batch_size=4,
+    )
 
     sys.exit(0)

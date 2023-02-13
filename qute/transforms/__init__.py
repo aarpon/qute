@@ -13,6 +13,7 @@ from ._transforms import (
     DebugMinNumVoxelCheckerd,
     MinMaxNormalize,
     MinMaxNormalized,
+    ToLabel,
     ToPyTorchOutputd,
 )
 

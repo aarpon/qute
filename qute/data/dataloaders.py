@@ -5,11 +5,14 @@ from typing import Optional, Union
 
 import numpy as np
 import pytorch_lightning as pl
+import torch
 import yaml
 from monai.data import Dataset
 from monai.transforms import (
+    AddChannel,
     AsDiscreted,
     Compose,
+    LoadImage,
     LoadImaged,
     RandRotate90d,
     RandSpatialCropd,
@@ -22,7 +25,7 @@ from qute.data.io import (
     get_cell_restoration_demo_dataset,
     get_cell_segmentation_demo_dataset,
 )
-from qute.transforms import MinMaxNormalized, ToPyTorchOutputd
+from qute.transforms import MinMaxNormalize, MinMaxNormalized, ToLabel, ToPyTorchOutputd
 
 
 class DataModuleLocalFolder(pl.LightningDataModule):
@@ -281,7 +284,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     reader="PILReader",
                     image_only=True,
                     ensure_channel_first=True,
-                    dtype=np.float32,
+                    dtype=torch.float32,
                 ),
                 MinMaxNormalized(
                     min_intensity=self.image_range_intensities[0],
@@ -306,7 +309,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     reader="PILReader",
                     image_only=True,
                     ensure_channel_first=True,
-                    dtype=np.float32,
+                    dtype=torch.float32,
                 ),
                 MinMaxNormalized(
                     min_intensity=self.image_range_intensities[0],
@@ -330,7 +333,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     reader="PILReader",
                     image_only=True,
                     ensure_channel_first=True,
-                    dtype=np.float32,
+                    dtype=torch.float32,
                 ),
                 MinMaxNormalized(
                     min_intensity=self.image_range_intensities[0],
@@ -344,6 +347,30 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             ]
         )
         return test_transforms
+
+    def get_predict_transforms(self):
+        """Define default predict set transforms."""
+        predict_transforms = Compose(
+            [
+                LoadImage(
+                    reader="PILReader",
+                    image_only=True,
+                    ensure_channel_first=True,
+                    dtype=torch.float32,
+                ),
+                MinMaxNormalize(
+                    min_intensity=self.image_range_intensities[0],
+                    max_intensity=self.image_range_intensities[1],
+                ),
+                AddChannel(),
+            ]
+        )
+        return predict_transforms
+
+    def get_post_transforms(self):
+        """Define default post transforms for prediction."""
+        post_transforms = Compose([ToLabel()])
+        return post_transforms
 
 
 class CellSegmentationDemo(DataModuleLocalFolder):

@@ -88,6 +88,27 @@ class MinMaxNormalized(Transform):
         return data
 
 
+class ToLabel(Transform):
+    """
+    Converts tensor from one-hot to label.
+    """
+
+    def __init__(self, dtype=torch.int32):
+        super().__init__()
+        self.dtype = dtype
+
+    def __call__(self, data: torch.Tensor) -> torch.Tensor:
+        """Unwrap the dictionary."""
+        if data.ndim == 4:
+            data = data.argmax(axis=1).type(self.dtype)
+        elif data.ndim == 3:
+            data = data.argmax(axis=0).type(self.dtype)
+        else:
+            raise ValueError("The input tensor must be of size (NCHW) or (HW).")
+
+        return data
+
+
 class ToPyTorchOutputd(Transform):
     """
     Simple converter to pass from the dictionary output of Monai transfors to the expected (image, label) tuple used by PyTorch Lightning.
