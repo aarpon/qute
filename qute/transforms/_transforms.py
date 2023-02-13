@@ -9,6 +9,8 @@
 #       Aaron Ponti - initial API and implementation
 #  ******************************************************************************/
 
+from typing import Dict
+
 import numpy as np
 import torch
 from monai.transforms import Transform
@@ -86,21 +88,27 @@ class MinMaxNormalized(Transform):
         return data
 
 
-class ToPyTorchOutput(Transform):
+class ToPyTorchOutputd(Transform):
     """
     Simple converter to pass from the dictionary output of Monai transfors to the expected (image, label) tuple used by PyTorch Lightning.
     """
 
     def __init__(
-        self, image_dtype: np.dtype = np.float32, label_dtype: np.dtype = np.int32
+        self,
+        image_key: str = "image",
+        image_dtype: torch.dtype = torch.float32,
+        label_key: str = "label",
+        label_dtype: torch.dtype = torch.int32,
     ):
         super().__init__()
+        self.image_key = image_key
+        self.label_key = label_key
         self.image_dtype = image_dtype
         self.label_dtype = label_dtype
 
-    def __call__(self, data: dict) -> dict:
+    def __call__(self, data: dict) -> tuple:
         """Unwrap the dictionary."""
-        return data["image"].astype(self.image_dtype), data["label"].astype(
+        return data[self.image_key].type(self.image_dtype), data[self.label_key].type(
             self.label_dtype
         )
 
@@ -172,4 +180,58 @@ class DebugInformer(Transform):
                 print(f"{prefix}{type(data)}: {str(data)}")
             except:
                 print(f"{prefix}Unknown type!")
+        return data
+
+
+class DebugMinNumVoxelCheckerd(Transform):
+    """
+    Simple reporter to be added to a Composed list of Transforms
+    to return some information. The data is returned untouched.
+    """
+
+    def __init__(self, keys: Dict, class_num: int, min_fraction: float = 0.0):
+        """Constructor.
+
+        Parameters
+        ----------
+
+        class_num: int
+            Number of the class to check for presence.
+        """
+        super().__init__()
+        self.keys = keys
+        self.class_num = class_num
+        self.min_fraction = min_fraction
+
+    def __call__(self, data):
+        """Call the Transform."""
+
+        # Get the keys
+        keys = data.keys()
+
+        # Only work on the expected keys
+        for key in keys:
+            if key not in self.keys:
+                continue
+
+            # The Tensor should be in OneHot format, and the class number should
+            # map to the index of the first dimension.
+            if self.class_num > (data[key].shape[0] - 1):
+                raise Exception("`num_class` is out of boundaries.")
+
+            num_voxels = data[key][self.class_num].sum()
+            if self.min_fraction == 0.0:
+                if num_voxels > 0:
+                    return data
+
+            if self.min_fraction > 0.0:
+                area = data[key].shape[1] * data[key].shape[2]
+                if num_voxels / area >= self.min_fraction:
+                    return data
+
+            raise Exception(
+                f"{self.name}: The number of voxels for {self.class_num} is lower than expected ({num_voxels})."
+            )
+
+        # Return data
         return data

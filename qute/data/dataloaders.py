@@ -22,7 +22,7 @@ from qute.data.io import (
     get_cell_restoration_demo_dataset,
     get_cell_segmentation_demo_dataset,
 )
-from qute.transforms import MinMaxNormalized, ToPyTorchOutput
+from qute.transforms import MinMaxNormalized, ToPyTorchOutputd
 
 
 class DataModuleLocalFolder(pl.LightningDataModule):
@@ -292,7 +292,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                 ),
                 RandRotate90d(keys=["image", "label"], prob=1.0, spatial_axes=(0, 1)),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
-                ToPyTorchOutput(),
+                ToPyTorchOutputd(),
             ]
         )
         return train_transforms
@@ -316,7 +316,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     keys=["image", "label"], roi_size=self.patch_size, random_size=False
                 ),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
-                ToPyTorchOutput(),
+                ToPyTorchOutputd(),
             ]
         )
         return val_transforms
@@ -340,7 +340,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     keys=["image", "label"], roi_size=self.patch_size, random_size=False
                 ),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
-                ToPyTorchOutput(),
+                ToPyTorchOutputd(),
             ]
         )
         return test_transforms

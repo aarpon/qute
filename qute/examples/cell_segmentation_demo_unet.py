@@ -14,8 +14,9 @@ from datetime import datetime
 
 import numpy as np
 import pytorch_lightning as pl
+import torch
 from monai.losses import DiceCELoss, GeneralizedDiceLoss
-from monai.metrics import GeneralizedDiceScore
+from monai.metrics import DiceMetric, GeneralizedDiceScore
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from tifffile import imwrite
@@ -36,20 +37,20 @@ if __name__ == "__main__":
     criterion = DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)
 
     # Metrics
-    metrics = GeneralizedDiceScore(include_background=False)
+    metrics = DiceMetric(include_background=False, reduction="mean")
 
     # Model
     model = UNet(num_res_units=4, criterion=criterion, metrics=metrics)
 
     # Callbacks
-    #early_stopping = EarlyStopping(monitor="val_loss")
+    # early_stopping = EarlyStopping(monitor="val_loss", patience=5, mode="min")
     model_checkpoint = ModelCheckpoint(monitor="val_loss")
 
     # Instantiate the Trainer
     trainer = pl.Trainer(
         accelerator="gpu",
         devices=1,
-        precision=32,
+        precision=16 if torch.cuda.is_bf16_supported() else 32,
         callbacks=[model_checkpoint],
         max_epochs=400,
         log_every_n_steps=1,
@@ -57,7 +58,7 @@ if __name__ == "__main__":
     trainer.logger._default_hp_metric = False
 
     # Find the best learning rate
-    #trainer.tune(model, datamodule=data_module)
+    # trainer.tune(model, datamodule=data_module)
 
     # Train with the optimal learning rate found above
     trainer.fit(model, data_module)

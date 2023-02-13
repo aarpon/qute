@@ -12,10 +12,9 @@
 #  ******************************************************************************/
 
 import pytorch_lightning as pl
-from monai.losses import DiceCELoss, GeneralizedDiceLoss
-from monai.metrics import GeneralizedDiceScore
+from monai.losses import DiceCELoss
+from monai.metrics import DiceMetric
 from monai.networks.nets import UNet as MonaiUNet
-from monai.transforms import Activations, AsDiscrete, Compose
 from torch.optim import AdamW
 
 
@@ -34,12 +33,12 @@ class UNet(pl.LightningModule):
         channels: tuple = (16, 32, 64, 128, 256),
         strides: tuple = (2, 2, 2, 2),
         criterion=DiceCELoss(include_background=False, to_onehot_y=False, softmax=True),
-        metrics=GeneralizedDiceScore(include_background=False),
+        metrics=DiceMetric(include_background=False, reduction="mean"),
         post_activation=None,
         learning_rate: float = 1e-2,
         optimizer_class=AdamW,
         num_res_units: int = 0,
-        dropout: float = 0.0
+        dropout: float = 0.0,
     ):
         """
         Constructor.
@@ -85,7 +84,7 @@ class UNet(pl.LightningModule):
 
         num_res_units: int = 0
             Number of residual units for the UNet.
-        
+
         dropout: float = 0.0
             Dropout ratio.
         """
@@ -104,7 +103,7 @@ class UNet(pl.LightningModule):
             channels=channels,
             strides=strides,
             num_res_units=num_res_units,
-            dropout=dropout
+            dropout=dropout,
         )
         self.save_hyperparameters(ignore=["criterion", "metrics"])
 
@@ -127,6 +126,9 @@ class UNet(pl.LightningModule):
         y_hat = self.net(x)
         val_loss = self.criterion(y_hat, y)
         self.log("val_loss", val_loss, on_step=False, on_epoch=True, prog_bar=True)
+        # if self.metrics is not None:
+        #     val_metrics = self.metrics(y_hat, y).mean()
+        #     self.log("val_metrics", val_metrics, on_step=False, on_epoch=True)
         return val_loss
 
     def test_step(self, batch, batch_idx):
