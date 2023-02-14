@@ -43,7 +43,9 @@ class UNet(pl.LightningModule):
         channels: tuple = (16, 32, 64, 128, 256),
         strides: tuple = (2, 2, 2, 2),
         criterion=DiceCELoss(include_background=False, to_onehot_y=False, softmax=True),
-        metrics=DiceMetric(include_background=False, reduction="mean", get_not_nans=False),
+        metrics=DiceMetric(
+            include_background=False, reduction="mean", get_not_nans=False
+        ),
         val_metrics_transforms=None,
         predict_post_transforms=None,
         learning_rate: float = 1e-2,
@@ -147,7 +149,6 @@ class UNet(pl.LightningModule):
             self.log("val_metrics", val_metrics, on_step=False, on_epoch=True)
         return val_loss
 
-
     def test_step(self, batch, batch_idx):
         """Perform a test step."""
         x, y = batch
@@ -191,10 +192,10 @@ class UNet(pl.LightningModule):
 
         roi_size: Tuple[int, int]
             Size of the patch for the sliding window prediction. It must match the patch size during training.
-        
+
         batch_size: int
             Number of parallel batches to run.
-            
+
         trnaspose: bool
             Whether the transpose the image before saving, to compensate for the default behavior of monai.transforms.LoadImage().
 

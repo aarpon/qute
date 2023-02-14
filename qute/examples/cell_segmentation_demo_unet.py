@@ -15,8 +15,8 @@ from datetime import datetime
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from monai.losses import DiceCELoss, GeneralizedDiceLoss
-from monai.metrics import DiceMetric, GeneralizedDiceScore
+from monai.losses import DiceCELoss
+from monai.metrics import DiceMetric
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
@@ -41,7 +41,12 @@ if __name__ == "__main__":
     metrics = DiceMetric(include_background=False, reduction="mean", get_not_nans=False)
 
     # Model
-    model = UNet(num_res_units=4, criterion=criterion, metrics=metrics, val_metrics_transforms=data_module.get_val_metrics_transforms())
+    model = UNet(
+        num_res_units=4,
+        criterion=criterion,
+        metrics=metrics,
+        val_metrics_transforms=data_module.get_val_metrics_transforms(),
+    )
 
     # Callbacks
     # early_stopping = EarlyStopping(monitor="val_loss", patience=5, mode="min")

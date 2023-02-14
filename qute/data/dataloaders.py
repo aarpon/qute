@@ -26,7 +26,13 @@ from qute.data.io import (
     get_cell_restoration_demo_dataset,
     get_cell_segmentation_demo_dataset,
 )
-from qute.transforms import MinMaxNormalize, MinMaxNormalized, ToLabel, ToPyTorchOutputd
+from qute.transforms import (
+    MinMaxNormalize,
+    MinMaxNormalized,
+    ToLabel,
+    ToPyTorchOutputd,
+    ZNormalized,
+)
 
 
 class DataModuleLocalFolder(pl.LightningDataModule):
@@ -318,10 +324,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
-                MinMaxNormalized(
-                    min_intensity=self.image_range_intensities[0],
-                    max_intensity=self.image_range_intensities[1],
-                ),
+                ZNormalized(image_key="image"),
                 RandSpatialCropd(
                     keys=["image", "label"], roi_size=self.patch_size, random_size=False
                 ),
@@ -343,10 +346,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
-                MinMaxNormalized(
-                    min_intensity=self.image_range_intensities[0],
-                    max_intensity=self.image_range_intensities[1],
-                ),
+                ZNormalized(image_key="image"),
                 RandSpatialCropd(
                     keys=["image", "label"], roi_size=self.patch_size, random_size=False
                 ),
@@ -367,10 +367,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
-                MinMaxNormalized(
-                    min_intensity=self.image_range_intensities[0],
-                    max_intensity=self.image_range_intensities[1],
-                ),
+                ZNormalized(image_key="image"),
                 RandSpatialCropd(
                     keys=["image", "label"], roi_size=self.patch_size, random_size=False
                 ),
@@ -390,19 +387,18 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
-                MinMaxNormalize(
-                    min_intensity=self.image_range_intensities[0],
-                    max_intensity=self.image_range_intensities[1],
-                ),
+                ZNormalized(image_key="image"),
             ]
         )
         return predict_transforms
 
     def get_val_metrics_transforms(self):
         """Define default transforms for validation for metric calculation."""
-        post_transforms = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
+        post_transforms = Compose(
+            [Activations(sigmoid=True), AsDiscrete(threshold=0.5)]
+        )
         return post_transforms
-    
+
     def get_post_predict_transforms(self):
         """Define default post transforms for prediction."""
         post_transforms = Compose([ToLabel()])

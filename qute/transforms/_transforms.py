@@ -36,6 +36,7 @@ class MinMaxNormalize(Transform):
         norm: tensor
             Normalized tensor.
         """
+        super().__init__()
         self.min_intensity = min_intensity
         self.max_intensity = max_intensity
         self.range_intensity = self.max_intensity - self.min_intensity
@@ -67,6 +68,7 @@ class MinMaxNormalized(Transform):
         max_intensity: int
             Maximum intensity to normalize against (optional, default = 65535).
         """
+        super().__init__()
         self.min_intensity = min_intensity
         self.max_intensity = max_intensity
         self.range_intensity = self.max_intensity - self.min_intensity
@@ -74,9 +76,6 @@ class MinMaxNormalized(Transform):
     def __call__(self, data: dict) -> dict:
         """
         Apply the transform to the "image" tensor in the data dictionary.
-
-        Returns
-        -------
 
         Returns
         -------
@@ -90,7 +89,7 @@ class MinMaxNormalized(Transform):
 
 class ToLabel(Transform):
     """
-    Converts tensor from one-hot to label.
+    Converts tensor from one-hot representation to 2D label image.
     """
 
     def __init__(self, dtype=torch.int32):
@@ -132,6 +131,30 @@ class ToPyTorchOutputd(Transform):
         return data[self.image_key].type(self.image_dtype), data[self.label_key].type(
             self.label_dtype
         )
+
+
+class ZNormalized(Transform):
+    """Standardize the "image" tensor by subracting the mean and dividing by the standard deviation."""
+
+    def __init__(self, image_key: str = "image") -> None:
+        """Constructor"""
+        super().__init__()
+        self.image_key = image_key
+
+    def __call__(self, data: dict) -> dict:
+        """
+        Apply the transform to the "image" tensor in the data dictionary.
+
+        Returns
+        -------
+
+        data: dict
+            Updated dictionary with normalized "image" tensor.
+        """
+        mn = data[self.image_key].mean()
+        sd = data[self.image_key].std()
+        data[self.image_key] = (data[self.image_key] - mn) / sd
+        return data
 
 
 class DebugInformer(Transform):
