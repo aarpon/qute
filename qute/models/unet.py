@@ -68,10 +68,10 @@ class UNet(pl.LightningModule):
         out_channels: int = 3
             Number of output channels (or labels, or classes)
 
-        channels: tuple = (16, 32, 64, 128)
+        channels: tuple = (16, 32, 64, 128, 256)
             Number of neuron per layer.
 
-        strides: tuple = (2, 2, 2)
+        strides: tuple = (2, 2, 2, 2)
             Strides for down-sampling.
 
         criterion: DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)
