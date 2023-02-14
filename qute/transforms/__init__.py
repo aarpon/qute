@@ -15,6 +15,7 @@ from ._transforms import (
     MinMaxNormalized,
     ToLabel,
     ToPyTorchOutputd,
+    ZNormalize,
     ZNormalized,
 )
 

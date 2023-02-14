@@ -26,13 +26,7 @@ from qute.data.io import (
     get_cell_restoration_demo_dataset,
     get_cell_segmentation_demo_dataset,
 )
-from qute.transforms import (
-    MinMaxNormalize,
-    MinMaxNormalized,
-    ToLabel,
-    ToPyTorchOutputd,
-    ZNormalized,
-)
+from qute.transforms import ToLabel, ToPyTorchOutputd, ZNormalize, ZNormalized
 
 
 class DataModuleLocalFolder(pl.LightningDataModule):
@@ -46,6 +40,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         val_fraction: float = 0.2,
         test_fraction: float = 0.1,
         batch_size: int = 8,
+        inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
         train_transforms_dict: Optional[list] = None,
         val_transforms_dict: Optional[list] = None,
@@ -55,6 +50,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         image_range_intensities: Optional[tuple[int, int]] = None,
         seed: int = 42,
         num_workers: Optional[int] = os.cpu_count(),
+        num_inference_workers: Optional[int] = 2,
         pin_memory: bool = True,
     ):
         """
@@ -79,7 +75,10 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             Fraction of images and corresponding labels that go into the test set.
 
         batch_size: int = 8
-            Size of one batch of image pairs.
+            Size of one batch of image pairs for training, validation and testing.
+
+        inference_batch_size: int = 2
+            Size of one batch of image pairs for full inference.
 
         patch_size: tuple = (512, 512)
             Size of the patch to be extracted (at random positions) from images and labels.
@@ -103,7 +102,10 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             Seed for all random number generators.
 
         num_workers: int = os.cpu_count()
-            Number of workers to be used in the data loaders.
+            Number of workers to be used in the training, validation and test data loaders.
+
+        num_inference_workers: int
+            Number of workers to be used in the inference data loader.
 
         pin_memory: bool = True
             Whether to pin the GPU memory.
@@ -112,9 +114,11 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         super().__init__()
         self.data_dir = Path(data_dir).resolve()
         self.batch_size = batch_size
+        self.inference_batch_size = inference_batch_size
         self.patch_size = patch_size
 
         self.num_workers = num_workers
+        self.num_inference_workers = num_inference_workers
         self.pin_memory = pin_memory
 
         self.num_classes = num_classes
@@ -285,18 +289,18 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             pin_memory=self.pin_memory,
         )
 
-    def full_predict_dataloader(
+    def inference_dataloader(
         self, input_folder: Union[Path, str], fmt_filter: str = "*.tif"
     ):
-        """Return DataLoader for the full prediction."""
+        """Return DataLoader for full inference."""
 
         # Scan for images
         image_names = natsorted(list(Path(input_folder).glob(fmt_filter)))
 
         # Create a DataSet
-        pred_dataset = ArrayDataset(
+        inference_dataset = ArrayDataset(
             image_names,
-            img_transform=self.get_predict_transforms(),
+            img_transform=self.get_inference_transforms(),
             seg=np.arange(
                 len(image_names)
             ).tolist(),  # Little trick to keep track of the file names
@@ -307,9 +311,9 @@ class DataModuleLocalFolder(pl.LightningDataModule):
 
         # Return the DataLoader
         return DataLoader(
-            pred_dataset,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
+            inference_dataset,
+            batch_size=self.inference_batch_size,
+            num_workers=self.num_inference_workers,
             pin_memory=self.pin_memory,
         )
 
@@ -328,7 +332,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                 RandSpatialCropd(
                     keys=["image", "label"], roi_size=self.patch_size, random_size=False
                 ),
-                RandRotate90d(keys=["image", "label"], prob=1.0, spatial_axes=(0, 1)),
+                RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=(0, 1)),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
                 ToPyTorchOutputd(),
             ]
@@ -377,9 +381,9 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         )
         return test_transforms
 
-    def get_predict_transforms(self):
-        """Define default predict set transforms."""
-        predict_transforms = Compose(
+    def get_inference_transforms(self):
+        """Define default inference set transforms."""
+        inference_transforms = Compose(
             [
                 LoadImage(
                     reader="PILReader",
@@ -387,10 +391,10 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
-                ZNormalized(image_key="image"),
+                ZNormalize(),
             ]
         )
-        return predict_transforms
+        return inference_transforms
 
     def get_val_metrics_transforms(self):
         """Define default transforms for validation for metric calculation."""
@@ -399,8 +403,8 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         )
         return post_transforms
 
-    def get_post_predict_transforms(self):
-        """Define default post transforms for prediction."""
+    def get_post_inference_transforms(self):
+        """Define default post transforms for full inference."""
         post_transforms = Compose([ToLabel()])
         return post_transforms
 
@@ -416,6 +420,7 @@ class CellSegmentationDemo(DataModuleLocalFolder):
         val_fraction: float = 0.2,
         test_fraction: float = 0.1,
         batch_size: int = 8,
+        inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
         train_transforms_dict: Optional[list] = None,
         val_transforms_dict: Optional[list] = None,
@@ -424,6 +429,7 @@ class CellSegmentationDemo(DataModuleLocalFolder):
         labels_sub_folder: str = "labels",
         seed: int = 42,
         num_workers: Optional[int] = os.cpu_count(),
+        num_inference_workers: Optional[int] = 2,
         pin_memory: bool = True,
     ):
         """
@@ -450,6 +456,9 @@ class CellSegmentationDemo(DataModuleLocalFolder):
         batch_size: int = 8
             Size of one batch of image pairs.
 
+        inference_batch_size: int = 2
+            Size of one batch of image pairs for full inference.
+
         patch_size: tuple = (512, 512)
             Size of the patch to be extracted (at random positions) from images and labels.
 
@@ -471,8 +480,11 @@ class CellSegmentationDemo(DataModuleLocalFolder):
         seed: int = 42
             Seed for all random number generators.
 
-        num_workers: int = os.cpu_count()
-            Number of workers to be used in the data loaders.
+        num_workers: int
+            Number of workers to be used in the training, validation and test data loaders.
+
+        num_inference_workers: int
+            Number of workers to be used in the inference data loader.
 
         pin_memory: bool = True
             Whether to pin the GPU memory.
@@ -501,6 +513,7 @@ class CellSegmentationDemo(DataModuleLocalFolder):
             val_fraction=val_fraction,
             test_fraction=test_fraction,
             batch_size=batch_size,
+            inference_batch_size=inference_batch_size,
             patch_size=patch_size,
             train_transforms_dict=train_transforms_dict,
             val_transforms_dict=val_transforms_dict,
@@ -513,6 +526,7 @@ class CellSegmentationDemo(DataModuleLocalFolder):
             ),
             seed=seed,
             num_workers=num_workers,
+            num_inference_workers=num_inference_workers,
             pin_memory=pin_memory,
         )
 
@@ -540,6 +554,7 @@ class CellRestorationDemo(DataModuleLocalFolder):
         val_fraction: float = 0.2,
         test_fraction: float = 0.1,
         batch_size: int = 8,
+        inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
         train_transforms_dict: Optional[list] = None,
         val_transforms_dict: Optional[list] = None,
@@ -548,6 +563,7 @@ class CellRestorationDemo(DataModuleLocalFolder):
         labels_sub_folder: str = "targets",
         seed: int = 42,
         num_workers: Optional[int] = os.cpu_count(),
+        num_inference_workers: Optional[int] = 2,
         pin_memory: bool = True,
     ):
         """
@@ -571,6 +587,9 @@ class CellRestorationDemo(DataModuleLocalFolder):
         batch_size: int = 8
             Size of one batch of image pairs.
 
+        inference_batch_size: int = 2
+            Size of one batch of image pairs for full inference.
+
         patch_size: tuple = (512, 512)
             Size of the patch to be extracted (at random positions) from images and labels.
 
@@ -592,8 +611,11 @@ class CellRestorationDemo(DataModuleLocalFolder):
         seed: int = 42
             Seed for all random number generators.
 
-        num_workers: int = os.cpu_count()
-            Number of workers to be used in the data loaders.
+        num_workers: int
+            Number of workers to be used in the training, validation and test data loaders.
+
+        num_inference_workers: int
+            Number of workers to be used in the inference data loader.
 
         pin_memory: bool = True
             Whether to pin the GPU memory.
@@ -616,6 +638,7 @@ class CellRestorationDemo(DataModuleLocalFolder):
             val_fraction=val_fraction,
             test_fraction=test_fraction,
             batch_size=batch_size,
+            inference_batch_size=inference_batch_size,
             patch_size=patch_size,
             train_transforms_dict=train_transforms_dict,
             val_transforms_dict=val_transforms_dict,
@@ -628,6 +651,7 @@ class CellRestorationDemo(DataModuleLocalFolder):
             ),
             seed=seed,
             num_workers=num_workers,
+            num_inference_workers=num_inference_workers,
             pin_memory=pin_memory,
         )
 

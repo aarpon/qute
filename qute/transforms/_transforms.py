@@ -133,6 +133,26 @@ class ToPyTorchOutputd(Transform):
         )
 
 
+class ZNormalize(Transform):
+    """Standardize the passed tensor by subracting the mean and dividing by the standard deviation."""
+
+    def __init__(self) -> None:
+        """Constructor"""
+        super().__init__()
+
+    def __call__(self, data: torch.Tensor) -> torch.Tensor:
+        """
+        Apply the transform to the "image" tensor in the data dictionary.
+
+        Returns
+        -------
+
+        data: torch.Tensor
+            Normalized tensor.
+        """
+        return (data - data.mean()) / data.std()
+
+
 class ZNormalized(Transform):
     """Standardize the "image" tensor by subracting the mean and dividing by the standard deviation."""
 

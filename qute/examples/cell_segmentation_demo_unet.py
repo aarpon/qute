@@ -24,15 +24,23 @@ from qute.data.dataloaders import CellSegmentationDemo
 from qute.models.unet import UNet
 
 SEED = 2022
+BATCH_SIZE = 24
+INFERENCE_BATCH_SIZE = 4
 PATCH_SIZE = (512, 512)
 PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
+MAX_EPOCHS = 250
 
 if __name__ == "__main__":
     # Seeding
     seed_everything(SEED, workers=True)
 
     # Data module
-    data_module = CellSegmentationDemo(seed=SEED, batch_size=24, patch_size=PATCH_SIZE)
+    data_module = CellSegmentationDemo(
+        seed=SEED,
+        batch_size=BATCH_SIZE,
+        patch_size=PATCH_SIZE,
+        inference_batch_size=INFERENCE_BATCH_SIZE,
+    )
 
     # Loss
     criterion = DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)
@@ -44,12 +52,14 @@ if __name__ == "__main__":
     model = UNet(
         num_res_units=4,
         criterion=criterion,
+        channels=(16, 32, 64),
+        strides=(2, 2),
         metrics=metrics,
         val_metrics_transforms=data_module.get_val_metrics_transforms(),
     )
 
     # Callbacks
-    # early_stopping = EarlyStopping(monitor="val_loss", patience=5, mode="min")
+    # early_stopping = EarlyStopping(monitor="val_loss", patience=5, mode="min")  # Issues with Lightning's ES
     model_checkpoint = ModelCheckpoint(monitor="val_loss")
 
     # Instantiate the Trainer
@@ -58,7 +68,7 @@ if __name__ == "__main__":
         devices=1,
         precision=PRECISION,
         callbacks=[model_checkpoint],
-        max_epochs=250,
+        max_epochs=MAX_EPOCHS,
         log_every_n_steps=1,
     )
     trainer.logger._default_hp_metric = False
@@ -82,13 +92,11 @@ if __name__ == "__main__":
     predictions = trainer.predict(model, dataloaders=data_module.test_dataloader())
 
     # Save the full predictions (on the test set)
-    model.full_predict(
-        data_loader=data_module.full_predict_dataloader(
-            data_module.data_dir / "images/"
-        ),
+    model.full_inference(
+        data_loader=data_module.inference_dataloader(data_module.data_dir / "images/"),
         target_folder=data_module.data_dir
         / f"full_predictions_{datetime.now().strftime('%Y%m%d_%H%M%S')}/",
-        predict_post_transform=data_module.get_post_predict_transforms(),
+        inference_post_transforms=data_module.get_post_inference_transforms(),
         roi_size=PATCH_SIZE,
         batch_size=4,
         transpose=True,

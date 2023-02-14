@@ -21,7 +21,7 @@ from monai.inferers import sliding_window_inference
 from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
 from monai.networks.nets import UNet as MonaiUNet
-from natsort import natsorted
+from monai.transforms import Transform
 from tifffile import TiffWriter
 from torch.optim import AdamW
 
@@ -40,8 +40,8 @@ class UNet(pl.LightningModule):
         spatial_dims: int = 2,
         in_channels: int = 1,
         out_channels: int = 3,
-        channels: tuple = (16, 32, 64, 128, 256),
-        strides: tuple = (2, 2, 2, 2),
+        channels=(16, 32, 64),
+        strides=(2, 2),
         criterion=DiceCELoss(include_background=False, to_onehot_y=False, softmax=True),
         metrics=DiceMetric(
             include_background=False, reduction="mean", get_not_nans=False
@@ -68,10 +68,10 @@ class UNet(pl.LightningModule):
         out_channels: int = 3
             Number of output channels (or labels, or classes)
 
-        channels: tuple = (16, 32, 64, 128, 256)
+        channels: tuple = (16, 32, 64)
             Number of neuron per layer.
 
-        strides: tuple = (2, 2, 2, 2)
+        strides: tuple = (2, 2)
             Strides for down-sampling.
 
         criterion: DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)
@@ -167,16 +167,16 @@ class UNet(pl.LightningModule):
             label = y_hat.argmax(axis=1)
         return label
 
-    def full_predict(
+    def full_inference(
         self,
         data_loader: DataLoader,
         target_folder: Union[Path, str],
-        predict_post_transform: list,
+        inference_post_transforms: Transform,
         roi_size: Tuple[int, int],
         batch_size: int,
         transpose: bool = True,
     ):
-        """Predict on passed images using given model.
+        """Run inference on full images using given model.
 
         Parameters
         ----------
@@ -187,8 +187,8 @@ class UNet(pl.LightningModule):
         target_folder: Union[Path|str]
             Path to the folder where to store the predicted images.
 
-        predict_post_transform: list
-            List of transforms to be applied to the result of the forward pass of the network.
+        inference_post_transforms: Transform
+            Composition of transforms to be applied to the result of the forward pass of the network.
 
         roi_size: Tuple[int, int]
             Size of the patch for the sliding window prediction. It must match the patch size during training.
@@ -196,21 +196,21 @@ class UNet(pl.LightningModule):
         batch_size: int
             Number of parallel batches to run.
 
-        trnaspose: bool
+        transpose: bool
             Whether the transpose the image before saving, to compensate for the default behavior of monai.transforms.LoadImage().
 
         Returns
         -------
 
         result: bool
-            True if the prediction was successful, False otherwise.
+            True if the inference was successful, False otherwise.
         """
 
         # Make sure the target folder exists
         Path(target_folder).mkdir(parents=True, exist_ok=True)
 
         # Device
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = "cpu"  # torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Switch to evaluation mode
         self.net.eval()
@@ -228,7 +228,7 @@ class UNet(pl.LightningModule):
                 )
 
                 # Apply post-transforms?
-                outputs = predict_post_transform(outputs)
+                outputs = inference_post_transforms(outputs)
 
                 # Retrieve the image from the GPU (if needed)
                 preds = outputs.cpu().numpy().squeeze()
