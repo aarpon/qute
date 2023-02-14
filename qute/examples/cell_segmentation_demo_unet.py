@@ -19,13 +19,13 @@ from monai.losses import DiceCELoss, GeneralizedDiceLoss
 from monai.metrics import DiceMetric, GeneralizedDiceScore
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
-from tifffile import imwrite
 
 from qute.data.dataloaders import CellSegmentationDemo
 from qute.models.unet import UNet
 
 SEED = 2022
 PATCH_SIZE = (512, 512)
+PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
 
 if __name__ == "__main__":
     # Seeding
@@ -38,10 +38,10 @@ if __name__ == "__main__":
     criterion = DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)
 
     # Metrics
-    metrics = DiceMetric(include_background=False, reduction="mean")
+    metrics = DiceMetric(include_background=False, reduction="mean", get_not_nans=False)
 
     # Model
-    model = UNet(num_res_units=4, criterion=criterion, metrics=metrics)
+    model = UNet(num_res_units=4, criterion=criterion, metrics=metrics, val_metrics_transforms=data_module.get_val_metrics_transforms())
 
     # Callbacks
     # early_stopping = EarlyStopping(monitor="val_loss", patience=5, mode="min")
@@ -51,7 +51,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         accelerator="gpu",
         devices=1,
-        precision=16 if torch.cuda.is_bf16_supported() else 32,
+        precision=PRECISION,
         callbacks=[model_checkpoint],
         max_epochs=250,
         log_every_n_steps=1,
@@ -83,7 +83,7 @@ if __name__ == "__main__":
         ),
         target_folder=data_module.data_dir
         / f"full_predictions_{datetime.now().strftime('%Y%m%d_%H%M%S')}/",
-        post_transforms=data_module.get_post_transforms(),
+        predict_post_transform=data_module.get_post_predict_transforms(),
         roi_size=PATCH_SIZE,
         batch_size=4,
         transpose=True,

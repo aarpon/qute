@@ -43,8 +43,9 @@ class UNet(pl.LightningModule):
         channels: tuple = (16, 32, 64, 128, 256),
         strides: tuple = (2, 2, 2, 2),
         criterion=DiceCELoss(include_background=False, to_onehot_y=False, softmax=True),
-        metrics=DiceMetric(include_background=False, reduction="mean"),
-        post_activation=None,
+        metrics=DiceMetric(include_background=False, reduction="mean", get_not_nans=False),
+        val_metrics_transforms=None,
+        predict_post_transforms=None,
         learning_rate: float = 1e-2,
         optimizer_class=AdamW,
         num_res_units: int = 0,
@@ -75,16 +76,17 @@ class UNet(pl.LightningModule):
             Loss function. Please NOTE: for classification, the loss function must convert `y` to OneHot.
             The default loss function applies to a multi-label target where the background class is omitted.
 
-        metrics: GeneralizedDiceScore(include_background=False)
-            Metrics used for training, validation, and testing. Set to None to omit.
+        metrics: DiceMetric(include_background=False, reduction="mean", get_not_nans=False)
+            Metrics used for validation. Set to None to omit.
 
             The default metrics applies to a three-label target where the background (index = 0) class
             is omitted from calculation.
 
-            Set to None to omit calculating and reporting it.
+        val_metrics_transforms: None
+            Post transform for the output of the forward pass in the validation step for metric calculation.
 
-        post_activation: None
-            Post activation for the output of the forward pass in the prediction step (only).
+        predict_post_transforms: None
+            Post transform for the output of the forward pass in the prediction step (only).
 
         learning_rate: float = 1e-2
             Learning rate for optimization.
@@ -105,7 +107,8 @@ class UNet(pl.LightningModule):
         self.metrics = metrics
         self.learning_rate = learning_rate
         self.optimizer_class = optimizer_class
-        self.post_activation = post_activation
+        self.val_metrics_transforms = val_metrics_transforms
+        self.predict_post_transforms = predict_post_transforms
         self.net = MonaiUNet(
             spatial_dims=spatial_dims,
             in_channels=in_channels,
@@ -136,10 +139,14 @@ class UNet(pl.LightningModule):
         y_hat = self.net(x)
         val_loss = self.criterion(y_hat, y)
         self.log("val_loss", val_loss, on_step=False, on_epoch=True, prog_bar=True)
-        # if self.metrics is not None:
-        #     val_metrics = self.metrics(y_hat, y).mean()
-        #     self.log("val_metrics", val_metrics, on_step=False, on_epoch=True)
+        if self.metrics is not None:
+            if self.val_metrics_transforms is not None:
+                val_metrics = self.metrics(self.val_metrics_transforms(y_hat), y).mean()
+            else:
+                val_metrics = self.metrics(y_hat, y).mean()
+            self.log("val_metrics", val_metrics, on_step=False, on_epoch=True)
         return val_loss
+
 
     def test_step(self, batch, batch_idx):
         """Perform a test step."""
@@ -153,16 +160,17 @@ class UNet(pl.LightningModule):
         """The predict step creates a label image from the output one-hot tensor."""
         x, _ = batch
         y_hat = self.net(x)
-        if self.post_activation is not None:
-            y_hat = self.post_activation(y_hat)
-        label = y_hat.argmax(axis=1)
+        if self.predict_post_transforms is not None:
+            label = self.predict_post_transforms(y_hat).argmax(axis=1)
+        else:
+            label = y_hat.argmax(axis=1)
         return label
 
     def full_predict(
         self,
         data_loader: DataLoader,
         target_folder: Union[Path, str],
-        post_transforms: list,
+        predict_post_transform: list,
         roi_size: Tuple[int, int],
         batch_size: int,
         transpose: bool = True,
@@ -172,14 +180,23 @@ class UNet(pl.LightningModule):
         Parameters
         ----------
 
-        input_folder: Union[Path|str]
-            Path to the folder that contains the images to predicted from.
+        data_loader: DataLoader
+            DataLoader for the image files names to be predicted on.
 
         target_folder: Union[Path|str]
             Path to the folder where to store the predicted images.
 
-        model_path: Union[Path|str]
-            Full path to the model to use.
+        predict_post_transform: list
+            List of transforms to be applied to the result of the forward pass of the network.
+
+        roi_size: Tuple[int, int]
+            Size of the patch for the sliding window prediction. It must match the patch size during training.
+        
+        batch_size: int
+            Number of parallel batches to run.
+            
+        trnaspose: bool
+            Whether the transpose the image before saving, to compensate for the default behavior of monai.transforms.LoadImage().
 
         Returns
         -------
@@ -210,7 +227,7 @@ class UNet(pl.LightningModule):
                 )
 
                 # Apply post-transforms?
-                outputs = post_transforms(outputs)
+                outputs = predict_post_transform(outputs)
 
                 # Retrieve the image from the GPU (if needed)
                 preds = outputs.cpu().numpy().squeeze()

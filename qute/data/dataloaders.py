@@ -9,7 +9,8 @@ import torch
 import yaml
 from monai.data import ArrayDataset, Dataset
 from monai.transforms import (
-    AddChannel,
+    Activations,
+    AsDiscrete,
     AsDiscreted,
     Compose,
     LoadImage,
@@ -252,6 +253,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         """Return DataLoader for Training data."""
         return DataLoader(
             self.train_dataset,
+            shuffle=False,  # Already shuffled
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
@@ -261,6 +263,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         """Return DataLoader for Validation data."""
         return DataLoader(
             self.val_dataset,
+            shuffle=False,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
@@ -270,6 +273,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         """Return DataLoader for Testing data."""
         return DataLoader(
             self.test_dataset,
+            shuffle=False,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
@@ -394,7 +398,12 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         )
         return predict_transforms
 
-    def get_post_transforms(self):
+    def get_val_metrics_transforms(self):
+        """Define default transforms for validation for metric calculation."""
+        post_transforms = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
+        return post_transforms
+    
+    def get_post_predict_transforms(self):
         """Define default post transforms for prediction."""
         post_transforms = Compose([ToLabel()])
         return post_transforms
