@@ -301,9 +301,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         inference_dataset = ArrayDataset(
             image_names,
             img_transform=self.get_inference_transforms(),
-            seg=np.arange(
-                len(image_names)
-            ).tolist(),  # Little trick to keep track of the file names
+            seg=None,
             seg_transform=None,
             labels=None,
             label_transform=None,

@@ -216,8 +216,9 @@ class UNet(pl.LightningModule):
         self.net.eval()
 
         # Process them
+        c = 0
         with torch.no_grad():
-            for images, indices in data_loader:
+            for images in data_loader:
                 # Apply sliding inference over ROI size
                 outputs = sliding_window_inference(
                     inputs=images,
@@ -233,15 +234,16 @@ class UNet(pl.LightningModule):
                 # Retrieve the image from the GPU (if needed)
                 preds = outputs.cpu().numpy().squeeze()
 
-                for pred, index in zip(preds, indices):
+                for pred in preds:
                     if transpose:
                         # Transpose to undo the effect of monai.transform.LoadImage(d)
                         pred = pred.T
 
                     # Save prediction image as tiff file
-                    output_name = Path(target_folder) / f"pred_{index.item():04}.tif"
+                    output_name = Path(target_folder) / f"pred_{c:04}.tif"
+                    c += 1
                     with TiffWriter(output_name) as tif:
-                        tif.save(pred)
+                        tif.write(pred)
 
                     # Inform
                     print(f"Saved {output_name}.")
