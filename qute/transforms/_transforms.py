@@ -57,18 +57,21 @@ class MinMaxNormalize(Transform):
 class MinMaxNormalized(Transform):
     """Normalize the "image" tensor to [0, 1] using given min and max absolute intensities from the data dictionary."""
 
-    def __init__(self, min_intensity: int = 0, max_intensity: int = 65535) -> None:
+    def __init__(self, image_key: str = "image", min_intensity: int = 0, max_intensity: int = 65535) -> None:
         """Constructor
 
         Parameters
         ----------
 
+        image_key: str
+            Key for the image in the data dictionary.
         min_intensity: int
             Minimum intensity to normalize against (optional, default = 0).
         max_intensity: int
             Maximum intensity to normalize against (optional, default = 65535).
         """
         super().__init__()
+        self.image_key = image_key
         self.min_intensity = min_intensity
         self.max_intensity = max_intensity
         self.range_intensity = self.max_intensity - self.min_intensity
@@ -83,7 +86,7 @@ class MinMaxNormalized(Transform):
         data: dict
             Updated dictionary with normalized "image" tensor.
         """
-        data["image"] = (data["image"] - self.min_intensity) / self.range_intensity
+        data[self.image_key] = (data[self.image_key] - self.min_intensity) / self.range_intensity
         return data
 
 
@@ -154,7 +157,7 @@ class ZNormalize(Transform):
 
 
 class ZNormalized(Transform):
-    """Standardize the "image" tensor by subracting the mean and dividing by the standard deviation."""
+    """Standardize the "image" tensor by subtracting the mean and dividing by the standard deviation."""
 
     def __init__(self, image_key: str = "image") -> None:
         """Constructor"""
@@ -253,7 +256,7 @@ class DebugMinNumVoxelCheckerd(Transform):
     to return some information. The data is returned untouched.
     """
 
-    def __init__(self, keys: Dict, class_num: int, min_fraction: float = 0.0):
+    def __init__(self, keys: tuple, class_num: int, min_fraction: float = 0.0):
         """Constructor.
 
         Parameters
