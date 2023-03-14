@@ -17,6 +17,7 @@ from monai.transforms import (
     LoadImaged,
     RandRotate90d,
     RandSpatialCropd,
+    Transform,
 )
 from natsort import natsorted
 from numpy.random import default_rng
@@ -42,9 +43,12 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         batch_size: int = 8,
         inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
-        train_transforms_dict: Optional[list] = None,
-        val_transforms_dict: Optional[list] = None,
-        test_transforms_dict: Optional[list] = None,
+        train_transforms_dict: Optional[Transform] = None,
+        val_transforms_dict: Optional[Transform] = None,
+        test_transforms_dict: Optional[Transform] = None,
+        inference_transforms_dict: Optional[Transform] = None,
+        post_inference_transforms_dict: Optional[Transform] = None,
+        val_metrics_transforms_dict: Optional[Transform] = None,
         images_sub_folder: str = "images",
         labels_sub_folder: str = "labels",
         image_range_intensities: Optional[tuple[int, int]] = None,
@@ -84,13 +88,28 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             Size of the patch to be extracted (at random positions) from images and labels.
 
         train_transforms_dict: Optional[list] = None
-            Dictionary transforms to be applied to the training images and labels. If omitted some default transforms will be applied.
+            Dictionary transforms to be applied to the training images and labels.
+            If omitted some default transforms will be applied.
 
         val_transforms_dict: Optional[list] = None
-            Dictionary transforms to be applied to the validation images and labels. If omitted some default transforms will be applied.
+            Dictionary transforms to be applied to the validation images and labels.
+            If omitted some default transforms will be applied.
 
         test_transforms_dict: Optional[list] = None
-            Dictionary transforms to be applied to the test images and labels. If omitted some default transforms will be applied.
+            Dictionary transforms to be applied to the test images and labels.
+            If omitted some default transforms will be applied.
+
+        inference_transforms_dict: Optional[Transform] = None
+            Dictionary transforms to be applied to the images for inference.
+            If omitted some default transforms will be applied.
+
+        post_inference_transforms_dict: Optional[Transform] = None
+            Dictionary transforms to be applied to the inference output to create the final image.
+            If omitted some default transforms will be applied.
+
+        val_metrics_transforms_dict: Optional[Transform] = None
+            Dictionary transforms to be applied to the validation output to compatible to the selected metrics.
+            If omitted some default transforms will be applied.
 
         images_sub_folder: str = "images"
             Name of the images sub-folder. It can be used to override the default "images".
@@ -133,24 +152,49 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         self.images_sub_folder = images_sub_folder
         self.labels_sub_folder = labels_sub_folder
 
-        # Set the transforms is any are passed
+        # Set the training transforms if passed
         self.train_transforms_dict = None
         if train_transforms_dict is not None:
             self.train_transforms_dict = train_transforms_dict
         else:
-            self.train_transforms_dict = self.get_train_transforms_dict()
+            self.train_transforms_dict = self.__default_train_transforms_dict()
 
+        # Set the validation transforms if passed
         self.val_transforms_dict = None
         if val_transforms_dict is not None:
             self.val_transforms_dict = val_transforms_dict
         else:
-            self.val_transforms_dict = self.get_val_transforms_dict()
+            self.val_transforms_dict = self.__default_val_transforms_dict()
 
+        # Set the test transforms if passed
         self.test_transforms_dict = None
         if test_transforms_dict is not None:
             self.test_transforms_dict = test_transforms_dict
         else:
-            self.test_transforms_dict = self.get_test_transforms_dict()
+            self.test_transforms_dict = self.__default_train_transforms_dict()
+
+        # Set the inference transforms if passed
+        self.inference_transforms_dict = None
+        if inference_transforms_dict is not None:
+            self.inference_transforms_dict = inference_transforms_dict
+        else:
+            self.inference_transforms_dict = self.__default_inference_transforms()
+
+        # Set the post inference transforms if passed
+        self.post_inference_transforms_dict = None
+        if post_inference_transforms_dict is not None:
+            self.post_inference_transforms_dict = post_inference_transforms_dict
+        else:
+            self.post_inference_transforms_dict = (
+                self.__default_post_inference_transforms()
+            )
+
+        # Set the validation metrics transform
+        self.val_metrics_transforms_dict = None
+        if val_metrics_transforms_dict is not None:
+            self.val_metrics_transforms_dict = val_metrics_transforms_dict
+        else:
+            self.val_metrics_transforms_dict = self.__default_val_metrics_transforms()
 
         # Set the seed
         if seed is None:
@@ -300,7 +344,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         # Create a DataSet
         inference_dataset = ArrayDataset(
             image_names,
-            img_transform=self.get_inference_transforms(),
+            img_transform=self.inference_transforms_dict,
             seg=None,
             seg_transform=None,
             labels=None,
@@ -316,6 +360,30 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         )
 
     def get_train_transforms_dict(self):
+        """Return train set transforms."""
+        return self.train_transforms_dict
+
+    def get_val_transforms_dict(self):
+        """Return validation set transforms."""
+        return self.val_transforms_dict
+
+    def get_test_transforms_dict(self):
+        """Return test set transforms."""
+        return self.test_transforms_dict
+
+    def get_val_metrics_transforms(self):
+        """Return transforms for validation for metric calculation."""
+        return self.val_metrics_transforms_dict
+
+    def get_inference_transforms(self):
+        """Return inference set transforms."""
+        return self.inference_transforms_dict
+
+    def get_post_inference_transforms(self):
+        """Return post transforms for full inference."""
+        return self.post_inference_transforms_dict
+
+    def __default_train_transforms_dict(self):
         """Define default training set transforms."""
         train_transforms = Compose(
             [
@@ -337,7 +405,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         )
         return train_transforms
 
-    def get_val_transforms_dict(self):
+    def __default_val_transforms_dict(self):
         """Define default validation set transforms."""
         val_transforms = Compose(
             [
@@ -358,7 +426,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         )
         return val_transforms
 
-    def get_test_transforms_dict(self):
+    def __default_test_transforms_dict(self):
         """Define default test set transforms."""
         test_transforms = Compose(
             [
@@ -379,7 +447,14 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         )
         return test_transforms
 
-    def get_inference_transforms(self):
+    def __default_val_metrics_transforms(self):
+        """Define default transforms for validation for metric calculation."""
+        post_transforms = Compose(
+            [Activations(sigmoid=True), AsDiscrete(threshold=0.5)]
+        )
+        return post_transforms
+
+    def __default_inference_transforms(self):
         """Define default inference set transforms."""
         inference_transforms = Compose(
             [
@@ -394,14 +469,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         )
         return inference_transforms
 
-    def get_val_metrics_transforms(self):
-        """Define default transforms for validation for metric calculation."""
-        post_transforms = Compose(
-            [Activations(sigmoid=True), AsDiscrete(threshold=0.5)]
-        )
-        return post_transforms
-
-    def get_post_inference_transforms(self):
+    def __default_post_inference_transforms(self):
         """Define default post transforms for full inference."""
         post_transforms = Compose([ToLabel()])
         return post_transforms

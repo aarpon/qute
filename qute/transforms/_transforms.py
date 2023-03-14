@@ -57,7 +57,12 @@ class MinMaxNormalize(Transform):
 class MinMaxNormalized(Transform):
     """Normalize the "image" tensor to [0, 1] using given min and max absolute intensities from the data dictionary."""
 
-    def __init__(self, image_key: str = "image", min_intensity: int = 0, max_intensity: int = 65535) -> None:
+    def __init__(
+        self,
+        image_key: str = "image",
+        min_intensity: int = 0,
+        max_intensity: int = 65535,
+    ) -> None:
         """Constructor
 
         Parameters
@@ -86,7 +91,9 @@ class MinMaxNormalized(Transform):
         data: dict
             Updated dictionary with normalized "image" tensor.
         """
-        data[self.image_key] = (data[self.image_key] - self.min_intensity) / self.range_intensity
+        data[self.image_key] = (
+            data[self.image_key] - self.min_intensity
+        ) / self.range_intensity
         return data
 
 
