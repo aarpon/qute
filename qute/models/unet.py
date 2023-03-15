@@ -174,6 +174,7 @@ class UNet(pl.LightningModule):
         inference_post_transforms: Transform,
         roi_size: Tuple[int, int],
         batch_size: int,
+        overlap: float = 0.25,
         transpose: bool = True,
     ):
         """Run inference on full images using given model.
@@ -195,6 +196,9 @@ class UNet(pl.LightningModule):
 
         batch_size: int
             Number of parallel batches to run.
+        
+        overlap: float
+            Fraction of overlap between rois.
 
         transpose: bool
             Whether the transpose the image before saving, to compensate for the default behavior of monai.transforms.LoadImage().
@@ -224,6 +228,7 @@ class UNet(pl.LightningModule):
                     inputs=images,
                     roi_size=roi_size,
                     sw_batch_size=batch_size,
+                    overlap=overlap,
                     predictor=self.net,
                     device=device,
                 )
