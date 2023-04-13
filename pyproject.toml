@@ -25,11 +25,11 @@ tifffile = "^2023.2.3"
 natsort = "^8.2.0"
 torchmetrics = "^0.11.1"
 torchvision = "^0.15"
-pytorch-lightning = "^1.9.0"
 tensorboard = "^2.11.2"
 scikit-image = "^0.19.3"
 torchio = "^0.18.87"
 monai-weekly = "^1.2.dev2315"   # PyTorch 2.0 requires MONAI 1.2 (unreleased)
+pytorch-lightning = "^2.0.1.post0"
 
 [tool.poetry.group.dev.dependencies]
 pdoc3 = "^0.10.0"
