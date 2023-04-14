@@ -58,8 +58,11 @@ if __name__ == "__main__":
         val_metrics_transforms=data_module.get_val_metrics_transforms(),
     )
 
+    # # Compile the model
+    # model = torch.compile(model)
+
     # Callbacks
-    # early_stopping = EarlyStopping(monitor="val_loss", patience=5, mode="min")  # Issues with Lightning's ES
+    early_stopping = EarlyStopping(monitor="val_loss", patience=5, mode="min")  # Issues with Lightning's ES
     model_checkpoint = ModelCheckpoint(monitor="val_loss")
 
     # Instantiate the Trainer
@@ -67,7 +70,7 @@ if __name__ == "__main__":
         accelerator="gpu",
         devices=1,
         precision=PRECISION,
-        callbacks=[model_checkpoint],
+        callbacks=[model_checkpoint, early_stopping],
         max_epochs=MAX_EPOCHS,
         log_every_n_steps=1,
     )

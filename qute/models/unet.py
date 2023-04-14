@@ -140,13 +140,13 @@ class UNet(pl.LightningModule):
         x, y = batch
         y_hat = self.net(x)
         val_loss = self.criterion(y_hat, y)
-        self.log("val_loss", val_loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val_loss", torch.tensor([val_loss]), on_step=False, on_epoch=True, prog_bar=True)
         if self.metrics is not None:
             if self.val_metrics_transforms is not None:
                 val_metrics = self.metrics(self.val_metrics_transforms(y_hat), y).mean()
             else:
                 val_metrics = self.metrics(y_hat, y).mean()
-            self.log("val_metrics", val_metrics, on_step=False, on_epoch=True)
+            self.log("val_metrics", torch.tensor([val_metrics]), on_step=False, on_epoch=True)
         return val_loss
 
     def test_step(self, batch, batch_idx):
