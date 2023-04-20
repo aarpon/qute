@@ -957,14 +957,14 @@ files = [
 
 [[package]]
 name = "monai-weekly"
-version = "1.2.dev2315"
+version = "1.2.dev2316"
 description = "AI Toolkit for Healthcare Imaging"
 category = "main"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "monai-weekly-1.2.dev2315.tar.gz", hash = "sha256:d2c8edbedc15205f878ae3ed856f4dcf4132e92ec1ce75f2078c7148ca7e97e6"},
-    {file = "monai_weekly-1.2.dev2315-py3-none-any.whl", hash = "sha256:a725cfd589279779909723236df9076aa46fbe27f6bd4f65bfa14c77be7a0f13"},
+    {file = "monai-weekly-1.2.dev2316.tar.gz", hash = "sha256:cd42c138369a92cdaefd19f7a29f0bd6ba8c3cabbea494947834caa77679118c"},
+    {file = "monai_weekly-1.2.dev2316-py3-none-any.whl", hash = "sha256:1205186a12b091ba73b22d57eb789fbfb8bf3c2900d9f41f0d4a6a90d6a4ce7a"},
 ]
 
 [package.dependencies]
@@ -2806,4 +2806,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "d4244daffc9a6334740b9291f6479711502754871ef3e327f2cdf6c72f2e49e6"
+content-hash = "1f325ba52a9154107809b319e4e52394103523aee49cd6a6779f51d6d350689d"
