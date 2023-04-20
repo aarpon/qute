@@ -80,7 +80,7 @@ if __name__ == "__main__":
     # trainer.tune(model, datamodule=data_module)
 
     # Train with the optimal learning rate found above
-    trainer.fit(model, data_module)
+    trainer.fit(model, datamodule=data_module)
 
     # Print path to best model
     print(f"Best model: {model_checkpoint.best_model_path}")
