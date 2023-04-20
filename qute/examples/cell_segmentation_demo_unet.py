@@ -24,7 +24,7 @@ from qute.data.dataloaders import CellSegmentationDemo
 from qute.models.unet import UNet
 
 SEED = 2022
-BATCH_SIZE = 24
+BATCH_SIZE = 32
 INFERENCE_BATCH_SIZE = 4
 PATCH_SIZE = (512, 512)
 PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
@@ -56,6 +56,8 @@ if __name__ == "__main__":
         strides=(2, 2),
         metrics=metrics,
         val_metrics_transforms=data_module.get_val_metrics_transforms(),
+        test_metrics_transforms=data_module.get_test_metrics_transforms(),
+        learning_rate=1e-2
     )
 
     # # Compile the model

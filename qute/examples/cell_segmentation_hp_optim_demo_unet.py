@@ -36,7 +36,7 @@ from qute.models.unet import UNet
 #
 
 SEED = 2022
-BATCH_SIZE = 24
+BATCH_SIZE = 32
 INFERENCE_BATCH_SIZE = 4
 PATCH_SIZE = (512, 512)
 PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
@@ -50,6 +50,7 @@ def train_fn(
     num_res_units = config["num_res_units"]
     learning_rate = config["learning_rate"]
     channels = config["channels"]
+    dropout = config["dropout"]
 
     # Instantiate the model
     model = UNet(
@@ -59,7 +60,9 @@ def train_fn(
         strides=(2, 2),
         metrics=metrics,
         val_metrics_transforms=data_module.get_val_metrics_transforms(),
+        test_metrics_transforms=data_module.get_test_metrics_transforms(),
         learning_rate=learning_rate,
+        dropout=dropout
     )
 
     # Tune report callback
@@ -84,19 +87,16 @@ def train_fn(
 
 def tune_fn(data_module, criterion, metrics, num_samples=10, num_epochs=MAX_EPOCHS):
     config = {
-        "num_res_units": tune.choice([2, 3, 4, 5]),
-        "learning_rate": tune.loguniform(1e-4, 1e-1),
-        "channels": tune.choice([
-            (16, 32),
-            (16, 32, 64),
-            (32, 64),
-        ])
+        "num_res_units": tune.choice([0, 1, 2, 3, 4]),
+        "learning_rate": tune.loguniform(0.005, 0.1),
+        "channels": (16, 32, 64),
+        "dropout": tune.choice([0, 0.1, 0.2, 0.3, 0.4, 0.5])
     }
 
     scheduler = ASHAScheduler(max_t=num_epochs, grace_period=1, reduction_factor=2)
 
     reporter = CLIReporter(
-        parameter_columns=["num_res_units", "learning_rate", "channels"],
+        parameter_columns=["num_res_units", "learning_rate", "channels", "dropout"],
         metric_columns=["loss", "dice", "training_iteration"],
     )
 
@@ -108,7 +108,7 @@ def tune_fn(data_module, criterion, metrics, num_samples=10, num_epochs=MAX_EPOC
         num_epochs=num_epochs,
         num_gpus=1,
     )
-    resources_per_trial = {"cpu": 1, "gpu": 1}
+    resources_per_trial = {"cpu": 0, "gpu": 1}
 
     tuner = tune.Tuner(
         tune.with_resources(train_fn_with_parameters, resources=resources_per_trial),
