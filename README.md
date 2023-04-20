@@ -25,3 +25,6 @@ To get started, try:
 ```bash
 $ python qute/examples/cell_segmentation_demo_unet.py 
 ```
+
+For an example on how to use `ray[tune]` to optimize hyper-parameters, see `qute/examples/cell_segmentation_hp_optim_demo_unet.py`.
+
