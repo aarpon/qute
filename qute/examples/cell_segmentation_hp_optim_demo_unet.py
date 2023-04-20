@@ -28,6 +28,13 @@ from ray.tune.schedulers import ASHAScheduler
 from qute.data.dataloaders import CellSegmentationDemo
 from qute.models.unet import UNet
 
+#
+# See: 
+#
+# Using PyTorch Lightning with Tune: https://docs.ray.io/en/latest/tune/examples/tune-pytorch-lightning.html
+# Tune search algorithms: https://docs.ray.io/en/latest/tune/api/suggestion.html 
+#
+
 SEED = 2022
 BATCH_SIZE = 24
 INFERENCE_BATCH_SIZE = 4
@@ -42,12 +49,13 @@ def train_fn(
     # Get current configuration parameters
     num_res_units = config["num_res_units"]
     learning_rate = config["learning_rate"]
+    channels = config["channels"]
 
     # Instantiate the model
     model = UNet(
         num_res_units=num_res_units,
         criterion=criterion,
-        channels=(16, 32, 64),
+        channels=channels,
         strides=(2, 2),
         metrics=metrics,
         val_metrics_transforms=data_module.get_val_metrics_transforms(),
@@ -56,7 +64,7 @@ def train_fn(
 
     # Tune report callback
     report_callback = TuneReportCallback(
-        {"loss": "val_loss", "mean_accuracy": "val_metrics"}, on="validation_end"
+        {"loss": "val_loss", "dice": "val_metrics"}, on="validation_end"
     )
 
     # Instantiate the Trainer
@@ -78,13 +86,18 @@ def tune_fn(data_module, criterion, metrics, num_samples=10, num_epochs=MAX_EPOC
     config = {
         "num_res_units": tune.choice([2, 3, 4, 5]),
         "learning_rate": tune.loguniform(1e-4, 1e-1),
+        "channels": tune.choice([
+            (16, 32),
+            (16, 32, 64),
+            (32, 64),
+        ])
     }
 
     scheduler = ASHAScheduler(max_t=num_epochs, grace_period=1, reduction_factor=2)
 
     reporter = CLIReporter(
-        parameter_columns=["num_res_units", "learning_rate"],
-        metric_columns=["loss", "mean_accuracy", "training_iteration"],
+        parameter_columns=["num_res_units", "learning_rate", "channels"],
+        metric_columns=["loss", "dice", "training_iteration"],
     )
 
     train_fn_with_parameters = tune.with_parameters(
@@ -136,7 +149,7 @@ if __name__ == "__main__":
 
     # Run the optimization
     results = tune_fn(
-        data_module, criterion, metrics, num_samples=10, num_epochs=MAX_EPOCHS
+        data_module, criterion, metrics, num_samples=25, num_epochs=MAX_EPOCHS
     )
 
     # Report
