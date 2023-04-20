@@ -49,6 +49,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         inference_transforms_dict: Optional[Transform] = None,
         post_inference_transforms_dict: Optional[Transform] = None,
         val_metrics_transforms_dict: Optional[Transform] = None,
+        test_metrics_transforms_dict: Optional[Transform] = None,
         images_sub_folder: str = "images",
         labels_sub_folder: str = "labels",
         image_range_intensities: Optional[tuple[int, int]] = None,
@@ -111,6 +112,10 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             Dictionary transforms to be applied to the validation output to compatible to the selected metrics.
             If omitted some default transforms will be applied.
 
+        test_metrics_transforms_dict: Optional[Transform] = None
+            Dictionary transforms to be applied to the test output to compatible to the selected metrics.
+            If omitted, it will default to the val_metrics_transforms_dict.
+            
         images_sub_folder: str = "images"
             Name of the images sub-folder. It can be used to override the default "images".
 
@@ -195,6 +200,13 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             self.val_metrics_transforms_dict = val_metrics_transforms_dict
         else:
             self.val_metrics_transforms_dict = self.__default_val_metrics_transforms()
+
+        # Set the test metrics transform
+        self.test_metrics_transforms_dict = None
+        if test_metrics_transforms_dict is not None:
+            self.test_metrics_transforms_dict = test_metrics_transforms_dict
+        else:
+            self.test_metrics_transforms_dict = self.__default_test_metrics_transforms()
 
         # Set the seed
         if seed is None:
@@ -375,6 +387,10 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         """Return transforms for validation for metric calculation."""
         return self.val_metrics_transforms_dict
 
+    def get_test_metrics_transforms(self):
+        """Return transforms for testing for metric calculation."""
+        return self.test_metrics_transforms_dict
+    
     def get_inference_transforms(self):
         """Return inference set transforms."""
         return self.inference_transforms_dict
@@ -453,6 +469,10 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             [Activations(sigmoid=True), AsDiscrete(threshold=0.5)]
         )
         return post_transforms
+
+    def __default_test_metrics_transforms(self):
+        """Define default transforms for testing for metric calculation."""
+        return self.__default_val_metrics_transforms()
 
     def __default_inference_transforms(self):
         """Define default inference set transforms."""

@@ -47,6 +47,7 @@ class UNet(pl.LightningModule):
             include_background=False, reduction="mean", get_not_nans=False
         ),
         val_metrics_transforms=None,
+        test_metrics_transforms=None,
         predict_post_transforms=None,
         learning_rate: float = 1e-2,
         optimizer_class=AdamW,
@@ -79,13 +80,16 @@ class UNet(pl.LightningModule):
             The default loss function applies to a multi-label target where the background class is omitted.
 
         metrics: DiceMetric(include_background=False, reduction="mean", get_not_nans=False)
-            Metrics used for validation. Set to None to omit.
+            Metrics used for validation and test. Set to None to omit.
 
             The default metrics applies to a three-label target where the background (index = 0) class
             is omitted from calculation.
 
         val_metrics_transforms: None
             Post transform for the output of the forward pass in the validation step for metric calculation.
+
+        test_metrics_transforms: None
+            Post transform for the output of the forward pass in the test step for metric calculation.
 
         predict_post_transforms: None
             Post transform for the output of the forward pass in the prediction step (only).
@@ -110,6 +114,7 @@ class UNet(pl.LightningModule):
         self.learning_rate = learning_rate
         self.optimizer_class = optimizer_class
         self.val_metrics_transforms = val_metrics_transforms
+        self.test_metrics_transforms = test_metrics_transforms
         self.predict_post_transforms = predict_post_transforms
         self.net = MonaiUNet(
             spatial_dims=spatial_dims,
@@ -155,6 +160,12 @@ class UNet(pl.LightningModule):
         y_hat = self.net(x)
         test_loss = self.criterion(y_hat, y)
         self.log("test_loss", test_loss)
+        if self.metrics is not None:
+            if self.test_metrics_transforms is not None:
+                test_metrics = self.metrics(self.test_metrics_transforms(y_hat), y).mean()
+            else:
+                test_metrics = self.metrics(y_hat, y).mean()
+            self.log("test_metrics", torch.tensor([test_metrics]), on_step=False, on_epoch=True)        
         return test_loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
