@@ -44,13 +44,24 @@ MAX_EPOCHS = 250
 
 
 def train_fn(
-    config, data_module, criterion, metrics, num_epochs=MAX_EPOCHS, num_gpus=1
+    config, criterion, metrics, num_epochs=MAX_EPOCHS, num_gpus=1
 ):
     # Get current configuration parameters
     num_res_units = config["num_res_units"]
     learning_rate = config["learning_rate"]
     channels = config["channels"]
     dropout = config["dropout"]
+    patch_size = config["patch_size"]
+    batch_size = config["batch_size"]
+
+    # Instiantiate data module
+    data_module = CellSegmentationDemo(
+        seed=SEED,
+        batch_size=batch_size,
+        patch_size=patch_size,
+        inference_batch_size=INFERENCE_BATCH_SIZE,
+    )
+
 
     # Instantiate the model
     model = UNet(
@@ -85,24 +96,25 @@ def train_fn(
     trainer.fit(model, datamodule=data_module)
 
 
-def tune_fn(data_module, criterion, metrics, num_samples=10, num_epochs=MAX_EPOCHS):
+def tune_fn(criterion, metrics, num_samples=10, num_epochs=MAX_EPOCHS):
     config = {
         "num_res_units": tune.choice([0, 1, 2, 3, 4]),
         "learning_rate": tune.loguniform(0.005, 0.1),
-        "channels": (16, 32, 64),
-        "dropout": tune.choice([0, 0.1, 0.2, 0.3, 0.4, 0.5])
+        "channels": tune.choice([(16, 32), (16, 32, 64), (32, 64)]),
+        "dropout": tune.choice([0, 0.1, 0.2, 0.3, 0.4, 0.5]),
+        "patch_size": tune.choice([(256, 256), (384, 384), (512, 512)]),
+        "batch_size": tune.choice([16, 24, 32]),
     }
 
     scheduler = ASHAScheduler(max_t=num_epochs, grace_period=1, reduction_factor=2)
 
     reporter = CLIReporter(
-        parameter_columns=["num_res_units", "learning_rate", "channels", "dropout"],
+        parameter_columns=["num_res_units", "learning_rate", "channels", "dropout", "patch_size", "batch_size"],
         metric_columns=["loss", "dice", "training_iteration"],
     )
 
     train_fn_with_parameters = tune.with_parameters(
         train_fn,
-        data_module=data_module,
         criterion=criterion,
         metrics=metrics,
         num_epochs=num_epochs,
@@ -133,14 +145,6 @@ if __name__ == "__main__":
     # Seeding
     seed_everything(SEED, workers=True)
 
-    # Data module
-    data_module = CellSegmentationDemo(
-        seed=SEED,
-        batch_size=BATCH_SIZE,
-        patch_size=PATCH_SIZE,
-        inference_batch_size=INFERENCE_BATCH_SIZE,
-    )
-
     # Loss
     criterion = DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)
 
@@ -149,7 +153,7 @@ if __name__ == "__main__":
 
     # Run the optimization
     results = tune_fn(
-        data_module, criterion, metrics, num_samples=25, num_epochs=MAX_EPOCHS
+        criterion, metrics, num_samples=25, num_epochs=MAX_EPOCHS
     )
 
     # Report
