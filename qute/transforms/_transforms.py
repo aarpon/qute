@@ -13,6 +13,7 @@ from typing import Dict
 
 import numpy as np
 import torch
+from monai.data import MetaTensor
 from monai.transforms import Transform
 
 
@@ -251,8 +252,12 @@ class DebugInformer(Transform):
             )
         elif type(data) == dict:
             # A dictionary, most likely of "image" and "label"
+            print(f"{prefix}Dictionary with keys: ", end=" ")
             for key in data.keys():
-                print(data[key].shape, data[key].dtype)
+                print(f"'{key}': shape={data[key].shape}, dtype={data[key].dtype}", end=" ")
+            print()
+        elif type(data) == MetaTensor:
+            print(f"{prefix}MONAI MetaTensor: shape={data.shape}, dtype={data.dtype}")
         else:
             try:
                 print(f"{prefix}{type(data)}: {str(data)}")
