@@ -15,6 +15,8 @@ from monai.transforms import (
     Compose,
     LoadImage,
     LoadImaged,
+    RandGaussianNoised,
+    RandGaussianSmoothd,
     RandRotate90d,
     RandSpatialCropd,
     Transform,
@@ -415,6 +417,8 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     keys=["image", "label"], roi_size=self.patch_size, random_size=False
                 ),
                 RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=(0, 1)),
+                RandGaussianNoised(keys="image", prob=0.2),
+                RandGaussianSmoothd(keys="image", prob=0.2),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
                 ToPyTorchOutputd(),
             ]

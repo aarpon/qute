@@ -28,10 +28,10 @@ torchvision = "^0.15"
 tensorboard = "^2.11.2"
 scikit-image = "^0.19.3"
 torchio = "^0.18.87"
-monai-weekly = "^1.2.dev2316"   # PyTorch 2.0 requires MONAI 1.2 (unreleased)
 pytorch-lightning = "^2.0.1.post0"
 ray = {extras = ["tune"], version = "^2.3.1"}
 protobuf = "3.20.3"             # Required for ray[tune] 2.3.1
+monai = "^1.2.0"
 
 [tool.poetry.group.dev.dependencies]
 pdoc3 = "^0.10.0"

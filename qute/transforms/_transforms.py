@@ -249,6 +249,10 @@ class DebugInformer(Transform):
                 f"median = {np.median(data_numpy)}, "
                 f"max = {data_numpy.max()}"
             )
+        elif type(data) == dict:
+            # A dictionary, most likely of "image" and "label"
+            for key in data.keys():
+                print(data[key].shape, data[key].dtype)
         else:
             try:
                 print(f"{prefix}{type(data)}: {str(data)}")
@@ -304,7 +308,7 @@ class DebugMinNumVoxelCheckerd(Transform):
                     return data
 
             raise Exception(
-                f"{self.name}: The number of voxels for {self.class_num} is lower than expected ({num_voxels})."
+                f"The number of voxels for {self.class_num} is lower than expected ({num_voxels})."
             )
 
         # Return data

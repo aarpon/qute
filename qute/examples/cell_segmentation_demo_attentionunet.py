@@ -20,12 +20,12 @@ from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
 from qute.data.dataloaders import CellSegmentationDemo
-from qute.models.unet import UNet
+from qute.models.attention_unet import AttentionUNet
 
 SEED = 2022
 BATCH_SIZE = 32
 INFERENCE_BATCH_SIZE = 4
-PATCH_SIZE = (512, 512)
+PATCH_SIZE = (256, 256)
 PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
 MAX_EPOCHS = 250
 
@@ -48,8 +48,7 @@ if __name__ == "__main__":
     metrics = DiceMetric(include_background=False, reduction="mean", get_not_nans=False)
 
     # Model
-    model = UNet(
-        num_res_units=4,
+    model = AttentionUNet(
         criterion=criterion,
         channels=(16, 32, 64),
         strides=(2, 2),
@@ -87,7 +86,7 @@ if __name__ == "__main__":
     print(f"Best model: {model_checkpoint.best_model_path}")
 
     # Load weights from best model
-    model = UNet.load_from_checkpoint(model_checkpoint.best_model_path)
+    model = AttentionUNet.load_from_checkpoint(model_checkpoint.best_model_path)
 
     # Test
     trainer.test(model, dataloaders=data_module.test_dataloader())
