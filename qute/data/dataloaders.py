@@ -18,7 +18,6 @@ from monai.transforms import (
     RandGaussianNoised,
     RandGaussianSmoothd,
     RandRotate90d,
-    RandSpatialCropd,
     Transform,
 )
 from natsort import natsorted
@@ -29,7 +28,7 @@ from qute.data.io import (
     get_cell_restoration_demo_dataset,
     get_cell_segmentation_demo_dataset,
 )
-from qute.transforms import ToLabel, ToPyTorchOutputd, ZNormalize, ZNormalized
+from qute.transforms import AddBorderd, PickLabelsAtRandomd, ToLabel, ToPyTorchLightningOutputd, ZNormalize, ZNormalized
 
 
 class DataModuleLocalFolder(pl.LightningDataModule):
@@ -413,14 +412,16 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     dtype=torch.float32,
                 ),
                 ZNormalized(image_key="image"),
-                RandSpatialCropd(
-                    keys=["image", "label"], roi_size=self.patch_size, random_size=False
-                ),
+                # RandSpatialCropd(
+                #     keys=["image", "label"], roi_size=self.patch_size, random_size=False
+                # ),
+                PickLabelsAtRandomd(image_key="image", label_key="label", num_windows=1, no_batch_dim=True),
+                AddBorderd(label_key="label", border_width=3),
                 RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=(0, 1)),
                 RandGaussianNoised(keys="image", prob=0.2),
                 RandGaussianSmoothd(keys="image", prob=0.2),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
-                ToPyTorchOutputd(),
+                ToPyTorchLightningOutputd(),
             ]
         )
         return train_transforms
@@ -437,11 +438,13 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     dtype=torch.float32,
                 ),
                 ZNormalized(image_key="image"),
-                RandSpatialCropd(
-                    keys=["image", "label"], roi_size=self.patch_size, random_size=False
-                ),
+                # RandSpatialCropd(
+                #     keys=["image", "label"], roi_size=self.patch_size, random_size=False
+                # ),
+                PickLabelsAtRandomd(image_key="image", label_key="label", num_windows=1, no_batch_dim=True),
+                AddBorderd(label_key="label", border_width=3),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
-                ToPyTorchOutputd(),
+                ToPyTorchLightningOutputd(),
             ]
         )
         return val_transforms
@@ -458,11 +461,13 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     dtype=torch.float32,
                 ),
                 ZNormalized(image_key="image"),
-                RandSpatialCropd(
-                    keys=["image", "label"], roi_size=self.patch_size, random_size=False
-                ),
+                # RandSpatialCropd(
+                #     keys=["image", "label"], roi_size=self.patch_size, random_size=False
+                # ),
+                PickLabelsAtRandomd(image_key="image", label_key="label", num_windows=1, no_batch_dim=True),
+                AddBorderd(label_key="label", border_width=3),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
-                ToPyTorchOutputd(),
+                ToPyTorchLightningOutputd(),
             ]
         )
         return test_transforms

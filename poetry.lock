@@ -752,6 +752,26 @@ files = [
 referencing = ">=0.28.0"
 
 [[package]]
+name = "kornia"
+version = "0.7.0"
+description = "Open Source Differentiable Computer Vision Library for PyTorch"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "kornia-0.7.0-py2.py3-none-any.whl", hash = "sha256:daa77a65f9cbfc1a67487d64a6b23d18a81f10eb94380312cda255d431bcc18a"},
+    {file = "kornia-0.7.0.tar.gz", hash = "sha256:72cba6a0965a15caf10a664647654412effb7c0b9afcf40e458bc005f976ffac"},
+]
+
+[package.dependencies]
+packaging = "*"
+torch = ">=1.9.1"
+
+[package.extras]
+dev = ["kornia-rs (==0.0.8)", "mypy[reports]", "numpy", "onnx", "opencv-python", "pre-commit (>=2)", "pydocstyle", "pytest (==7.4.0)", "pytest-cov (==4.1.0)", "scipy"]
+docs = ["PyYAML (>=5.1)", "furo", "kornia-moons", "matplotlib", "opencv-python", "sphinx (>=4)", "sphinx-autodoc-defaultargs", "sphinx-autodoc-typehints", "sphinx-copybutton (>=0.3)", "sphinx-design", "sphinxcontrib-bibtex", "sphinxcontrib-gtagjs", "sphinxcontrib-youtube", "torchvision"]
+x = ["accelerate (==0.21.0)"]
+
+[[package]]
 name = "lightning-bolts"
 version = "0.6.0.post1"
 description = "Lightning Bolts is a community contribution for ML researchers."
@@ -2788,4 +2808,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "be2ea9a7d507d2fe55f79b207a1975f5b43f407be5b1d141fc923d56b5baa877"
+content-hash = "29c85c96a90e82bd53b9081f76f926329993a9cea86f5bd20d89ef98dfd7eb01"

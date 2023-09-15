@@ -9,12 +9,14 @@
 #       Aaron Ponti - initial API and implementation
 #  ******************************************************************************/
 from ._transforms import (
+    AddBorderd,
     DebugInformer,
     DebugMinNumVoxelCheckerd,
     MinMaxNormalize,
     MinMaxNormalized,
+    PickLabelsAtRandomd,
     ToLabel,
-    ToPyTorchOutputd,
+    ToPyTorchLightningOutputd,
     ZNormalize,
     ZNormalized,
 )

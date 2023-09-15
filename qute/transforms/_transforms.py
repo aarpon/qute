@@ -9,9 +9,11 @@
 #       Aaron Ponti - initial API and implementation
 #  ******************************************************************************/
 
-from typing import Dict
-
+import random
 import numpy as np
+from skimage.measure import label, regionprops
+from skimage.morphology import disk
+from kornia.morphology import erosion
 import torch
 from monai.data import MetaTensor
 from monai.transforms import Transform
@@ -42,7 +44,7 @@ class MinMaxNormalize(Transform):
         self.max_intensity = max_intensity
         self.range_intensity = self.max_intensity - self.min_intensity
 
-    def __call__(self, image: torch.tensor) -> torch.tensor:
+    def __call__(self, image: np.ndarray) -> np.ndarray:
         """
         Apply the transform to `image`.
 
@@ -119,7 +121,7 @@ class ToLabel(Transform):
         return data
 
 
-class ToPyTorchOutputd(Transform):
+class ToPyTorchLightningOutputd(Transform):
     """
     Simple converter to pass from the dictionary output of Monai transfors to the expected (image, label) tuple used by PyTorch Lightning.
     """
@@ -187,6 +189,233 @@ class ZNormalized(Transform):
         data[self.image_key] = (data[self.image_key] - mn) / sd
         return data
 
+
+class PickLabelsAtRandomd(Transform):
+    """Pick labels at random and extract the requested window from both label and image."""
+
+    def __init__(
+            self,
+            image_key: str = "image",
+            label_key: str = "label",
+            window_size: tuple[int, int] = (128, 128),
+            label_indx: int = 1,
+            num_windows: int = 1,
+            no_batch_dim: bool = False
+    ) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+
+        image_key: str
+            Key for the image in the data dictionary.
+        label_key: str
+            Key for the label in the data dictionary.
+        window_size: tuple[int, int]
+            Size of the window to be extracted centered on the selected label.
+        num_windows: int
+            Number of stacked labels to be returned. The Transform will sample with repetitions if the number of objects
+            in the image with the requested label index is lower than the number of requested windows.
+        no_batch_dim: bool
+            If only one window is returned, the batch dimension can be omitted, to return a (channel, height, width)
+            tensor. This ensures that the dataloader does not require a custom collate function to handle the double
+            batching. If num_windows > 1, this parameter is ignored.
+        """
+        super().__init__()
+        self.label_key = label_key
+        self.image_key = image_key
+        self.window_size = window_size
+        self.label_indx = label_indx
+        self.num_windows = num_windows
+        self.no_batch_dim = no_batch_dim
+
+    def __call__(self, data: dict) -> dict:
+        """
+        Select the requested number of labels from the label image, and extract region of defined window size for both
+        image and label in stacked Tensors in the data dictionary. Please notice that after extraction, the label image
+        will be binary (any additional classes in the original data will be lost).
+
+        Returns
+        -------
+
+        data: dict
+            Updated dictionary with extracted windows for the "image" and "label" tensors.
+        """
+
+        # Get the 2D label image to work with
+        label_img = label(data[self.label_key][..., :, :].squeeze() == self.label_indx)
+        sy, sx = label_img.shape
+
+        # Get the window half-side lengths
+        wy = self.window_size[0] // 2
+        wx = self.window_size[1] // 2
+
+        # Get the number of distinct objects in the image with the requested label index
+        regions = regionprops(label_img)
+
+        # Build a list of valid labels, by dropping all labels that are too close to the
+        # borders to allow for extracting a valid window of requested size.
+        valid_labels = []
+        cached_regions = {}
+        for region in regions:
+
+            # Get the centroid
+            cy, cx = region.centroid
+
+            # Get the boundaries of the area to extract
+            cy = round(cy)
+            cx = round(cx)
+
+            # Get the boundaries
+            y0 = cy - wy
+            y = cy + wy
+            x0 = cx - wx
+            x = cx + wx
+
+            if y0 >= 0 and y < sy and x0 >= 0 and x < sx:
+                # This window is completely contained in the image, keep (and cache) it
+                valid_labels.append(region.label)
+                cached_regions[region.label] = {
+                    "y0": y0,
+                    "y": y,
+                    "x0": x0,
+                    "x": x
+                }
+
+        # Number of valid labels in the image
+        num_labels = len(valid_labels)
+
+        # Get the range of labels to select from
+        if num_labels >= self.num_windows:
+            selected_labels = random.sample(valid_labels, k=self.num_windows)
+        else:
+            # Allow for repetitions
+            selected_labels = random.choices(valid_labels, k=self.num_windows)
+
+        # Number of selected labels
+        num_selected_labels = len(selected_labels)
+
+        # Make sure to add the selected regions to the batch dimension
+        out_images = torch.zeros((num_selected_labels, 1, self.window_size[0], self.window_size[1]), dtype=data["image"].dtype)
+        out_labels = torch.zeros((num_selected_labels, 1, self.window_size[0], self.window_size[1]), dtype=data["label"].dtype)
+
+        # Extract the areas around the selected labels
+        for i, selected_label in enumerate(selected_labels):
+            # Extract the cached region boundaries
+            region = cached_regions[selected_label]
+
+            # Get and store the regions
+            y0 = region["y0"]
+            y = region["y"]
+            x0 = region["x0"]
+            x = region["x"]
+            out_images[i, 0, :, :] = data[self.image_key][..., y0:y, x0:x].squeeze()
+            out_labels[i, 0, :, :] = torch.tensor(label_img[y0:y, x0:x] > 0, dtype=torch.int)  # Binary only
+
+        # Drop batch dimension if needed
+        if out_labels.shape[0] == 1 and self.no_batch_dim:
+            out_images = out_images.squeeze(0)
+            out_labels = out_labels.squeeze(0)
+
+        # Prepare new data dictionary
+        new_data = {self.image_key: out_images, self.label_key: out_labels}
+
+        # Return the new data
+        return new_data
+
+
+class AddBorderd(Transform):
+    """Add a border class to the (binary) label image.
+
+    Please notice that the border is obtained from the erosion of the objects (that is, it does not extend outside of the original connected components.
+    """
+
+    def __init__(
+            self,
+            label_key: str = "label",
+            border_width: int = 3
+    ) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+
+        label_key: str
+            Key for the label image in the data dictionary.
+        border_width: int
+            Width of the border to be eroded from the binary image and added as new class.
+        """
+        super().__init__()
+        self.label_key = label_key
+        self.border_width = border_width
+
+    def process_label(self, lbl, footprint):
+        """Create and add object borders as new class."""
+        eroded = erosion(lbl, footprint)
+        border = torch.bitwise_or(lbl, eroded)
+        return lbl + border  # Count border pixels twice
+
+    def __call__(self, data: dict) -> dict:
+        """
+        Add  the requested number of labels from the label image, and extract region of defined window size for both image and label in stacked Tensors in the data dictionary.
+
+        Returns
+        -------
+
+        data: dict
+            Updated dictionary with new and "label" tensor.
+        """
+
+        # Make sure the label datatype is torch.int32
+        if data["label"].dtype != torch.int32:
+            data["label"] = data["label"].to(torch.int32)
+
+        # Get the 2D label image to work with
+        label_img = data["label"][..., :, :].squeeze()
+
+        # Make sure there are only two classes: background and foreground
+        if len(torch.unique(label_img)) > 2:
+            raise ValueError("The label image(s) must be binary!")
+
+        # Prepare the structuring element for the erosion
+        footprint = torch.tensor(disk(self.border_width), dtype=torch.int32)
+
+        # Number of dimensions in the data tensor
+        num_dims = len(data["label"].shape)
+
+        # Prepare the input
+        if num_dims == 2:
+
+            # Add batch and channel dimension
+            label_batch = data["label"].unsqueeze(0).unsqueeze(0)
+
+            # Process and update
+            data["label"] = self.process_label(label_batch, footprint).squeeze(0).squeeze(0)
+
+        elif num_dims == 3:
+            # We have a channel dimension: make sure there only one channel!
+            if data["label"].shape[0] > 1:
+                raise ValueError("The label image must be binary!")
+
+            # Add batch dimension
+            label_batch = data["label"].unsqueeze(0)
+
+            # Process and update
+            data["label"][0, :, :] = self.process_label(label_batch, footprint).squeeze(0)
+
+        elif num_dims == 4:
+
+            # We have a batch. Make sure that there is only one channel!
+            if data["label"][0].shape[0] > 1:
+                raise ValueError("The label image must be binary!")
+
+            # Process and update
+            data["label"] = self.process_label(data["label"], footprint)
+
+        else:
+            raise ValueError('Unexpected number of dimensions for data["label"].')
+
+        return data
 
 class DebugInformer(Transform):
     """
