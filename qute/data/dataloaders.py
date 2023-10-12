@@ -7,7 +7,7 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import yaml
-from monai.data import ArrayDataset, Dataset
+from monai.data import ArrayDataset, Dataset, DataLoader, list_data_collate
 from monai.transforms import (
     Activations,
     AsDiscrete,
@@ -22,13 +22,12 @@ from monai.transforms import (
 )
 from natsort import natsorted
 from numpy.random import default_rng
-from torch.utils.data import DataLoader
 
 from qute.data.io import (
     get_cell_restoration_demo_dataset,
     get_cell_segmentation_demo_dataset,
 )
-from qute.transforms import AddBorderd, PickLabelsAtRandomd, ToLabel, ToPyTorchLightningOutputd, ZNormalize, ZNormalized
+from qute.transforms import SelectPatchesByLabeld, ToLabel, ToPyTorchLightningOutputd, ZNormalize, ZNormalized
 
 
 class DataModuleLocalFolder(pl.LightningDataModule):
@@ -44,6 +43,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         batch_size: int = 8,
         inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
+        num_patches: int = 1,
         train_transforms_dict: Optional[Transform] = None,
         val_transforms_dict: Optional[Transform] = None,
         test_transforms_dict: Optional[Transform] = None,
@@ -88,6 +88,9 @@ class DataModuleLocalFolder(pl.LightningDataModule):
 
         patch_size: tuple = (512, 512)
             Size of the patch to be extracted (at random positions) from images and labels.
+
+        num_patches: int = 1
+            Number of patches per image to be extracted (and collated in the batch).
 
         train_transforms_dict: Optional[list] = None
             Dictionary transforms to be applied to the training images and labels.
@@ -141,6 +144,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         self.batch_size = batch_size
         self.inference_batch_size = inference_batch_size
         self.patch_size = patch_size
+        self.num_patches = num_patches
 
         self.num_workers = num_workers
         self.num_inference_workers = num_inference_workers
@@ -323,6 +327,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             shuffle=False,  # Already shuffled
             batch_size=self.batch_size,
             num_workers=self.num_workers,
+            collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
         )
 
@@ -333,6 +338,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             shuffle=False,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
+            collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
         )
 
@@ -369,6 +375,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             inference_dataset,
             batch_size=self.inference_batch_size,
             num_workers=self.num_inference_workers,
+            collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
         )
 
@@ -412,11 +419,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     dtype=torch.float32,
                 ),
                 ZNormalized(image_key="image"),
-                # RandSpatialCropd(
-                #     keys=["image", "label"], roi_size=self.patch_size, random_size=False
-                # ),
-                PickLabelsAtRandomd(image_key="image", label_key="label", num_windows=1, no_batch_dim=True),
-                AddBorderd(label_key="label", border_width=3),
+                SelectPatchesByLabeld(image_key="image", label_key="label", patch_size=self.patch_size, num_patches=self.num_patches, no_batch_dim=True),
                 RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=(0, 1)),
                 RandGaussianNoised(keys="image", prob=0.2),
                 RandGaussianSmoothd(keys="image", prob=0.2),
@@ -438,11 +441,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     dtype=torch.float32,
                 ),
                 ZNormalized(image_key="image"),
-                # RandSpatialCropd(
-                #     keys=["image", "label"], roi_size=self.patch_size, random_size=False
-                # ),
-                PickLabelsAtRandomd(image_key="image", label_key="label", num_windows=1, no_batch_dim=True),
-                AddBorderd(label_key="label", border_width=3),
+                SelectPatchesByLabeld(image_key="image", label_key="label", patch_size=self.patch_size, num_patches=1, no_batch_dim=True),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
                 ToPyTorchLightningOutputd(),
             ]
@@ -461,11 +460,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     dtype=torch.float32,
                 ),
                 ZNormalized(image_key="image"),
-                # RandSpatialCropd(
-                #     keys=["image", "label"], roi_size=self.patch_size, random_size=False
-                # ),
-                PickLabelsAtRandomd(image_key="image", label_key="label", num_windows=1, no_batch_dim=True),
-                AddBorderd(label_key="label", border_width=3),
+                SelectPatchesByLabeld(image_key="image", label_key="label", patch_size=self.patch_size, num_patches=1, no_batch_dim=True),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
                 ToPyTorchLightningOutputd(),
             ]
@@ -517,6 +512,7 @@ class CellSegmentationDemo(DataModuleLocalFolder):
         batch_size: int = 8,
         inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
+        num_patches: int = 1,
         train_transforms_dict: Optional[list] = None,
         val_transforms_dict: Optional[list] = None,
         test_transforms_dict: Optional[list] = None,
@@ -556,6 +552,9 @@ class CellSegmentationDemo(DataModuleLocalFolder):
 
         patch_size: tuple = (512, 512)
             Size of the patch to be extracted (at random positions) from images and labels.
+
+        num_patches: int = 1
+            Number of patches per image to be extracted (and collated in the batch).
 
         train_transforms_dict: Optional[list] = None
             Dictionary transforms to be applied to the training images and labels. If omitted some default transforms will be applied.
@@ -610,6 +609,7 @@ class CellSegmentationDemo(DataModuleLocalFolder):
             batch_size=batch_size,
             inference_batch_size=inference_batch_size,
             patch_size=patch_size,
+            num_patches=num_patches,
             train_transforms_dict=train_transforms_dict,
             val_transforms_dict=val_transforms_dict,
             test_transforms_dict=test_transforms_dict,
@@ -651,6 +651,7 @@ class CellRestorationDemo(DataModuleLocalFolder):
         batch_size: int = 8,
         inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
+        num_patches: int = 1,
         train_transforms_dict: Optional[list] = None,
         val_transforms_dict: Optional[list] = None,
         test_transforms_dict: Optional[list] = None,
@@ -687,6 +688,9 @@ class CellRestorationDemo(DataModuleLocalFolder):
 
         patch_size: tuple = (512, 512)
             Size of the patch to be extracted (at random positions) from images and labels.
+
+        num_patches: int = 1
+            Number of patches per image to be extracted (and collated in the batch).
 
         train_transforms_dict: Optional[list] = None
             Dictionary transforms to be applied to the training images and labels. If omitted some default transforms will be applied.
@@ -735,6 +739,7 @@ class CellRestorationDemo(DataModuleLocalFolder):
             batch_size=batch_size,
             inference_batch_size=inference_batch_size,
             patch_size=patch_size,
+            num_patches=num_patches,
             train_transforms_dict=train_transforms_dict,
             val_transforms_dict=val_transforms_dict,
             test_transforms_dict=test_transforms_dict,

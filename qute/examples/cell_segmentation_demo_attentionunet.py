@@ -23,9 +23,10 @@ from qute.data.dataloaders import CellSegmentationDemo
 from qute.models.attention_unet import AttentionUNet
 
 SEED = 2022
-BATCH_SIZE = 32
+BATCH_SIZE = 16 
 INFERENCE_BATCH_SIZE = 4
-PATCH_SIZE = (256, 256)
+PATCH_SIZE = (384, 384)
+NUM_PATCHES = 3
 PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
 MAX_EPOCHS = 250
 
@@ -38,6 +39,7 @@ if __name__ == "__main__":
         seed=SEED,
         batch_size=BATCH_SIZE,
         patch_size=PATCH_SIZE,
+        num_patches=NUM_PATCHES,
         inference_batch_size=INFERENCE_BATCH_SIZE,
     )
 

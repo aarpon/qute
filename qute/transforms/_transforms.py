@@ -9,6 +9,7 @@
 #       Aaron Ponti - initial API and implementation
 #  ******************************************************************************/
 
+from copy import deepcopy
 import random
 import numpy as np
 from skimage.measure import label, regionprops
@@ -190,16 +191,16 @@ class ZNormalized(Transform):
         return data
 
 
-class PickLabelsAtRandomd(Transform):
+class SelectPatchesByLabeld(Transform):
     """Pick labels at random and extract the requested window from both label and image."""
 
     def __init__(
             self,
             image_key: str = "image",
             label_key: str = "label",
-            window_size: tuple[int, int] = (128, 128),
+            patch_size: tuple[int, int] = (128, 128),
             label_indx: int = 1,
-            num_windows: int = 1,
+            num_patches: int = 1,
             no_batch_dim: bool = False
     ) -> None:
         """Constructor
@@ -211,9 +212,9 @@ class PickLabelsAtRandomd(Transform):
             Key for the image in the data dictionary.
         label_key: str
             Key for the label in the data dictionary.
-        window_size: tuple[int, int]
+        patch_size: tuple[int, int]
             Size of the window to be extracted centered on the selected label.
-        num_windows: int
+        num_patches: int
             Number of stacked labels to be returned. The Transform will sample with repetitions if the number of objects
             in the image with the requested label index is lower than the number of requested windows.
         no_batch_dim: bool
@@ -224,16 +225,15 @@ class PickLabelsAtRandomd(Transform):
         super().__init__()
         self.label_key = label_key
         self.image_key = image_key
-        self.window_size = window_size
+        self.patch_size = patch_size
         self.label_indx = label_indx
-        self.num_windows = num_windows
+        self.num_patches = num_patches
         self.no_batch_dim = no_batch_dim
 
     def __call__(self, data: dict) -> dict:
         """
         Select the requested number of labels from the label image, and extract region of defined window size for both
-        image and label in stacked Tensors in the data dictionary. Please notice that after extraction, the label image
-        will be binary (any additional classes in the original data will be lost).
+        image and label in stacked Tensors in the data dictionary.
 
         Returns
         -------
@@ -247,8 +247,8 @@ class PickLabelsAtRandomd(Transform):
         sy, sx = label_img.shape
 
         # Get the window half-side lengths
-        wy = self.window_size[0] // 2
-        wx = self.window_size[1] // 2
+        wy = self.patch_size[0] // 2
+        wx = self.patch_size[1] // 2
 
         # Get the number of distinct objects in the image with the requested label index
         regions = regionprops(label_img)
@@ -286,42 +286,41 @@ class PickLabelsAtRandomd(Transform):
         num_labels = len(valid_labels)
 
         # Get the range of labels to select from
-        if num_labels >= self.num_windows:
-            selected_labels = random.sample(valid_labels, k=self.num_windows)
+        if num_labels >= self.num_patches:
+            selected_labels = random.sample(valid_labels, k=self.num_patches)
         else:
             # Allow for repetitions
-            selected_labels = random.choices(valid_labels, k=self.num_windows)
+            selected_labels = random.choices(valid_labels, k=self.num_patches)
 
-        # Number of selected labels
-        num_selected_labels = len(selected_labels)
+        # Initialize returned list with shallow copy to preserve key ordering
+        ret: list = [dict(data) for _ in range(self.num_patches)]
 
-        # Make sure to add the selected regions to the batch dimension
-        out_images = torch.zeros((num_selected_labels, 1, self.window_size[0], self.window_size[1]), dtype=data["image"].dtype)
-        out_labels = torch.zeros((num_selected_labels, 1, self.window_size[0], self.window_size[1]), dtype=data["label"].dtype)
+        # Meta keys
+        meta_keys = set(data.keys()).difference({self.label_key, self.image_key})
+
+        # Deep copy all the unmodified data
+        if len(meta_keys) > 0:
+            for i in range(self.num_patches):
+                for key in meta_keys:
+                    ret[i][key] = deepcopy(data[key])
 
         # Extract the areas around the selected labels
         for i, selected_label in enumerate(selected_labels):
             # Extract the cached region boundaries
             region = cached_regions[selected_label]
 
-            # Get and store the regions
+            # Get the region
             y0 = region["y0"]
             y = region["y"]
             x0 = region["x0"]
             x = region["x"]
-            out_images[i, 0, :, :] = data[self.image_key][..., y0:y, x0:x].squeeze()
-            out_labels[i, 0, :, :] = torch.tensor(label_img[y0:y, x0:x] > 0, dtype=torch.int)  # Binary only
 
-        # Drop batch dimension if needed
-        if out_labels.shape[0] == 1 and self.no_batch_dim:
-            out_images = out_images.squeeze(0)
-            out_labels = out_labels.squeeze(0)
-
-        # Prepare new data dictionary
-        new_data = {self.image_key: out_images, self.label_key: out_labels}
+            # Store it
+            ret[i][self.image_key] = data[self.image_key][..., y0:y, x0:x]
+            ret[i][self.label_key] = data[self.label_key][..., y0:y, x0:x]
 
         # Return the new data
-        return new_data
+        return ret
 
 
 class AddBorderd(Transform):
@@ -483,7 +482,14 @@ class DebugInformer(Transform):
             # A dictionary, most likely of "image" and "label"
             print(f"{prefix}Dictionary with keys: ", end=" ")
             for key in data.keys():
-                print(f"'{key}': shape={data[key].shape}, dtype={data[key].dtype}", end=" ")
+                value = data[key]
+                t = type(value)
+                if t is MetaTensor:
+                    print(f"'{key}': shape={data[key].shape}, dtype={data[key].dtype};", end=" ")
+                elif t is dict:
+                    print(f"'{key}': dict;", end=" ")
+                else:
+                    print(f"'{key}': {t};", end=" ")
             print()
         elif type(data) == MetaTensor:
             print(f"{prefix}MONAI MetaTensor: shape={data.shape}, dtype={data.dtype}")

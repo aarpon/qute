@@ -14,7 +14,7 @@ from ._transforms import (
     DebugMinNumVoxelCheckerd,
     MinMaxNormalize,
     MinMaxNormalized,
-    PickLabelsAtRandomd,
+    SelectPatchesByLabeld,
     ToLabel,
     ToPyTorchLightningOutputd,
     ZNormalize,

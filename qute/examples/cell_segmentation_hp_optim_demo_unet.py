@@ -52,13 +52,15 @@ def train_fn(
     channels = config["channels"]
     dropout = config["dropout"]
     patch_size = config["patch_size"]
+    num_patches = config["num_patches"]
     batch_size = config["batch_size"]
 
-    # Instiantiate data module
+    # Instantiate data module
     data_module = CellSegmentationDemo(
         seed=SEED,
         batch_size=batch_size,
         patch_size=patch_size,
+        num_patches=num_patches,
         inference_batch_size=INFERENCE_BATCH_SIZE,
     )
 
@@ -99,17 +101,18 @@ def train_fn(
 def tune_fn(criterion, metrics, num_samples=10, num_epochs=MAX_EPOCHS):
     config = {
         "num_res_units": tune.choice([0, 1, 2, 3, 4]),
-        "learning_rate": tune.loguniform(0.005, 0.1),
-        "channels": tune.choice([(16, 32), (16, 32, 64), (32, 64)]),
+        "learning_rate": tune.loguniform(0.0005, 0.5),
+        "channels": tune.choice([(16, 32), (16, 32, 64), (32, 64), (32, 64, 128)]),
         "dropout": tune.choice([0, 0.1, 0.2, 0.3, 0.4, 0.5]),
-        "patch_size": tune.choice([(256, 256), (384, 384), (512, 512)]),
-        "batch_size": tune.choice([16, 24, 32]),
+        "patch_size": tune.choice([(128, 128), (256, 256), (384, 384), (512, 512)]),
+        "num_patches": tune.choice([1, 2, 4, 8]),
+        "batch_size": tune.choice([16, 24, 32, 64]),
     }
 
     scheduler = ASHAScheduler(max_t=num_epochs, grace_period=1, reduction_factor=2)
 
     reporter = CLIReporter(
-        parameter_columns=["num_res_units", "learning_rate", "channels", "dropout", "patch_size", "batch_size"],
+        parameter_columns=["num_res_units", "learning_rate", "channels", "dropout", "patch_size", "num_patches", "batch_size"],
         metric_columns=["loss", "dice", "training_iteration"],
     )
 
