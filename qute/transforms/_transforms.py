@@ -9,15 +9,16 @@
 #       Aaron Ponti - initial API and implementation
 #  ******************************************************************************/
 
-from copy import deepcopy
 import random
+from copy import deepcopy
+
 import numpy as np
-from skimage.measure import label, regionprops
-from skimage.morphology import disk
-from kornia.morphology import erosion
 import torch
+from kornia.morphology import erosion
 from monai.data import MetaTensor
 from monai.transforms import Transform
+from skimage.measure import label, regionprops
+from skimage.morphology import disk
 
 
 class MinMaxNormalize(Transform):
@@ -148,7 +149,7 @@ class ToPyTorchLightningOutputd(Transform):
 
 
 class ZNormalize(Transform):
-    """Standardize the passed tensor by subracting the mean and dividing by the standard deviation."""
+    """Standardize the passed tensor by subtracting the mean and dividing by the standard deviation."""
 
     def __init__(self) -> None:
         """Constructor"""
@@ -195,13 +196,13 @@ class SelectPatchesByLabeld(Transform):
     """Pick labels at random and extract the requested window from both label and image."""
 
     def __init__(
-            self,
-            image_key: str = "image",
-            label_key: str = "label",
-            patch_size: tuple[int, int] = (128, 128),
-            label_indx: int = 1,
-            num_patches: int = 1,
-            no_batch_dim: bool = False
+        self,
+        image_key: str = "image",
+        label_key: str = "label",
+        patch_size: tuple[int, int] = (128, 128),
+        label_indx: int = 1,
+        num_patches: int = 1,
+        no_batch_dim: bool = False,
     ) -> None:
         """Constructor
 
@@ -275,12 +276,7 @@ class SelectPatchesByLabeld(Transform):
             if y0 >= 0 and y < sy and x0 >= 0 and x < sx:
                 # This window is completely contained in the image, keep (and cache) it
                 valid_labels.append(region.label)
-                cached_regions[region.label] = {
-                    "y0": y0,
-                    "y": y,
-                    "x0": x0,
-                    "x": x
-                }
+                cached_regions[region.label] = {"y0": y0, "y": y, "x0": x0, "x": x}
 
         # Number of valid labels in the image
         num_labels = len(valid_labels)
@@ -323,17 +319,103 @@ class SelectPatchesByLabeld(Transform):
         return ret
 
 
+class AddFFT2(Transform):
+    """Calculates the power spectrum of the selected single-channel image and adds it as a second plane."""
+
+    def __init__(self) -> None:
+        """Constructor"""
+        super().__init__()
+
+    def __call__(self, data: torch.Tensor) -> torch.Tensor:
+        """
+        Apply the transform to the "image" tensor in the data dictionary.
+
+        Returns
+        -------
+
+        data: torch.Tensor
+            Image with added normalized power spectrum as second plane.
+        """
+        # Make sure that the dimensions of the data are correct
+        if not (data.dim() == 3 and data.shape[0] == 1):
+            raise ValueError(
+                "The image tensor must be of dimensions (1 x height x width)!"
+            )
+
+        # Calculate the power spectrum of the image
+        f = torch.fft.fft2(data).abs()
+
+        # Set the DC to 0.0
+        f[0, 0, 0] = 0.0
+
+        # Normalize
+        f = (f - f.mean()) / f.std()
+
+        # Add it as a new plane
+        data = torch.cat((data, f), dim=0)
+
+        # Return the updated tensor
+        return data
+
+
+class AddFFT2d(Transform):
+    """Adds the FFT2 of a single-channel image as a second plane."""
+
+    def __init__(
+        self,
+        image_key: str = "image",
+    ) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+
+        image_key: str
+            Key for the image in the data dictionary.
+        """
+        super().__init__()
+        self.image_key = image_key
+
+    def __call__(self, data: dict) -> dict:
+        """
+        Calculates the power spectrum of the selected single-channel image and adds it as a second plane.
+
+        Returns
+        -------
+
+        data: dict
+            Updated dictionary with modified "image" tensor.
+        """
+
+        # Make sure that the dimensions of the data are correct
+        if not (data[self.image_key].dim() == 3 and data[self.image_key].shape[0] == 1):
+            raise ValueError(
+                "The image tensor must be of dimensions (1 x height x width)!"
+            )
+
+        # Calculate the power spectrum of the image
+        f = torch.fft.fft2(data[self.image_key]).abs()
+
+        # Set the DC to 0.0
+        f[0, 0, 0] = 0.0
+
+        # Normalize
+        f = (f - f.mean()) / f.std()
+
+        # Add it as a new plane
+        data[self.image_key] = torch.cat((data[self.image_key], f), dim=0)
+
+        # Return the updated data dictionary
+        return data
+
+
 class AddBorderd(Transform):
     """Add a border class to the (binary) label image.
 
     Please notice that the border is obtained from the erosion of the objects (that is, it does not extend outside of the original connected components.
     """
 
-    def __init__(
-            self,
-            label_key: str = "label",
-            border_width: int = 3
-    ) -> None:
+    def __init__(self, label_key: str = "label", border_width: int = 3) -> None:
         """Constructor
 
         Parameters
@@ -389,7 +471,9 @@ class AddBorderd(Transform):
             label_batch = data["label"].unsqueeze(0).unsqueeze(0)
 
             # Process and update
-            data["label"] = self.process_label(label_batch, footprint).squeeze(0).squeeze(0)
+            data["label"] = (
+                self.process_label(label_batch, footprint).squeeze(0).squeeze(0)
+            )
 
         elif num_dims == 3:
             # We have a channel dimension: make sure there only one channel!
@@ -400,7 +484,9 @@ class AddBorderd(Transform):
             label_batch = data["label"].unsqueeze(0)
 
             # Process and update
-            data["label"][0, :, :] = self.process_label(label_batch, footprint).squeeze(0)
+            data["label"][0, :, :] = self.process_label(label_batch, footprint).squeeze(
+                0
+            )
 
         elif num_dims == 4:
 
@@ -415,6 +501,7 @@ class AddBorderd(Transform):
             raise ValueError('Unexpected number of dimensions for data["label"].')
 
         return data
+
 
 class DebugInformer(Transform):
     """
@@ -485,7 +572,10 @@ class DebugInformer(Transform):
                 value = data[key]
                 t = type(value)
                 if t is MetaTensor:
-                    print(f"'{key}': shape={data[key].shape}, dtype={data[key].dtype};", end=" ")
+                    print(
+                        f"'{key}': shape={data[key].shape}, dtype={data[key].dtype};",
+                        end=" ",
+                    )
                 elif t is dict:
                     print(f"'{key}': dict;", end=" ")
                 else:

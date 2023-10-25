@@ -7,7 +7,7 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import yaml
-from monai.data import ArrayDataset, Dataset, DataLoader, list_data_collate
+from monai.data import ArrayDataset, DataLoader, Dataset, list_data_collate
 from monai.transforms import (
     Activations,
     AsDiscrete,
@@ -15,6 +15,7 @@ from monai.transforms import (
     Compose,
     LoadImage,
     LoadImaged,
+    RandCropByPosNegLabeld,
     RandGaussianNoised,
     RandGaussianSmoothd,
     RandRotate90d,
@@ -27,7 +28,15 @@ from qute.data.io import (
     get_cell_restoration_demo_dataset,
     get_cell_segmentation_demo_dataset,
 )
-from qute.transforms import SelectPatchesByLabeld, ToLabel, ToPyTorchLightningOutputd, ZNormalize, ZNormalized
+from qute.transforms import (
+    AddFFT2,
+    AddFFT2d,
+    SelectPatchesByLabeld,
+    ToLabel,
+    ToPyTorchLightningOutputd,
+    ZNormalize,
+    ZNormalized,
+)
 
 
 class DataModuleLocalFolder(pl.LightningDataModule):
@@ -119,7 +128,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         test_metrics_transforms_dict: Optional[Transform] = None
             Dictionary transforms to be applied to the test output to compatible to the selected metrics.
             If omitted, it will default to the val_metrics_transforms_dict.
-            
+
         images_sub_folder: str = "images"
             Name of the images sub-folder. It can be used to override the default "images".
 
@@ -398,7 +407,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
     def get_test_metrics_transforms(self):
         """Return transforms for testing for metric calculation."""
         return self.test_metrics_transforms_dict
-    
+
     def get_inference_transforms(self):
         """Return inference set transforms."""
         return self.inference_transforms_dict
@@ -419,7 +428,19 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     dtype=torch.float32,
                 ),
                 ZNormalized(image_key="image"),
-                SelectPatchesByLabeld(image_key="image", label_key="label", patch_size=self.patch_size, num_patches=self.num_patches, no_batch_dim=True),
+                RandCropByPosNegLabeld(
+                    keys=["image", "label"],
+                    label_key="label",
+                    spatial_size=self.patch_size,
+                    pos=1.0,
+                    neg=1.0,
+                    num_samples=self.num_patches,
+                    image_key="image",
+                    image_threshold=0.0,
+                    allow_smaller=False,
+                    lazy=False,
+                ),
+                AddFFT2d(image_key="image"),
                 RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=(0, 1)),
                 RandGaussianNoised(keys="image", prob=0.2),
                 RandGaussianSmoothd(keys="image", prob=0.2),
@@ -441,7 +462,19 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     dtype=torch.float32,
                 ),
                 ZNormalized(image_key="image"),
-                SelectPatchesByLabeld(image_key="image", label_key="label", patch_size=self.patch_size, num_patches=1, no_batch_dim=True),
+                RandCropByPosNegLabeld(
+                    keys=["image", "label"],
+                    label_key="label",
+                    spatial_size=self.patch_size,
+                    pos=1.0,
+                    neg=1.0,
+                    num_samples=self.num_patches,
+                    image_key="image",
+                    image_threshold=0.0,
+                    allow_smaller=False,
+                    lazy=False,
+                ),
+                AddFFT2d(image_key="image"),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
                 ToPyTorchLightningOutputd(),
             ]
@@ -460,7 +493,19 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     dtype=torch.float32,
                 ),
                 ZNormalized(image_key="image"),
-                SelectPatchesByLabeld(image_key="image", label_key="label", patch_size=self.patch_size, num_patches=1, no_batch_dim=True),
+                RandCropByPosNegLabeld(
+                    keys=["image", "label"],
+                    label_key="label",
+                    spatial_size=self.patch_size,
+                    pos=1.0,
+                    neg=1.0,
+                    num_samples=self.num_patches,
+                    image_key="image",
+                    image_threshold=0.0,
+                    allow_smaller=False,
+                    lazy=False,
+                ),
+                AddFFT2d(image_key="image"),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
                 ToPyTorchLightningOutputd(),
             ]
@@ -489,6 +534,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                     dtype=torch.float32,
                 ),
                 ZNormalize(),
+                AddFFT2(),
             ]
         )
         return inference_transforms

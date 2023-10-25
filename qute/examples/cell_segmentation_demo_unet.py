@@ -23,10 +23,10 @@ from qute.data.dataloaders import CellSegmentationDemo
 from qute.models.unet import UNet
 
 SEED = 2022
-BATCH_SIZE = 16 
+BATCH_SIZE = 1
 INFERENCE_BATCH_SIZE = 4
-NUM_PATCHES = 3
-PATCH_SIZE = (384, 384)
+NUM_PATCHES = 16
+PATCH_SIZE = (640, 640)
 PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
 MAX_EPOCHS = 250
 
@@ -44,13 +44,15 @@ if __name__ == "__main__":
     )
 
     # Loss
-    criterion = DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)
+    criterion = DiceCELoss(include_background=True, to_onehot_y=False, softmax=True)
 
     # Metrics
-    metrics = DiceMetric(include_background=False, reduction="mean", get_not_nans=False)
+    metrics = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
 
     # Model
     model = UNet(
+        in_channels=2,
+        out_channels=3,
         num_res_units=4,
         criterion=criterion,
         channels=(16, 32, 64),
@@ -65,7 +67,9 @@ if __name__ == "__main__":
     # model = torch.compile(model)
 
     # Callbacks
-    early_stopping = EarlyStopping(monitor="val_loss", patience=5, mode="min")  # Issues with Lightning's ES
+    early_stopping = EarlyStopping(
+        monitor="val_loss", patience=5, mode="min"
+    )  # Issues with Lightning's ES
     model_checkpoint = ModelCheckpoint(monitor="val_loss")
 
     # Instantiate the Trainer
