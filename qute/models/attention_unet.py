@@ -36,23 +36,23 @@ class AttentionUNet(pl.LightningModule):
     """
 
     def __init__(
-            self,
-            spatial_dims: int = 2,
-            in_channels: int = 1,
-            out_channels: int = 3,
-            channels=(16, 32, 64),
-            strides=(2, 2),
-            criterion=DiceCELoss(include_background=False, to_onehot_y=False, softmax=True),
-            metrics=DiceMetric(
-                include_background=False, reduction="mean", get_not_nans=False
-            ),
-            val_metrics_transforms=None,
-            test_metrics_transforms=None,
-            predict_post_transforms=None,
-            learning_rate: float = 1e-2,
-            optimizer_class=AdamW,
-            num_res_units: int = 0,
-            dropout: float = 0.0,
+        self,
+        spatial_dims: int = 2,
+        in_channels: int = 1,
+        out_channels: int = 3,
+        channels=(16, 32, 64),
+        strides=(2, 2),
+        criterion=DiceCELoss(include_background=False, to_onehot_y=False, softmax=True),
+        metrics=DiceMetric(
+            include_background=False, reduction="mean", get_not_nans=False
+        ),
+        val_metrics_transforms=None,
+        test_metrics_transforms=None,
+        predict_post_transforms=None,
+        learning_rate: float = 1e-2,
+        optimizer_class=AdamW,
+        num_res_units: int = 0,
+        dropout: float = 0.0,
     ):
         """
         Constructor.
@@ -144,13 +144,21 @@ class AttentionUNet(pl.LightningModule):
         x, y = batch
         y_hat = self.net(x)
         val_loss = self.criterion(y_hat, y)
-        self.log("val_loss", torch.tensor([val_loss]), on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            "val_loss",
+            torch.tensor([val_loss]),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
         if self.metrics is not None:
             if self.val_metrics_transforms is not None:
                 val_metrics = self.metrics(self.val_metrics_transforms(y_hat), y).mean()
             else:
                 val_metrics = self.metrics(y_hat, y).mean()
-            self.log("val_metrics", torch.tensor([val_metrics]), on_step=False, on_epoch=True)
+            self.log(
+                "val_metrics", torch.tensor([val_metrics]), on_step=False, on_epoch=True
+            )
         return val_loss
 
     def test_step(self, batch, batch_idx):
@@ -161,10 +169,17 @@ class AttentionUNet(pl.LightningModule):
         self.log("test_loss", test_loss)
         if self.metrics is not None:
             if self.test_metrics_transforms is not None:
-                test_metrics = self.metrics(self.test_metrics_transforms(y_hat), y).mean()
+                test_metrics = self.metrics(
+                    self.test_metrics_transforms(y_hat), y
+                ).mean()
             else:
                 test_metrics = self.metrics(y_hat, y).mean()
-            self.log("test_metrics", torch.tensor([test_metrics]), on_step=False, on_epoch=True)
+            self.log(
+                "test_metrics",
+                torch.tensor([test_metrics]),
+                on_step=False,
+                on_epoch=True,
+            )
         return test_loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
@@ -178,14 +193,14 @@ class AttentionUNet(pl.LightningModule):
         return label
 
     def full_inference(
-            self,
-            data_loader: DataLoader,
-            target_folder: Union[Path, str],
-            inference_post_transforms: Transform,
-            roi_size: Tuple[int, int],
-            batch_size: int,
-            overlap: float = 0.25,
-            transpose: bool = True,
+        self,
+        data_loader: DataLoader,
+        target_folder: Union[Path, str],
+        inference_post_transforms: Transform,
+        roi_size: Tuple[int, int],
+        batch_size: int,
+        overlap: float = 0.25,
+        transpose: bool = True,
     ):
         """Run inference on full images using given model.
 

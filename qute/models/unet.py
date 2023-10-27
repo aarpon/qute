@@ -145,13 +145,21 @@ class UNet(pl.LightningModule):
         x, y = batch
         y_hat = self.net(x)
         val_loss = self.criterion(y_hat, y)
-        self.log("val_loss", torch.tensor([val_loss]), on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            "val_loss",
+            torch.tensor([val_loss]),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
         if self.metrics is not None:
             if self.val_metrics_transforms is not None:
                 val_metrics = self.metrics(self.val_metrics_transforms(y_hat), y).mean()
             else:
                 val_metrics = self.metrics(y_hat, y).mean()
-            self.log("val_metrics", torch.tensor([val_metrics]), on_step=False, on_epoch=True)
+            self.log(
+                "val_metrics", torch.tensor([val_metrics]), on_step=False, on_epoch=True
+            )
         return val_loss
 
     def test_step(self, batch, batch_idx):
@@ -162,10 +170,17 @@ class UNet(pl.LightningModule):
         self.log("test_loss", test_loss)
         if self.metrics is not None:
             if self.test_metrics_transforms is not None:
-                test_metrics = self.metrics(self.test_metrics_transforms(y_hat), y).mean()
+                test_metrics = self.metrics(
+                    self.test_metrics_transforms(y_hat), y
+                ).mean()
             else:
                 test_metrics = self.metrics(y_hat, y).mean()
-            self.log("test_metrics", torch.tensor([test_metrics]), on_step=False, on_epoch=True)        
+            self.log(
+                "test_metrics",
+                torch.tensor([test_metrics]),
+                on_step=False,
+                on_epoch=True,
+            )
         return test_loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
@@ -207,7 +222,7 @@ class UNet(pl.LightningModule):
 
         batch_size: int
             Number of parallel batches to run.
-        
+
         overlap: float
             Fraction of overlap between rois.
 

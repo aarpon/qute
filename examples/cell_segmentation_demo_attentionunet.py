@@ -59,7 +59,7 @@ if __name__ == "__main__":
         metrics=metrics,
         val_metrics_transforms=data_module.get_val_metrics_transforms(),
         test_metrics_transforms=data_module.get_test_metrics_transforms(),
-        learning_rate=5e-3,
+        learning_rate=1e-3,
     )
 
     # # Compile the model
