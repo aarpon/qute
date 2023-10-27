@@ -20,13 +20,13 @@ from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
 from qute.data.dataloaders import CellSegmentationDemo
-from qute.models.attention_unet import AttentionUNet
+from qute.models.unet import UNet
 
 SEED = 2022
-BATCH_SIZE = 16 
+BATCH_SIZE = 4
 INFERENCE_BATCH_SIZE = 4
-PATCH_SIZE = (384, 384)
-NUM_PATCHES = 3
+NUM_PATCHES = 4
+PATCH_SIZE = (512, 512)
 PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
 MAX_EPOCHS = 250
 
@@ -44,27 +44,32 @@ if __name__ == "__main__":
     )
 
     # Loss
-    criterion = DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)
+    criterion = DiceCELoss(include_background=True, to_onehot_y=False, softmax=True)
 
     # Metrics
-    metrics = DiceMetric(include_background=False, reduction="mean", get_not_nans=False)
+    metrics = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
 
     # Model
-    model = AttentionUNet(
+    model = UNet(
+        in_channels=2,
+        out_channels=3,
+        num_res_units=4,
         criterion=criterion,
         channels=(16, 32, 64),
         strides=(2, 2),
         metrics=metrics,
         val_metrics_transforms=data_module.get_val_metrics_transforms(),
         test_metrics_transforms=data_module.get_test_metrics_transforms(),
-        learning_rate=1e-2
+        learning_rate=5e-3,
     )
 
     # # Compile the model
     # model = torch.compile(model)
 
     # Callbacks
-    early_stopping = EarlyStopping(monitor="val_loss", patience=5, mode="min")  # Issues with Lightning's ES
+    early_stopping = EarlyStopping(
+        monitor="val_loss", patience=10, mode="min"
+    )  # Issues with Lightning's ES
     model_checkpoint = ModelCheckpoint(monitor="val_loss")
 
     # Instantiate the Trainer
@@ -78,9 +83,6 @@ if __name__ == "__main__":
     )
     trainer.logger._default_hp_metric = False
 
-    # Find the best learning rate
-    # trainer.tune(model, datamodule=data_module)
-
     # Train with the optimal learning rate found above
     trainer.fit(model, datamodule=data_module)
 
@@ -88,7 +90,7 @@ if __name__ == "__main__":
     print(f"Best model: {model_checkpoint.best_model_path}")
 
     # Load weights from best model
-    model = AttentionUNet.load_from_checkpoint(model_checkpoint.best_model_path)
+    model = UNet.load_from_checkpoint(model_checkpoint.best_model_path)
 
     # Test
     trainer.test(model, dataloaders=data_module.test_dataloader())
@@ -103,7 +105,7 @@ if __name__ == "__main__":
         / f"full_predictions_{datetime.now().strftime('%Y%m%d_%H%M%S')}/",
         inference_post_transforms=data_module.get_post_inference_transforms(),
         roi_size=PATCH_SIZE,
-        batch_size=4,
+        batch_size=INFERENCE_BATCH_SIZE,
         transpose=True,
     )
 

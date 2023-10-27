@@ -20,13 +20,13 @@ from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
 from qute.data.dataloaders import CellSegmentationDemo
-from qute.models.unet import UNet
+from qute.models.attention_unet import AttentionUNet
 
 SEED = 2022
-BATCH_SIZE = 1
+BATCH_SIZE = 4
 INFERENCE_BATCH_SIZE = 4
-NUM_PATCHES = 16
-PATCH_SIZE = (640, 640)
+NUM_PATCHES = 4
+PATCH_SIZE = (512, 512)
 PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
 MAX_EPOCHS = 250
 
@@ -50,17 +50,16 @@ if __name__ == "__main__":
     metrics = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
 
     # Model
-    model = UNet(
+    model = AttentionUNet(
         in_channels=2,
         out_channels=3,
-        num_res_units=4,
         criterion=criterion,
         channels=(16, 32, 64),
         strides=(2, 2),
         metrics=metrics,
         val_metrics_transforms=data_module.get_val_metrics_transforms(),
         test_metrics_transforms=data_module.get_test_metrics_transforms(),
-        learning_rate=1e-2,
+        learning_rate=5e-3,
     )
 
     # # Compile the model
@@ -83,9 +82,6 @@ if __name__ == "__main__":
     )
     trainer.logger._default_hp_metric = False
 
-    # Find the best learning rate
-    # trainer.tune(model, datamodule=data_module)
-
     # Train with the optimal learning rate found above
     trainer.fit(model, datamodule=data_module)
 
@@ -93,7 +89,7 @@ if __name__ == "__main__":
     print(f"Best model: {model_checkpoint.best_model_path}")
 
     # Load weights from best model
-    model = UNet.load_from_checkpoint(model_checkpoint.best_model_path)
+    model = AttentionUNet.load_from_checkpoint(model_checkpoint.best_model_path)
 
     # Test
     trainer.test(model, dataloaders=data_module.test_dataloader())
@@ -108,7 +104,7 @@ if __name__ == "__main__":
         / f"full_predictions_{datetime.now().strftime('%Y%m%d_%H%M%S')}/",
         inference_post_transforms=data_module.get_post_inference_transforms(),
         roi_size=PATCH_SIZE,
-        batch_size=4,
+        batch_size=INFERENCE_BATCH_SIZE,
         transpose=True,
     )
 

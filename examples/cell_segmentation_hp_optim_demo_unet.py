@@ -29,10 +29,10 @@ from qute.data.dataloaders import CellSegmentationDemo
 from qute.models.unet import UNet
 
 #
-# See: 
+# See:
 #
 # Using PyTorch Lightning with Tune: https://docs.ray.io/en/latest/tune/examples/tune-pytorch-lightning.html
-# Tune search algorithms: https://docs.ray.io/en/latest/tune/api/suggestion.html 
+# Tune search algorithms: https://docs.ray.io/en/latest/tune/api/suggestion.html
 #
 
 SEED = 2022
@@ -43,9 +43,7 @@ PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
 MAX_EPOCHS = 250
 
 
-def train_fn(
-    config, criterion, metrics, num_epochs=MAX_EPOCHS, num_gpus=1
-):
+def train_fn(config, criterion, metrics, num_epochs=MAX_EPOCHS, num_gpus=1):
     # Get current configuration parameters
     num_res_units = config["num_res_units"]
     learning_rate = config["learning_rate"]
@@ -64,7 +62,6 @@ def train_fn(
         inference_batch_size=INFERENCE_BATCH_SIZE,
     )
 
-
     # Instantiate the model
     model = UNet(
         num_res_units=num_res_units,
@@ -75,7 +72,7 @@ def train_fn(
         val_metrics_transforms=data_module.get_val_metrics_transforms(),
         test_metrics_transforms=data_module.get_test_metrics_transforms(),
         learning_rate=learning_rate,
-        dropout=dropout
+        dropout=dropout,
     )
 
     # Tune report callback
@@ -112,7 +109,15 @@ def tune_fn(criterion, metrics, num_samples=10, num_epochs=MAX_EPOCHS):
     scheduler = ASHAScheduler(max_t=num_epochs, grace_period=1, reduction_factor=2)
 
     reporter = CLIReporter(
-        parameter_columns=["num_res_units", "learning_rate", "channels", "dropout", "patch_size", "num_patches", "batch_size"],
+        parameter_columns=[
+            "num_res_units",
+            "learning_rate",
+            "channels",
+            "dropout",
+            "patch_size",
+            "num_patches",
+            "batch_size",
+        ],
         metric_columns=["loss", "dice", "training_iteration"],
     )
 
@@ -155,9 +160,7 @@ if __name__ == "__main__":
     metrics = DiceMetric(include_background=False, reduction="mean", get_not_nans=False)
 
     # Run the optimization
-    results = tune_fn(
-        criterion, metrics, num_samples=25, num_epochs=MAX_EPOCHS
-    )
+    results = tune_fn(criterion, metrics, num_samples=25, num_epochs=MAX_EPOCHS)
 
     # Report
     print(f"Best hyper-parameters found: {results.get_best_result().config}")
