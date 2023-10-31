@@ -12,7 +12,7 @@
 #  ******************************************************************************/
 
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 import pytorch_lightning as pl
 import torch
@@ -41,17 +41,16 @@ class AttentionUNet(pl.LightningModule):
         in_channels: int = 1,
         out_channels: int = 3,
         channels=(16, 32, 64),
-        strides=(2, 2),
-        criterion=DiceCELoss(include_background=False, to_onehot_y=False, softmax=True),
+        strides: Optional[tuple] = None,
+        criterion=DiceCELoss(include_background=True, to_onehot_y=False, softmax=True),
         metrics=DiceMetric(
-            include_background=False, reduction="mean", get_not_nans=False
+            include_background=True, reduction="mean", get_not_nans=False
         ),
         val_metrics_transforms=None,
         test_metrics_transforms=None,
         predict_post_transforms=None,
         learning_rate: float = 1e-2,
         optimizer_class=AdamW,
-        num_res_units: int = 0,
         dropout: float = 0.0,
     ):
         """
@@ -72,7 +71,7 @@ class AttentionUNet(pl.LightningModule):
         channels: tuple = (16, 32, 64)
             Number of neuron per layer.
 
-        strides: tuple = (2, 2)
+        strides: Optional[tuple] = (2, 2)
             Strides for down-sampling.
 
         criterion: DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)
@@ -100,9 +99,6 @@ class AttentionUNet(pl.LightningModule):
         optimizer_class=AdamW
             Optimizer.
 
-        num_res_units: int = 0
-            Number of residual units for the UNet.
-
         dropout: float = 0.0
             Dropout ratio.
         """
@@ -116,6 +112,8 @@ class AttentionUNet(pl.LightningModule):
         self.val_metrics_transforms = val_metrics_transforms
         self.test_metrics_transforms = test_metrics_transforms
         self.predict_post_transforms = predict_post_transforms
+        if strides is None:
+            strides = (2,) * (len(channels) - 1)
         self.net = MonaiAttentionUnet(
             spatial_dims=spatial_dims,
             in_channels=in_channels,

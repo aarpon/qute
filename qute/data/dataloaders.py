@@ -6,6 +6,7 @@ from typing import Optional, Union
 import numpy as np
 import pytorch_lightning as pl
 import torch
+import userpaths
 import yaml
 from monai.data import ArrayDataset, DataLoader, Dataset, list_data_collate
 from monai.transforms import (
@@ -62,7 +63,6 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         test_metrics_transforms_dict: Optional[Transform] = None,
         images_sub_folder: str = "images",
         labels_sub_folder: str = "labels",
-        image_range_intensities: Optional[tuple[int, int]] = None,
         seed: int = 42,
         num_workers: Optional[int] = os.cpu_count(),
         num_inference_workers: Optional[int] = 2,
@@ -160,12 +160,6 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         self.pin_memory = pin_memory
 
         self.num_classes = num_classes
-
-        # Normalization range
-        if image_range_intensities is None:
-            self.image_range_intensities = (0, 65535)
-        else:
-            self.image_range_intensities = image_range_intensities
 
         # Set the subfolder names
         self.images_sub_folder = images_sub_folder
@@ -550,7 +544,7 @@ class CellSegmentationDemo(DataModuleLocalFolder):
 
     def __init__(
         self,
-        download_dir: Union[Path, str] = Path.home() / ".qute" / "data",
+        download_dir: Union[Path, str, None] = None,
         three_classes: bool = True,
         train_fraction: float = 0.7,
         val_fraction: float = 0.2,
@@ -630,6 +624,10 @@ class CellSegmentationDemo(DataModuleLocalFolder):
             Whether to pin the GPU memory.
         """
 
+        # Check that download_dir is set
+        if download_dir is None:
+            download_dir = Path(userpaths.get_my_documents()) / "qute" / "data"
+
         # Download directory is parent of the actual data_dir that we pass to the parent class
         self.download_dir = Path(download_dir).resolve()
 
@@ -640,10 +638,6 @@ class CellSegmentationDemo(DataModuleLocalFolder):
         else:
             self.num_classes = 2
         data_dir = self.download_dir / f"demo_segmentation_{self.num_classes}_classes"
-
-        # Parse the metadata file
-        with open(data_dir / "metadata.yaml") as f:
-            metadata = yaml.load(f, Loader=yaml.FullLoader)
 
         # Call base constructor
         super().__init__(
@@ -661,10 +655,6 @@ class CellSegmentationDemo(DataModuleLocalFolder):
             test_transforms_dict=test_transforms_dict,
             images_sub_folder=images_sub_folder,
             labels_sub_folder=labels_sub_folder,
-            image_range_intensities=(
-                metadata["min_intensity"],
-                metadata["max_intensity"],
-            ),
             seed=seed,
             num_workers=num_workers,
             num_inference_workers=num_inference_workers,
@@ -690,7 +680,7 @@ class CellRestorationDemo(DataModuleLocalFolder):
 
     def __init__(
         self,
-        download_dir: Union[Path, str] = Path.home() / ".qute" / "data",
+        download_dir: Union[Path, str, None] = None,
         train_fraction: float = 0.7,
         val_fraction: float = 0.2,
         test_fraction: float = 0.1,
@@ -766,15 +756,15 @@ class CellRestorationDemo(DataModuleLocalFolder):
             Whether to pin the GPU memory.
         """
 
+        # Check that download_dir is set
+        if download_dir is None:
+            download_dir = Path(userpaths.get_my_documents()) / "qute" / "data"
+
         # Download directory is parent of the actual data_dir that we pass to the parent class
         self.download_dir = Path(download_dir).resolve()
 
         # Data directory
         data_dir = self.download_dir / f"demo_restoration"
-
-        # Parse the metadata file
-        with open(data_dir / "metadata.yaml") as f:
-            metadata = yaml.load(f, Loader=yaml.FullLoader)
 
         # Call base constructor
         super().__init__(
@@ -791,10 +781,6 @@ class CellRestorationDemo(DataModuleLocalFolder):
             test_transforms_dict=test_transforms_dict,
             images_sub_folder=images_sub_folder,
             labels_sub_folder=labels_sub_folder,
-            image_range_intensities=(
-                metadata["min_intensity"],
-                metadata["max_intensity"],
-            ),
             seed=seed,
             num_workers=num_workers,
             num_inference_workers=num_inference_workers,

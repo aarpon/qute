@@ -63,9 +63,6 @@ if __name__ == "__main__":
         learning_rate=1e-3,
     )
 
-    # # Compile the model
-    # model = torch.compile(model)
-
     # Callbacks
     early_stopping = EarlyStopping(
         monitor="val_loss", patience=10, mode="min"

@@ -64,10 +64,12 @@ def train_fn(config, criterion, metrics, num_epochs=MAX_EPOCHS, num_gpus=1):
 
     # Instantiate the model
     model = UNet(
+        in_channels=2,
+        out_channels=3,
         num_res_units=num_res_units,
         criterion=criterion,
         channels=channels,
-        strides=(2, 2),
+        strides=None,
         metrics=metrics,
         val_metrics_transforms=data_module.get_val_metrics_transforms(),
         test_metrics_transforms=data_module.get_test_metrics_transforms(),
@@ -101,9 +103,9 @@ def tune_fn(criterion, metrics, num_samples=10, num_epochs=MAX_EPOCHS):
         "learning_rate": tune.loguniform(0.0005, 0.5),
         "channels": tune.choice([(16, 32), (16, 32, 64), (32, 64), (32, 64, 128)]),
         "dropout": tune.choice([0, 0.1, 0.2, 0.3, 0.4, 0.5]),
-        "patch_size": tune.choice([(128, 128), (256, 256), (384, 384), (512, 512)]),
+        "patch_size": tune.choice([(256, 256), (384, 384), (512, 512)]),
         "num_patches": tune.choice([1, 2, 4, 8]),
-        "batch_size": tune.choice([16, 24, 32, 64]),
+        "batch_size": tune.choice([1, 2, 4, 8]),
     }
 
     scheduler = ASHAScheduler(max_t=num_epochs, grace_period=1, reduction_factor=2)

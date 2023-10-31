@@ -16,6 +16,7 @@ from typing import Optional, Union
 from zipfile import ZipFile
 
 import requests
+import userpaths
 
 
 def get_cell_segmentation_demo_dataset(
@@ -41,7 +42,7 @@ def get_cell_segmentation_demo_dataset(
 
     # Data folder
     if download_dir is None:
-        data_folder = Path.home() / ".qute" / "data"
+        data_folder = userpaths.get_my_documents() / "qute" / "data"
     else:
         data_folder = Path(download_dir).resolve()
 
@@ -121,7 +122,7 @@ def get_cell_restoration_demo_dataset(download_dir: Optional[Union[Path, str]] =
 
     # Data folder
     if download_dir is None:
-        data_folder = Path.home() / ".qute" / "data"
+        data_folder = userpaths.get_my_documents() / "qute" / "data"
     else:
         data_folder = Path(download_dir).resolve()
 
