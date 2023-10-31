@@ -19,6 +19,7 @@ from typing import Optional, Union
 
 import numpy as np
 import userpaths
+from imio import load, save
 from natsort import natsorted
 from numpy.random import default_rng
 
@@ -90,6 +91,7 @@ def qute_to_msd_format(
     dataset_name: Optional[str] = None,
     stem_name: str = "demo_",
     images_suffix: str = "_0000",
+    to_nii_gz: bool = False,
     test_perc: float = 0.2,
     num_folds: int = 5,
     force: bool = False,
@@ -127,6 +129,9 @@ def qute_to_msd_format(
     images_suffix: str (default is "_0000")
         Numeric suffix (as 0-padded string and leading _) for the images (it won't be applied to the labels).
         For instance, imagesTr/demo_001_0000.tif is matched by labelsTr/demo_001.tif.
+
+    to_nii_gz: bool (default is False)
+        Set to True to convert the TIFF images to nii.gz; otherwise, the TIFF files are just copied over.
 
     test_perc: float (default is 0.2)
         Fraction of the images to be used for testing.
@@ -237,12 +242,15 @@ def qute_to_msd_format(
     selected_training_labels_files = shuffled_labels_files[:threshold]
     selected_test_images_files = shuffled_images_files[threshold:]
 
-    def target_name(name: str, stem: str, suffix: str = ""):
+    def target_name(convert: bool, name: str, stem: str, suffix: str = ""):
         """Rename the target image to fit the nnUNetv2 expected pattern."""
         numbers = re.findall("(\d+).tif$", Path(name).name)
         if len(numbers) != 1:
             return name
-        new_name = f"{stem}{numbers[0]}{suffix}.tif"
+        if convert:
+            new_name = f"{stem}{numbers[0]}{suffix}.nii.gz"
+        else:
+            new_name = f"{stem}{numbers[0]}{suffix}.tif"
         return new_name
 
     # Prepare output file names
@@ -251,28 +259,37 @@ def qute_to_msd_format(
     renamed_selected_test_images_files = []
     for f in selected_training_images_files:
         renamed_selected_training_images_files.append(
-            f"{images_tr_folder}/{target_name(f, stem_name, images_suffix)}"
+            f"{images_tr_folder}/{target_name(to_nii_gz, f, stem_name, images_suffix)}"
         )
     for f in selected_training_labels_files:
         renamed_selected_training_labels_files.append(
-            f"{labels_tr_folder}/{target_name(f, stem_name)}"
+            f"{labels_tr_folder}/{target_name(to_nii_gz, f, stem_name)}"
         )
     for f in selected_test_images_files:
         renamed_selected_test_images_files.append(
-            f"{images_ts_folder}/{target_name(f, stem_name, images_suffix)}"
+            f"{images_ts_folder}/{target_name(to_nii_gz, f, stem_name, images_suffix)}"
         )
 
-    # Now copy the files
+    # Now copy or convert the files
     for f, o in zip(
         selected_training_images_files, renamed_selected_training_images_files
     ):
-        shutil.copy(f, o)
+        if to_nii_gz:
+            save.to_nii(load.load_any(f), o)
+        else:
+            shutil.copy(f, o)
     for f, o in zip(
         selected_training_labels_files, renamed_selected_training_labels_files
     ):
-        shutil.copy(f, o)
+        if to_nii_gz:
+            save.to_nii(load.load_any(f), o)
+        else:
+            shutil.copy(f, o)
     for f, o in zip(selected_test_images_files, renamed_selected_test_images_files):
-        shutil.copy(f, o)
+        if to_nii_gz:
+            save.to_nii(load.load_any(f), o)
+        else:
+            shutil.copy(f, o)
 
     # Create the datalist
     datalist = {
@@ -341,12 +358,9 @@ def qute_to_msd_format(
         f"and the dataset is 2D, run the following (adapt accordingly): "
     )
     print(f"\n$ nnUNetv2_plan_and_preprocess -d 1 --verify_dataset_integrity")
-    print(f"$ nnUNetv2_train 1 2d 0 --npz")  # Fold 0
-    print(f"$ nnUNetv2_train 1 2d 1 --npz")  # Fold 1
-    print(f"$ nnUNetv2_train 1 2d 2 --npz")  # Fold 2
-    print(f"$ nnUNetv2_train 1 2d 3 --npz")  # Fold 3
-    print(f"$ nnUNetv2_train 1 2d 4 --npz")  # Fold 4
-    print(f"$ nnUNetv2_find_best_configuration 1 -c 2d")
+    print(
+        "$ for i in {0..4}; do nnUNetv2_train 1 2d $i --npz; done   # Fold 0 through 4, adapt as necessary"
+    )
     print(
         f"$ nnUNetv2_predict -d 1 -i $nnUNet_raw/$Dataset/imagesTs -o $nnUNet_results/$Dataset/inference -f 0 1 2 3 4 \\"
     )
