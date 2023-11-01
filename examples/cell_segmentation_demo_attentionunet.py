@@ -19,7 +19,7 @@ from monai.metrics import DiceMetric
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
-from qute.data.dataloaders import CellSegmentationDemo
+from qute.data.demos import CellSegmentationDemo
 from qute.models.attention_unet import AttentionUNet
 
 SEED = 2022

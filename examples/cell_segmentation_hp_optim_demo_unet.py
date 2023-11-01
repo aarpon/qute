@@ -25,7 +25,7 @@ from ray.tune import CLIReporter
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
 from ray.tune.schedulers import ASHAScheduler
 
-from qute.data.dataloaders import CellSegmentationDemo
+from qute.data.demos import CellSegmentationDemo
 from qute.models.unet import UNet
 
 #
