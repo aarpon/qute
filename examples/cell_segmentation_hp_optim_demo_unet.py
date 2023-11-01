@@ -156,10 +156,10 @@ if __name__ == "__main__":
     seed_everything(SEED, workers=True)
 
     # Loss
-    criterion = DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)
+    criterion = DiceCELoss(include_background=True, to_onehot_y=False, softmax=True)
 
     # Metrics
-    metrics = DiceMetric(include_background=False, reduction="mean", get_not_nans=False)
+    metrics = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
 
     # Run the optimization
     results = tune_fn(criterion, metrics, num_samples=25, num_epochs=MAX_EPOCHS)

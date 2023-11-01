@@ -22,6 +22,7 @@ from monai.transforms import (
 )
 from natsort import natsorted
 from numpy.random import default_rng
+from sklearn.model_selection import KFold
 
 from qute.transforms import (
     AddFFT2,
@@ -40,6 +41,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         self,
         data_dir: Union[Path, str] = Path(),
         num_classes: int = 3,
+        num_folds: int = 1,
         train_fraction: float = 0.7,
         val_fraction: float = 0.2,
         test_fraction: float = 0.1,
@@ -73,14 +75,24 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         num_classes: int = 3
             Number of output classes (labels).
 
+        num_folds: int = 1
+            Set to a number larger than one to set up k-fold cross-validation. All images
+            that do not belong to the test set fraction as defined by `test_fraction` will
+            be rotated for k-fold cross-validations. In this regime, the training set will
+            contain n * (k-1)/k images, while the validation set will contain n / k images
+            (with k = num_folds, and n = number of images in the training + validation set).
+
         train_fraction: float = 0.7
             Fraction of images and corresponding labels that go into the training set.
+            Please notice that this will be ignored if num_folds is larger than 1.
 
         val_fraction: float = 0.2
             Fraction of images and corresponding labels that go into the validation set.
+            Please notice that this will be ignored if num_folds is larger than 1.
 
         test_fraction: float = 0.1
             Fraction of images and corresponding labels that go into the test set.
+            This is always used, independent of whether num_folds is 1 or larger.
 
         batch_size: int = 8
             Size of one batch of image pairs for training, validation and testing.
@@ -154,7 +166,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
 
         self.num_classes = num_classes
 
-        # Set the subfolder names
+        # Set the sub-folder names
         self.images_sub_folder = images_sub_folder
         self.labels_sub_folder = labels_sub_folder
 
@@ -220,17 +232,18 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         self.val_fraction: float = val_fraction / total
         self.test_fraction: float = test_fraction / total
 
-        # Declare lists of training, validation, and testing images and labels
-        self.images: list[Path] = []
-        self.labels: list[Path] = []
+        # Keep track of all images and labels
+        self._all_images: np.ndarray = np.empty(shape=0)
+        self._all_labels: np.ndarray = np.empty(shape=0)
 
-        # Keep track of the file names of the training, validation, and testing sets
-        self.train_images: list[Path] = []
-        self.train_labels: list[Path] = []
-        self.val_images: list[Path] = []
-        self.val_labels: list[Path] = []
-        self.test_images: list[Path] = []
-        self.test_labels: list[Path] = []
+        # Set the information about k-fold cross-validation
+        self.num_folds = num_folds
+        self.current_fold = 0
+        self.k_folds = None
+        self._test_indices: np.ndarray = np.empty(shape=0)
+        self._train_val_indices: np.ndarray = np.empty(shape=0)
+        self._train_indices: np.ndarray = np.empty(shape=0)
+        self._val_indices: np.ndarray = np.empty(shape=0)
 
         # Declare datasets
         self.train_dataset = None
@@ -249,52 +262,93 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
             return
 
         # Scan the "images" and "labels" folders
-        self.images = natsorted(
-            list((self.data_dir / self.images_sub_folder).glob("*.tif"))
+        self._all_images = np.array(
+            natsorted(list((self.data_dir / self.images_sub_folder).glob("*.tif")))
         )
-        self.labels = natsorted(
-            list((self.data_dir / self.labels_sub_folder).glob("*.tif"))
+        self._all_labels = np.array(
+            natsorted(list((self.data_dir / self.labels_sub_folder).glob("*.tif")))
         )
 
         # Check that we found some images
-        if len(self.images) == 0:
+        if len(self._all_images) == 0:
             raise Exception("Could not find any images to process.")
 
         # Check that there are as many images as labels
-        if len(self.images) != len(self.labels):
+        if len(self._all_images) != len(self._all_labels):
             raise Exception("The number of images does not match the number of labels.")
 
-        # Shuffle a copy of the file names
+        # Partition the data into a test set, and a combined training + validation set,
+        # that can be used to easily create folds if requested.from
         rng = default_rng(seed=self.seed)
-        shuffled_indices = rng.permutation(len(self.images))
-        shuffled_images = np.array(self.images.copy())[shuffled_indices].tolist()
-        shuffled_labels = np.array(self.labels.copy())[shuffled_indices].tolist()
+        shuffled_indices = rng.permutation(len(self._all_images))
 
-        # Partition images and labels into training, validation and testing datasets
-        train_len = round(self.train_fraction * len(shuffled_images))
-        len_rest = len(shuffled_images) - train_len
-        updated_val_fraction = self.val_fraction / (
-            self.val_fraction + self.test_fraction
-        )
-        val_len = round(updated_val_fraction * len_rest)
-        test_len = len_rest - val_len
+        # Extract the indices for the test set and assign everything else to the combined
+        # training + validation set
+        num_test_images = int(round(self.test_fraction * len(self._all_images)))
+        self._test_indices = shuffled_indices[-num_test_images:]
+        self._train_val_indices = shuffled_indices[:-num_test_images]
 
-        # Split the sets
-        self.train_images = shuffled_images[:train_len]
-        self.train_labels = shuffled_labels[:train_len]
-        self.val_images = shuffled_images[train_len:-test_len]
-        self.val_labels = shuffled_labels[train_len:-test_len]
-        self.test_images = shuffled_images[-test_len:]
-        self.test_labels = shuffled_labels[-test_len:]
+        if self.num_folds == 1:
+            # Update the training and validation fractions since the test set
+            # has been removed already
+            updated_val_fraction = self.val_fraction / (1.0 - self.test_fraction)
+            num_val_images = int(
+                round(updated_val_fraction * len(self._train_val_indices))
+            )
+            self._val_indices = self._train_val_indices[-num_val_images:]
+            self._train_indices = self._train_val_indices[:-num_val_images]
 
-        assert len(self.train_images) + len(self.val_images) + len(
-            self.test_images
-        ) == len(shuffled_images), "Something went wrong with the partitioning!"
+            # Create the datasets
+            self._create_datasets()
 
+        else:
+            # Use k-fold split to set the indices for current fold - the datasets
+            # will be automatically re-created
+            self.set_fold(self.current_fold)
+
+        assert len(self._train_indices) + len(self._val_indices) + len(
+            self._test_indices
+        ) == len(self._all_images), "Something went wrong with the partitioning!"
+
+    def set_fold(self, fold: int):
+        """Set current fold for k-fold cross-validation."""
+        if self.num_folds == 1:
+            # We don't need to do anything, but if the user sets
+            # the fold to 0 we have a valid non-action
+            if fold == 0:
+                self.current_fold = 0
+                return
+            else:
+                raise ValueError("k-fold cross-validation is not active.")
+        else:
+            if fold < 0 or fold >= self.num_folds:
+                raise ValueError(
+                    f"`fold` must be in the range (0..{self.num_folds - 1})."
+                )
+            else:
+                if self.k_folds is None:
+                    self.k_folds = KFold(n_splits=self.num_folds, shuffle=False)
+                self.current_fold = fold
+                for i, (fold_train_indices, fold_val_indices) in enumerate(
+                    self.k_folds.split(self._train_val_indices)
+                ):
+                    if i == self.current_fold:
+                        self._train_indices = fold_train_indices
+                        self._val_indices = fold_val_indices
+                        break
+
+                # Recreate the datasets
+                self._create_datasets()
+
+    def _create_datasets(self):
+        """Create datasets based on current splits."""
         # Create the training dataset
         train_files = [
             {"image": image, "label": label}
-            for image, label in zip(self.train_images, self.train_labels)
+            for image, label in zip(
+                self._all_images[self._train_indices],
+                self._all_labels[self._train_indices],
+            )
         ]
         self.train_dataset = Dataset(
             data=train_files, transform=self.train_transforms_dict
@@ -303,18 +357,38 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         # Create the validation dataset
         val_files = [
             {"image": image, "label": label}
-            for image, label in zip(self.val_images, self.val_labels)
+            for image, label in zip(
+                self._all_images[self._val_indices], self._all_labels[self._val_indices]
+            )
         ]
         self.val_dataset = Dataset(data=val_files, transform=self.val_transforms_dict)
 
         # Create the testing dataset
         test_files = [
             {"image": image, "label": label}
-            for image, label in zip(self.test_images, self.test_labels)
+            for image, label in zip(
+                self._all_images[self._test_indices],
+                self._all_labels[self._test_indices],
+            )
         ]
         self.test_dataset = Dataset(
             data=test_files, transform=self.test_transforms_dict
         )
+
+        # Inform
+        print(
+            f"Working with {len(self._train_indices)} training, "
+            f"{len(self._val_indices)} validation, and "
+            f"{len(self._test_indices)} test image/label pairs.",
+            end=" ",
+        )
+        if self.num_folds > 1:
+            print(
+                f"K-Folds cross-validator: {self.num_folds} folds (0 .. {self.num_folds - 1}). "
+                f"Current fold: {self.current_fold}."
+            )
+        else:
+            print(f"One-way split.")
 
     def train_dataloader(self):
         """Return DataLoader for Training data."""

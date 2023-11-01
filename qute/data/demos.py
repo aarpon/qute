@@ -15,6 +15,7 @@ class CellSegmentationDemo(SegmentationDataModuleLocalFolder):
         self,
         download_dir: Union[Path, str, None] = None,
         three_classes: bool = True,
+        num_folds: int = 1,
         train_fraction: float = 0.7,
         val_fraction: float = 0.2,
         test_fraction: float = 0.1,
@@ -43,6 +44,13 @@ class CellSegmentationDemo(SegmentationDataModuleLocalFolder):
 
         three_classes: bool = True
             Whether to download and extract the demo dataset with 3 labels (classes), or the one with two.
+
+        num_folds: int = 1
+            Set to a number larger than one to set up k-fold cross-validation. All images
+            that do not belong to the test set fraction as defined by `test_fraction` will
+            be rotated for k-fold cross-validations. In this regime, the training set will
+            contain n * (k-1)/k images, while the validation set will contain n / k images
+            (with k = num_folds, and n = number of images in the training + validation set).
 
         train_fraction: float = 0.7
             Fraction of images and corresponding labels that go into the training set.
@@ -112,6 +120,7 @@ class CellSegmentationDemo(SegmentationDataModuleLocalFolder):
         super().__init__(
             data_dir=data_dir,
             num_classes=self.num_classes,
+            num_folds=num_folds,
             train_fraction=train_fraction,
             val_fraction=val_fraction,
             test_fraction=test_fraction,
