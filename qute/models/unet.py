@@ -24,6 +24,7 @@ from monai.networks.nets import UNet as MonaiUNet
 from monai.transforms import Transform
 from tifffile import TiffWriter
 from torch.optim import AdamW
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 import qute
 
@@ -130,9 +131,15 @@ class UNet(pl.LightningModule):
         self.save_hyperparameters(ignore=["criterion", "metrics"])
 
     def configure_optimizers(self):
-        """Configure and return the optimizer."""
+        """Configure and return the optimizer and scheduler."""
         optimizer = self.optimizer_class(self.parameters(), lr=self.learning_rate)
-        return optimizer
+        lr_scheduler = {
+            "scheduler": ReduceLROnPlateau(optimizer, mode="min"),
+            "name": "learning_rate",
+            "monitor": "val_loss",
+            "frequency": 1,
+        }
+        return [optimizer], [lr_scheduler]
 
     def training_step(self, batch, batch_idx):
         """Perform a training step."""

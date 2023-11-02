@@ -17,7 +17,11 @@ import torch
 from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
 from pytorch_lightning import seed_everything
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+from pytorch_lightning.callbacks import (
+    EarlyStopping,
+    LearningRateMonitor,
+    ModelCheckpoint,
+)
 
 from qute.data.demos import CellSegmentationDemo
 from qute.models.unet import UNet
@@ -68,13 +72,14 @@ if __name__ == "__main__":
         monitor="val_loss", patience=10, mode="min"
     )  # Issues with Lightning's ES
     model_checkpoint = ModelCheckpoint(monitor="val_loss")
+    lr_monitor = LearningRateMonitor(logging_interval="step")
 
     # Instantiate the Trainer
     trainer = pl.Trainer(
         accelerator="gpu",
         devices=1,
         precision=PRECISION,
-        callbacks=[model_checkpoint, early_stopping],
+        callbacks=[model_checkpoint, early_stopping, lr_monitor],
         max_epochs=MAX_EPOCHS,
         log_every_n_steps=1,
     )
