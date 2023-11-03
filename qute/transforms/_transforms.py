@@ -11,6 +11,7 @@
 
 import random
 from copy import deepcopy
+from typing import Optional
 
 import numpy as np
 import torch
@@ -322,9 +323,14 @@ class SelectPatchesByLabeld(Transform):
 class AddFFT2(Transform):
     """Calculates the power spectrum of the selected single-channel image and adds it as a second plane."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self, min_p: Optional[float] = None, max_p: Optional[float] = None
+    ) -> None:
         """Constructor"""
         super().__init__()
+        self.min_p = min_p
+        self.max_p = max_p
+        self.delta_p = self.max_p - self.min_p
 
     def __call__(self, data: torch.Tensor) -> torch.Tensor:
         """
@@ -342,14 +348,17 @@ class AddFFT2(Transform):
                 "The image tensor must be of dimensions (1 x height x width)!"
             )
 
-        # Calculate the power spectrum of the image
-        f = torch.fft.fft2(data).abs()
+        # Zero the DC
+        data = data - data.mean()
 
-        # Set the DC to 0.0
-        f[0, 0, 0] = 0.0
+        # Calculate the power spectrum of the image
+        f = torch.fft.fftshift(torch.fft.fft2(data).abs())
 
         # Normalize
-        f = (f - f.mean()) / f.std()
+        if self.min_p is not None and self.max_p is not None:
+            f = (f - self.min_p) / self.delta_p
+        else:
+            f = (f - f.mean()) / f.std()
 
         # Add it as a new plane
         data = torch.cat((data, f), dim=0)
@@ -364,6 +373,8 @@ class AddFFT2d(Transform):
     def __init__(
         self,
         image_key: str = "image",
+        min_p: Optional[float] = None,
+        max_p: Optional[float] = None,
     ) -> None:
         """Constructor
 
@@ -375,6 +386,9 @@ class AddFFT2d(Transform):
         """
         super().__init__()
         self.image_key = image_key
+        self.min_p = min_p
+        self.max_p = max_p
+        self.delta_p = self.max_p - self.min_p
 
     def __call__(self, data: dict) -> dict:
         """
@@ -393,14 +407,17 @@ class AddFFT2d(Transform):
                 "The image tensor must be of dimensions (1 x height x width)!"
             )
 
-        # Calculate the power spectrum of the image
-        f = torch.fft.fft2(data[self.image_key]).abs()
+        # Zero the DC
+        tmp = data[self.image_key] - data[self.image_key].mean()
 
-        # Set the DC to 0.0
-        f[0, 0, 0] = 0.0
+        # Calculate the power spectrum of the image
+        f = torch.fft.fftshift(torch.fft.fft2(tmp).abs())
 
         # Normalize
-        f = (f - f.mean()) / f.std()
+        if self.min_p is not None and self.max_p is not None:
+            f = (f - self.min_p) / self.delta_p
+        else:
+            f = (f - f.mean()) / f.std()
 
         # Add it as a new plane
         data[self.image_key] = torch.cat((data[self.image_key], f), dim=0)
