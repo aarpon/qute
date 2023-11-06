@@ -330,7 +330,10 @@ class AddFFT2(Transform):
         super().__init__()
         self.min_p = min_p
         self.max_p = max_p
-        self.delta_p = self.max_p - self.min_p
+        if self.min_p is not None and self.max_p is not None:
+            self.delta_p = self.max_p - self.min_p
+        else:
+            self.delta_p = None
 
     def __call__(self, data: torch.Tensor) -> torch.Tensor:
         """
@@ -388,7 +391,10 @@ class AddFFT2d(Transform):
         self.image_key = image_key
         self.min_p = min_p
         self.max_p = max_p
-        self.delta_p = self.max_p - self.min_p
+        if self.min_p is not None and self.max_p is not None:
+            self.delta_p = self.max_p - self.min_p
+        else:
+            self.delta_p = None
 
     def __call__(self, data: dict) -> dict:
         """
