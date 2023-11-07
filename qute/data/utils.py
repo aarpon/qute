@@ -361,19 +361,19 @@ def qute_to_msd_format(
     print(
         "$ for i in {0..4}; do nnUNetv2_train 1 2d $i --npz; done   # Fold 0 through 4, adapt as necessary"
     )
+    print(f"$ nnUNetv2_find_best_configuration -d 1 -f 0 1 2 3 4 -c 2d")
     print(
         f"$ nnUNetv2_predict -d 1 -i $nnUNet_raw/$Dataset/imagesTs -o $nnUNet_results/$Dataset/inference -f 0 1 2 3 4 \\"
     )
-    print(f"       -tr nnUnetTrainer -c 2d -p nnUnetPlans")
+    print(f"       -tr nnUNetTrainer -c 2d -p nnUNetPlans")
     print(
         f"$ nnUNetv2_apply_postprocessing -i $nnUNet_results/$Dataset/inference -o $nnUNet_results/$Dataset/postprocessing \\"
     )
     print(
         f"       -pp_pkl_file $nnUNet_results/$Dataset/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/postprocessing.pkl \\"
     )
-    print(f"       -np 8 -plans_json \\")
     print(
-        f"       $nnUNet_results/$Dataset/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/plans.json"
+        f"     -np 8 -plans_json $nnUNet_results/$Dataset/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/plans.json"
     )
     print(f"\nIn the commands above, replace `$Dataset` with the dataset name.")
     print(f"\nPlease see: ")

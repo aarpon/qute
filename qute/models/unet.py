@@ -14,19 +14,18 @@
 from pathlib import Path
 from typing import Optional, Tuple, Union
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
 from monai.data import DataLoader
 from monai.inferers import sliding_window_inference
-from monai.losses import DiceCELoss
+from monai.losses import DiceCELoss, FocalLoss
 from monai.metrics import DiceMetric
 from monai.networks.nets import UNet as MonaiUNet
 from monai.transforms import Transform
 from tifffile import TiffWriter
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-
-import qute
+from torch.optim.lr_scheduler import PolynomialLR
 
 
 class UNet(pl.LightningModule):
@@ -128,13 +127,15 @@ class UNet(pl.LightningModule):
             num_res_units=num_res_units,
             dropout=dropout,
         )
+
+        # Log the hyperparameters
         self.save_hyperparameters(ignore=["criterion", "metrics"])
 
     def configure_optimizers(self):
         """Configure and return the optimizer and scheduler."""
         optimizer = self.optimizer_class(self.parameters(), lr=self.learning_rate)
         lr_scheduler = {
-            "scheduler": ReduceLROnPlateau(optimizer, mode="min"),
+            "scheduler": PolynomialLR(optimizer, total_iters=100, power=0.9),
             "name": "learning_rate",
             "monitor": "val_loss",
             "frequency": 1,
@@ -249,7 +250,10 @@ class UNet(pl.LightningModule):
         Path(target_folder).mkdir(parents=True, exist_ok=True)
 
         # Device
-        device = "cpu"  # torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Make sure the model is on the device
+        self.net.to(device)
 
         # Switch to evaluation mode
         self.net.eval()
@@ -260,7 +264,7 @@ class UNet(pl.LightningModule):
             for images in data_loader:
                 # Apply sliding inference over ROI size
                 outputs = sliding_window_inference(
-                    inputs=images,
+                    inputs=images.to(device),
                     roi_size=roi_size,
                     sw_batch_size=batch_size,
                     overlap=overlap,
@@ -289,6 +293,163 @@ class UNet(pl.LightningModule):
                     print(f"Saved {output_name}.")
 
         print(f"Prediction completed.")
+
+        # Return success
+        return True
+
+    @staticmethod
+    def full_inference_ensemble(
+        models: list,
+        weights: list,
+        data_loader: DataLoader,
+        target_folder: Union[Path, str],
+        inference_post_transforms: Transform,
+        roi_size: Tuple[int, int],
+        batch_size: int,
+        overlap: float = 0.25,
+        transpose: bool = True,
+        save_individual_preds: bool = False,
+    ):
+        """Run inference on full images using given model.
+
+        Parameters
+        ----------
+
+        models: list
+            List of trained UNet models to use for ensemble prediction.
+
+        weights: list
+            List of weights for each of the contributions.
+
+        data_loader: DataLoader
+            DataLoader for the image files names to be predicted on.
+
+        target_folder: Union[Path|str]
+            Path to the folder where to store the predicted images.
+
+        inference_post_transforms: Transform
+            Composition of transforms to be applied to the result of the forward pass of the network.
+
+        roi_size: Tuple[int, int]
+            Size of the patch for the sliding window prediction. It must match the patch size during training.
+
+        batch_size: int
+            Number of parallel batches to run.
+
+        overlap: float
+            Fraction of overlap between rois.
+
+        transpose: bool
+            Whether the transpose the image before saving, to compensate for the default behavior of monai.transforms.LoadImage().
+
+        save_individual_preds: bool
+            Whether to save the individual predictions of each model.
+
+        Returns
+        -------
+
+        result: bool
+            True if the inference was successful, False otherwise.
+        """
+
+        if len(models) != len(weights):
+            raise ValueError("The number of weights must match the number of models.")
+
+        if not isinstance(models[0], UNet) or not hasattr(models[0], "net"):
+            raise ValueError("The models must be of type `qute.models.unet.UNet`.")
+
+        # Turn the weights into a NumPy array of float 32 bit
+        weights = np.array(weights, dtype=np.float32)
+        weights = weights / weights.sum()
+
+        # Make sure the target folder exists
+        Path(target_folder).mkdir(parents=True, exist_ok=True)
+
+        # If needed, create the sub-folders for the invidual predictions
+        if save_individual_preds:
+            for f in range(len(models)):
+                fold_subolder = Path(target_folder) / f"fold_{f}"
+                Path(fold_subolder).mkdir(parents=True, exist_ok=True)
+        # Device
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Switch to evaluation mode on all models
+        for model in models:
+            model.net.eval()
+
+        c = 0
+        with torch.no_grad():
+            for images in data_loader:
+
+                predictions = [[] for _ in range(len(models))]
+
+                # Not process all models
+                for n, model in enumerate(models):
+
+                    # Make sure the model is on the device
+                    model.to(device)
+
+                    # Apply sliding inference over ROI size
+                    outputs = sliding_window_inference(
+                        inputs=images.to(device),
+                        roi_size=roi_size,
+                        sw_batch_size=batch_size,
+                        overlap=overlap,
+                        predictor=model.net,
+                        device=device,
+                    )
+
+                    # Apply post-transforms?
+                    outputs = inference_post_transforms(outputs)
+
+                    # Retrieve the image from the GPU (if needed)
+                    preds = outputs.cpu().numpy().squeeze()
+
+                    stored_preds = []
+                    for pred in preds:
+                        if transpose:
+                            # Transpose to undo the effect of monai.transform.LoadImage(d)
+                            pred = pred.T
+                        stored_preds.append(pred)
+
+                    # Store
+                    predictions[n] = stored_preds
+
+                # Iterate over all images in the batch
+                for i in range(len(predictions[0])):
+
+                    # Iterate over all predictions from the models
+                    for j in range(len(predictions)):
+
+                        if j == 0:
+                            ensemble_pred = weights[j] * predictions[j][i]
+                        else:
+                            ensemble_pred += weights[j] * predictions[j][i]
+                    ensemble_pred = np.round(ensemble_pred).astype(np.int32)
+
+                    # Save ensemble prediction image as tiff file
+                    output_name = Path(target_folder) / f"ensemble_pred_{c:04}.tif"
+                    with TiffWriter(output_name) as tif:
+                        tif.write(ensemble_pred)
+
+                    # Inform
+                    print(f"Saved {output_name}.")
+
+                    # Save individual predictions?
+                    if save_individual_preds:
+                        # Iterate over all predictions from the models
+                        for j in range(len(predictions)):
+                            # Save prediction image as tiff file
+                            output_name = (
+                                Path(target_folder) / f"fold_{j}" / f"pred_{c:04}.tif"
+                            )
+                            with TiffWriter(output_name) as tif:
+                                tif.write(predictions[j][i])
+
+                    # Update global file counter c
+                    c += 1
+
+        print(f"Ensemble prediction completed.")
 
         # Return success
         return True

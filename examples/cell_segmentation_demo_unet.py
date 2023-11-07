@@ -11,10 +11,12 @@
 
 import sys
 from datetime import datetime
+from pathlib import Path
 
 import pytorch_lightning as pl
 import torch
-from monai.losses import DiceCELoss
+import userpaths
+from monai.losses import DiceCELoss, FocalLoss
 from monai.metrics import DiceMetric
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import (
@@ -27,12 +29,15 @@ from qute.data.demos import CellSegmentationDemo
 from qute.models.unet import UNet
 
 SEED = 2022
-BATCH_SIZE = 4
+BATCH_SIZE = 8
 INFERENCE_BATCH_SIZE = 4
-NUM_PATCHES = 4
-PATCH_SIZE = (512, 512)
+NUM_PATCHES = 1
+PATCH_SIZE = (640, 640)
 PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
 MAX_EPOCHS = 250
+EXP_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
+MODEL_DIR = Path(userpaths.get_my_documents()) / "qute" / "models" / EXP_NAME
+RESULTS_DIR = Path(userpaths.get_my_documents()) / "qute" / "results" / EXP_NAME
 
 if __name__ == "__main__":
     # Seeding
@@ -49,13 +54,14 @@ if __name__ == "__main__":
 
     # Loss
     criterion = DiceCELoss(include_background=True, to_onehot_y=False, softmax=True)
+    # criterion = FocalLoss(include_background=True, to_onehot_y=False, use_softmax=True)
 
     # Metrics
     metrics = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
 
     # Model
     model = UNet(
-        in_channels=2,
+        in_channels=1,
         out_channels=3,
         num_res_units=4,
         criterion=criterion,
@@ -64,18 +70,19 @@ if __name__ == "__main__":
         metrics=metrics,
         val_metrics_transforms=data_module.get_val_metrics_transforms(),
         test_metrics_transforms=data_module.get_test_metrics_transforms(),
-        learning_rate=1e-3,
+        learning_rate=1e-2,
     )
 
     # Callbacks
     early_stopping = EarlyStopping(
         monitor="val_loss", patience=10, mode="min"
     )  # Issues with Lightning's ES
-    model_checkpoint = ModelCheckpoint(monitor="val_loss")
+    model_checkpoint = ModelCheckpoint(dirpath=MODEL_DIR, monitor="val_loss")
     lr_monitor = LearningRateMonitor(logging_interval="step")
 
     # Instantiate the Trainer
     trainer = pl.Trainer(
+        default_root_dir=RESULTS_DIR / EXP_NAME,
         accelerator="gpu",
         devices=1,
         precision=PRECISION,
@@ -83,6 +90,9 @@ if __name__ == "__main__":
         max_epochs=MAX_EPOCHS,
         log_every_n_steps=1,
     )
+
+    # Store parameters
+    # trainer.hparams = { }
     trainer.logger._default_hp_metric = False
 
     # Train with the optimal learning rate found above
@@ -103,8 +113,7 @@ if __name__ == "__main__":
     # Save the full predictions (on the test set)
     model.full_inference(
         data_loader=data_module.inference_dataloader(data_module.data_dir / "images/"),
-        target_folder=data_module.data_dir
-        / f"full_predictions_{datetime.now().strftime('%Y%m%d_%H%M%S')}/",
+        target_folder=RESULTS_DIR / "full_predictions",
         inference_post_transforms=data_module.get_post_inference_transforms(),
         roi_size=PATCH_SIZE,
         batch_size=INFERENCE_BATCH_SIZE,

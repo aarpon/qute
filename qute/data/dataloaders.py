@@ -27,6 +27,10 @@ from sklearn.model_selection import KFold
 from qute.transforms import (
     AddFFT2,
     AddFFT2d,
+    ClippedZNormalize,
+    ClippedZNormalized,
+    MinMaxNormalize,
+    MinMaxNormalized,
     ToLabel,
     ToPyTorchLightningOutputd,
     ZNormalize,
@@ -59,8 +63,8 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         images_sub_folder: str = "images",
         labels_sub_folder: str = "labels",
         seed: int = 42,
-        num_workers: Optional[int] = os.cpu_count(),
-        num_inference_workers: Optional[int] = 2,
+        num_workers: Optional[int] = os.cpu_count() - 1,
+        num_inference_workers: Optional[int] = os.cpu_count() - 1,
         pin_memory: bool = True,
     ):
         """
@@ -488,7 +492,6 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
-                ZNormalized(image_key="image"),
                 RandCropByPosNegLabeld(
                     keys=["image", "label"],
                     label_key="label",
@@ -501,7 +504,14 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                AddFFT2d(image_key="image"),
+                ZNormalized(image_key="image"),
+                # AddFFT2d(
+                #     image_key="image",
+                #     mean_real=243.20000000000144,
+                #     std_real=538086.5132100589,
+                #     mean_imag=-1.2471390320969179e-14,
+                #     std_imag=369479.19867306296
+                # ),
                 RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=(0, 1)),
                 RandGaussianNoised(keys="image", prob=0.2),
                 RandGaussianSmoothd(keys="image", prob=0.2),
@@ -522,7 +532,6 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
-                ZNormalized(image_key="image"),
                 RandCropByPosNegLabeld(
                     keys=["image", "label"],
                     label_key="label",
@@ -535,7 +544,14 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                AddFFT2d(image_key="image"),
+                ZNormalized(image_key="image"),
+                # AddFFT2d(
+                #     image_key="image",
+                #     mean_real=243.20000000000144,
+                #     std_real=538086.5132100589,
+                #     mean_imag=-1.2471390320969179e-14,
+                #     std_imag=369479.19867306296
+                # ),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
                 ToPyTorchLightningOutputd(),
             ]
@@ -570,7 +586,12 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
                     dtype=torch.float32,
                 ),
                 ZNormalize(),
-                AddFFT2(),
+                # AddFFT2(
+                #     mean_real=243.20000000000144,
+                #     std_real=538086.5132100589,
+                #     mean_imag=-1.2471390320969179e-14,
+                #     std_imag=369479.19867306296
+                # ),
             ]
         )
         return inference_transforms

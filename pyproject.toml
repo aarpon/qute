@@ -41,7 +41,7 @@ force_grid_wrap = 0
 use_parentheses = true
 line_length = 88
 combine_as_imports = true
-known_third_party = ["imio", "kornia", "monai", "natsort", "numpy", "pytest", "pytorch_lightning", "ray", "requests", "skimage", "sklearn", "tifffile", "torch", "userpaths"]
+known_third_party = ["imio", "kornia", "monai", "natsort", "numpy", "pytest", "pytorch_lightning", "ray", "requests", "scipy", "skimage", "sklearn", "tifffile", "torch", "tqdm", "userpaths"]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"

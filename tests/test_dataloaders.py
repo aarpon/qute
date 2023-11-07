@@ -24,7 +24,7 @@ def test_k_folds():
 
 def test_setup():
 
-    # Initialize data module
+    # Initialize data module (no k-fold cross-validation)
     data_module = CellSegmentationDemo()
 
     # Run the prepare/setup steps
@@ -42,10 +42,52 @@ def test_setup():
     ), "Unexpected number of training images/labels pairs."
     assert (
         len(data_module.val_dataset) == 18
-    ), "Unexpected number of valiudation images/labels pairs."
+    ), "Unexpected number of validation images/labels pairs."
     assert (
         len(data_module.test_dataset) == 9
     ), "Unexpected number of test images/labels pairs."
+
+    # Check the training dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.train_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 63, "Unexpected number of images returned."
+    assert n_labels == 63, "Unexpected number of labels returned."
+
+    # Check the validation dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.val_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 18, "Unexpected number of images returned."
+    assert n_labels == 18, "Unexpected number of labels returned."
+
+    # Check the test dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.test_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 9, "Unexpected number of images returned."
+    assert n_labels == 9, "Unexpected number of labels returned."
 
     # Initialize data module with k-fold cross-validation (10 folds)
     data_module = CellSegmentationDemo(num_folds=10)
@@ -60,7 +102,7 @@ def test_setup():
     ), "Unexpected number of training images/labels pairs."
     assert (
         len(data_module.val_dataset) == 9
-    ), "Unexpected number of valiudation images/labels pairs."
+    ), "Unexpected number of validation images/labels pairs."
     assert (
         len(data_module.test_dataset) == 9
     ), "Unexpected number of test images/labels pairs."
@@ -78,10 +120,52 @@ def test_setup():
     ), "Unexpected number of training images/labels pairs."
     assert (
         len(data_module.val_dataset) == 17
-    ), "Unexpected number of valiudation images/labels pairs."
+    ), "Unexpected number of validation images/labels pairs."
     assert (
         len(data_module.test_dataset) == 9
     ), "Unexpected number of test images/labels pairs."
+
+    # Check the training dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.train_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 64, "Unexpected number of images returned."
+    assert n_labels == 64, "Unexpected number of labels returned."
+
+    # Check the validation dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.val_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 17, "Unexpected number of images returned."
+    assert n_labels == 17, "Unexpected number of labels returned."
+
+    # Check the test dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.test_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 9, "Unexpected number of images returned."
+    assert n_labels == 9, "Unexpected number of labels returned."
 
     # Change to fold number 1: please notice that since the training + validation set contains
     # 81 values (that are not divisible by 5 without a remainder), the first fold will split
@@ -95,21 +179,52 @@ def test_setup():
     ), "Unexpected number of training images/labels pairs."
     assert (
         len(data_module.val_dataset) == 16
-    ), "Unexpected number of valiudation images/labels pairs."
+    ), "Unexpected number of validation images/labels pairs."
     assert (
         len(data_module.test_dataset) == 9
     ), "Unexpected number of test images/labels pairs."
 
-    # Check dataset sizes
-    assert (
-        len(data_module.train_dataset) == 65
-    ), "Unexpected number of training images/labels pairs."
-    assert (
-        len(data_module.val_dataset) == 16
-    ), "Unexpected number of valiudation images/labels pairs."
-    assert (
-        len(data_module.test_dataset) == 9
-    ), "Unexpected number of test images/labels pairs."
+    # Check the training dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.train_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 65, "Unexpected number of images returned."
+    assert n_labels == 65, "Unexpected number of labels returned."
+
+    # Check the validation dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.val_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 16, "Unexpected number of images returned."
+    assert n_labels == 16, "Unexpected number of labels returned."
+
+    # Check the test dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.test_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 9, "Unexpected number of images returned."
+    assert n_labels == 9, "Unexpected number of labels returned."
 
     # Change to fold number 2
     data_module.set_fold(2)
@@ -121,10 +236,52 @@ def test_setup():
     ), "Unexpected number of training images/labels pairs."
     assert (
         len(data_module.val_dataset) == 16
-    ), "Unexpected number of valiudation images/labels pairs."
+    ), "Unexpected number of validation images/labels pairs."
     assert (
         len(data_module.test_dataset) == 9
     ), "Unexpected number of test images/labels pairs."
+
+    # Check the training dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.train_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 65, "Unexpected number of images returned."
+    assert n_labels == 65, "Unexpected number of labels returned."
+
+    # Check the validation dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.val_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 16, "Unexpected number of images returned."
+    assert n_labels == 16, "Unexpected number of labels returned."
+
+    # Check the test dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.test_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 9, "Unexpected number of images returned."
+    assert n_labels == 9, "Unexpected number of labels returned."
 
     # Change to fold number 3
     data_module.set_fold(3)
@@ -136,10 +293,52 @@ def test_setup():
     ), "Unexpected number of training images/labels pairs."
     assert (
         len(data_module.val_dataset) == 16
-    ), "Unexpected number of valiudation images/labels pairs."
+    ), "Unexpected number of validation images/labels pairs."
     assert (
         len(data_module.test_dataset) == 9
     ), "Unexpected number of test images/labels pairs."
+
+    # Check the training dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.train_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 65, "Unexpected number of images returned."
+    assert n_labels == 65, "Unexpected number of labels returned."
+
+    # Check the validation dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.val_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 16, "Unexpected number of images returned."
+    assert n_labels == 16, "Unexpected number of labels returned."
+
+    # Check the test dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.test_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 9, "Unexpected number of images returned."
+    assert n_labels == 9, "Unexpected number of labels returned."
 
     # Change to fold number 4
     data_module.set_fold(4)
@@ -151,10 +350,52 @@ def test_setup():
     ), "Unexpected number of training images/labels pairs."
     assert (
         len(data_module.val_dataset) == 16
-    ), "Unexpected number of valiudation images/labels pairs."
+    ), "Unexpected number of validation images/labels pairs."
     assert (
         len(data_module.test_dataset) == 9
     ), "Unexpected number of test images/labels pairs."
+
+    # Check the training dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.train_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 65, "Unexpected number of images returned."
+    assert n_labels == 65, "Unexpected number of labels returned."
+
+    # Check the validation dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.val_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 16, "Unexpected number of images returned."
+    assert n_labels == 16, "Unexpected number of labels returned."
+
+    # Check the test dataloader
+    n_images = 0
+    n_labels = 0
+    for image, label in data_module.test_dataloader():
+        assert len(image.shape) == 4, "Wrong dimensionality of `image`."
+        assert len(label.shape) == 4, "Wrong dimensionality of `label`."
+        assert image.shape[1] == 1, "Image must have one channel."
+        assert label.shape[1] == 3, "Image must have three channels."
+        n_images += image.shape[0]
+        n_labels += label.shape[0]
+
+    assert n_images == 9, "Unexpected number of images returned."
+    assert n_labels == 9, "Unexpected number of labels returned."
 
     # Check that 5 is not an acceptable fold number
     with pytest.raises(ValueError):

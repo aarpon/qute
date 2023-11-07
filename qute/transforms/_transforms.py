@@ -25,16 +25,18 @@ from skimage.morphology import disk
 class MinMaxNormalize(Transform):
     """Normalize a tensor to [0, 1] using given min and max absolute intensities."""
 
-    def __init__(self, min_intensity: int = 0, max_intensity: int = 65535) -> None:
+    def __init__(
+        self, min_intensity: float = 0.0, max_intensity: float = 65535.0
+    ) -> None:
         """Constructor
 
         Parameters
         ----------
 
-        min_intensity: int
-            Minimum intensity to normalize against (optional, default = 0).
-        max_intensity: int
-            Maximum intensity to normalize against (optional, default = 65535).
+        min_intensity: float
+            Minimum intensity to normalize against (optional, default = 0.0).
+        max_intensity: float
+            Maximum intensity to normalize against (optional, default = 65535.0).
 
         Returns
         -------
@@ -66,8 +68,8 @@ class MinMaxNormalized(Transform):
     def __init__(
         self,
         image_key: str = "image",
-        min_intensity: int = 0,
-        max_intensity: int = 65535,
+        min_intensity: float = 0.0,
+        max_intensity: float = 65535.0,
     ) -> None:
         """Constructor
 
@@ -76,10 +78,10 @@ class MinMaxNormalized(Transform):
 
         image_key: str
             Key for the image in the data dictionary.
-        min_intensity: int
-            Minimum intensity to normalize against (optional, default = 0).
-        max_intensity: int
-            Maximum intensity to normalize against (optional, default = 65535).
+        min_intensity: float
+            Minimum intensity to normalize against (optional, default = 0.0).
+        max_intensity: float
+            Maximum intensity to normalize against (optional, default = 65535.0).
         """
         super().__init__()
         self.image_key = image_key
@@ -94,6 +96,7 @@ class MinMaxNormalized(Transform):
         Returns
         -------
 
+        data: dict
         data: dict
             Updated dictionary with normalized "image" tensor.
         """
@@ -190,6 +193,70 @@ class ZNormalized(Transform):
         mn = data[self.image_key].mean()
         sd = data[self.image_key].std()
         data[self.image_key] = (data[self.image_key] - mn) / sd
+        return data
+
+
+class ClippedZNormalize(Transform):
+    """Standardize the passed tensor by subtracting the mean and dividing by the standard deviation."""
+
+    def __init__(
+        self, mean: float, std: float, min_clip: float, max_clip: float
+    ) -> None:
+        """Constructor"""
+        super().__init__()
+        self.mean = mean
+        self.std = np.max([std, 1e-8])
+        self.min_clip = min_clip
+        self.max_clip = max_clip
+
+    def __call__(self, data: torch.Tensor) -> torch.Tensor:
+        """
+        Apply the transform to the "image" tensor in the data dictionary.
+
+        Returns
+        -------
+
+        data: torch.Tensor
+            Normalized tensor.
+        """
+        tmp = torch.clip(data, self.min_clip, self.max_clip)
+        tmp = (tmp - self.mean) / self.std
+        return tmp
+
+
+class ClippedZNormalized(Transform):
+    """Standardize the "image" tensor by subtracting the mean and dividing by the standard deviation."""
+
+    def __init__(
+        self,
+        mean: float,
+        std: float,
+        min_clip: float,
+        max_clip: float,
+        image_key: str = "image",
+    ) -> None:
+        """Constructor"""
+        super().__init__()
+        self.image_key = image_key
+        self.mean = mean
+        self.std = np.max([std, 1e-8])
+        self.min_clip = min_clip
+        self.max_clip = max_clip
+
+    def __call__(self, data: dict) -> dict:
+        """
+        Apply the transform to the "image" tensor in the data dictionary.
+
+        Returns
+        -------
+
+        data: dict
+            Updated dictionary with normalized "image" tensor.
+        """
+        data[self.image_key] = torch.clip(
+            data[self.image_key], self.min_clip, self.max_clip
+        )
+        data[self.image_key] = (data[self.image_key] - self.mean) / self.std
         return data
 
 
@@ -321,19 +388,22 @@ class SelectPatchesByLabeld(Transform):
 
 
 class AddFFT2(Transform):
-    """Calculates the power spectrum of the selected single-channel image and adds it as a second plane."""
+    """Calculates the Forier transform of the selected single-channel image and adds its z-normalized real
+    and imaginary parts as two additional planes."""
 
     def __init__(
-        self, min_p: Optional[float] = None, max_p: Optional[float] = None
+        self,
+        mean_real: Optional[float] = None,
+        std_real: Optional[float] = None,
+        mean_imag: Optional[float] = None,
+        std_imag: Optional[float] = None,
     ) -> None:
         """Constructor"""
         super().__init__()
-        self.min_p = min_p
-        self.max_p = max_p
-        if self.min_p is not None and self.max_p is not None:
-            self.delta_p = self.max_p - self.min_p
-        else:
-            self.delta_p = None
+        self.mean_real = mean_real
+        self.std_real = std_real
+        self.mean_imag = mean_imag
+        self.std_imag = std_imag
 
     def __call__(self, data: torch.Tensor) -> torch.Tensor:
         """
@@ -351,33 +421,37 @@ class AddFFT2(Transform):
                 "The image tensor must be of dimensions (1 x height x width)!"
             )
 
-        # Zero the DC
-        data = data - data.mean()
-
-        # Calculate the power spectrum of the image
-        f = torch.fft.fftshift(torch.fft.fft2(data).abs())
+        # Calculate the Fourier transform of the image
+        f = torch.fft.fftshift(torch.fft.fft2(data))
 
         # Normalize
-        if self.min_p is not None and self.max_p is not None:
-            f = (f - self.min_p) / self.delta_p
+        if self.mean_real is not None and self.std_real is not None:
+            f.real = (f.real - self.mean_real) / self.std_real
         else:
-            f = (f - f.mean()) / f.std()
+            f.real = (f.real - f.real.mean()) / f.real.std()
+        if self.mean_imag is not None and self.std_imag is not None:
+            f.imag = (f.imag - self.mean_imag) / self.std_imag
+        else:
+            f.imag = (f.imag - f.imag.mean()) / f.imag.std()
 
         # Add it as a new plane
-        data = torch.cat((data, f), dim=0)
+        data = torch.cat((data, f.real, f.imag), dim=0)
 
         # Return the updated tensor
         return data
 
 
 class AddFFT2d(Transform):
-    """Adds the FFT2 of a single-channel image as a second plane."""
+    """Calculates the Forier transform of the selected single-channel image and adds its z-normalized real
+    and imaginary parts as two additional planes."""
 
     def __init__(
         self,
         image_key: str = "image",
-        min_p: Optional[float] = None,
-        max_p: Optional[float] = None,
+        mean_real: Optional[float] = None,
+        std_real: Optional[float] = None,
+        mean_imag: Optional[float] = None,
+        std_imag: Optional[float] = None,
     ) -> None:
         """Constructor
 
@@ -389,12 +463,10 @@ class AddFFT2d(Transform):
         """
         super().__init__()
         self.image_key = image_key
-        self.min_p = min_p
-        self.max_p = max_p
-        if self.min_p is not None and self.max_p is not None:
-            self.delta_p = self.max_p - self.min_p
-        else:
-            self.delta_p = None
+        self.mean_real = mean_real
+        self.std_real = std_real
+        self.mean_imag = mean_imag
+        self.std_imag = std_imag
 
     def __call__(self, data: dict) -> dict:
         """
@@ -413,20 +485,21 @@ class AddFFT2d(Transform):
                 "The image tensor must be of dimensions (1 x height x width)!"
             )
 
-        # Zero the DC
-        tmp = data[self.image_key] - data[self.image_key].mean()
-
-        # Calculate the power spectrum of the image
-        f = torch.fft.fftshift(torch.fft.fft2(tmp).abs())
+        # Calculate the Fourier transform of the image
+        f = torch.fft.fftshift(torch.fft.fft2(data[self.image_key]))
 
         # Normalize
-        if self.min_p is not None and self.max_p is not None:
-            f = (f - self.min_p) / self.delta_p
+        if self.mean_real is not None and self.std_real is not None:
+            f.real = (f.real - self.mean_real) / self.std_real
         else:
-            f = (f - f.mean()) / f.std()
+            f.real = (f.real - f.real.mean()) / f.real.std()
+        if self.mean_imag is not None and self.std_imag is not None:
+            f.imag = (f.imag - self.mean_imag) / self.std_imag
+        else:
+            f.imag = (f.imag - f.imag.mean()) / f.imag.std()
 
         # Add it as a new plane
-        data[self.image_key] = torch.cat((data[self.image_key], f), dim=0)
+        data[self.image_key] = torch.cat((data[self.image_key], f.real, f.imag), dim=0)
 
         # Return the updated data dictionary
         return data

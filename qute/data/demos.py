@@ -29,8 +29,8 @@ class CellSegmentationDemo(SegmentationDataModuleLocalFolder):
         images_sub_folder: str = "images",
         labels_sub_folder: str = "labels",
         seed: int = 42,
-        num_workers: Optional[int] = os.cpu_count(),
-        num_inference_workers: Optional[int] = 2,
+        num_workers: Optional[int] = os.cpu_count() - 1,
+        num_inference_workers: Optional[int] = os.cpu_count() - 1,
         pin_memory: bool = True,
     ):
         """
