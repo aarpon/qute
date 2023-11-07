@@ -4,8 +4,6 @@ Leverages and extends several [PyTorch](https://pytorch.org)-based framework and
 
 * [PyTorch](https://pytorch.org)
 * [PyTorch Lightning](https://www.pytorchlightning.ai/)
-  * [torchmetrics](https://github.com/PyTorchLightning/metrics)
-  * [Lightning Bolts](https://github.com/PyTorchLightning/lightning-bolts)
 * [MONAI](https://monai.io)
 
 ## Installation
