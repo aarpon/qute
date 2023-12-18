@@ -193,7 +193,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         if test_transforms_dict is not None:
             self.test_transforms_dict = test_transforms_dict
         else:
-            self.test_transforms_dict = self.__default_train_transforms_dict()
+            self.test_transforms_dict = self.__default_test_transforms_dict()
 
         # Set the inference transforms if passed
         self.inference_transforms_dict = None
