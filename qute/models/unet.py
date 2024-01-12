@@ -23,6 +23,7 @@ from monai.losses import DiceCELoss, FocalLoss
 from monai.metrics import DiceMetric
 from monai.networks.nets import UNet as MonaiUNet
 from monai.transforms import Transform
+from monai.utils import BlendMode
 from tifffile import TiffWriter
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import PolynomialLR
@@ -269,6 +270,8 @@ class UNet(pl.LightningModule):
                     sw_batch_size=batch_size,
                     overlap=overlap,
                     predictor=self.net,
+                    mode=BlendMode.GAUSSIAN,
+                    sigma_scale=0.125,
                     device=device,
                 )
 
