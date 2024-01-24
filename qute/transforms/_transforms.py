@@ -11,7 +11,8 @@
 
 import random
 from copy import deepcopy
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -20,6 +21,49 @@ from monai.data import MetaTensor
 from monai.transforms import Transform
 from skimage.measure import label, regionprops
 from skimage.morphology import disk
+
+
+class CellposeLabelReader(Transform):
+    """Loads a Cellpose label file and returns it as a NumPy array."""
+
+    def __init__(self, file_name: Union[Path, str], to_int32: bool = True) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+
+        file_name: str
+            File name
+
+        to_int32: bool
+         Set to True to convert to np.int32.
+
+        Returns
+        -------
+
+        labels: np.ndarray
+            Labels array.
+        """
+        super().__init__()
+        self.file_name = Path(file_name)
+        self.to_int32 = to_int32
+
+    def __call__(self) -> np.ndarray:
+        """
+        Load the file and return the labels tensor.
+
+        Returns
+        -------
+
+        labels: ndarray
+            The labels array from the CellPose labels file.
+        """
+        data = np.load(self.file_name, allow_pickle=True)
+        d = data[()]
+        if self.to_int32:
+            return d["masks"].astype(np.int32)
+        else:
+            return d["masks"]
 
 
 class MinMaxNormalize(Transform):
