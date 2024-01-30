@@ -12,6 +12,8 @@ from ._transforms import (
     AddBorderd,
     AddFFT2,
     AddFFT2d,
+    AddNormalizedDistanceTransform,
+    AddNormalizedDistanceTransformd,
     CellposeLabelReader,
     ClippedZNormalize,
     ClippedZNormalized,

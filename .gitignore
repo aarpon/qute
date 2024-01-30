@@ -3,6 +3,7 @@
 qute.egg-info/
 lightning_logs/
 __pycache__/
+.pytest_cache/
 .ipynb_checkpoints/
 *.pth
 *.log

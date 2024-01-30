@@ -19,8 +19,11 @@ import torch
 from kornia.morphology import erosion
 from monai.data import MetaTensor
 from monai.transforms import Transform
+from scipy.ndimage import distance_transform_edt
 from skimage.measure import label, regionprops
 from skimage.morphology import disk
+
+from qute.transforms.util import scale_dist_transform_by_region
 
 
 class CellposeLabelReader(Transform):
@@ -343,7 +346,7 @@ class SelectPatchesByLabeld(Transform):
         self.num_patches = num_patches
         self.no_batch_dim = no_batch_dim
 
-    def __call__(self, data: dict) -> dict:
+    def __call__(self, data: dict) -> list[dict]:
         """
         Select the requested number of labels from the label image, and extract region of defined window size for both
         image and label in stacked Tensors in the data dictionary.
@@ -351,8 +354,8 @@ class SelectPatchesByLabeld(Transform):
         Returns
         -------
 
-        data: dict
-            Updated dictionary with extracted windows for the "image" and "label" tensors.
+        data: list[dict]
+            List of dictionaries with extracted windows for the "image" and "label" tensors.
         """
 
         # Get the 2D label image to work with
@@ -432,7 +435,7 @@ class SelectPatchesByLabeld(Transform):
 
 
 class AddFFT2(Transform):
-    """Calculates the Forier transform of the selected single-channel image and adds its z-normalized real
+    """Calculates the Fourier transform of the selected single-channel image and adds its z-normalized real
     and imaginary parts as two additional planes."""
 
     def __init__(
@@ -486,7 +489,7 @@ class AddFFT2(Transform):
 
 
 class AddFFT2d(Transform):
-    """Calculates the Forier transform of the selected single-channel image and adds its z-normalized real
+    """Calculates the Fourier transform of the selected single-channel image and adds its z-normalized real
     and imaginary parts as two additional planes."""
 
     def __init__(
@@ -572,6 +575,8 @@ class AddBorderd(Transform):
 
     def process_label(self, lbl, footprint):
         """Create and add object borders as new class."""
+
+        # Add the border as class 2
         eroded = erosion(lbl, footprint)
         border = torch.bitwise_or(lbl, eroded)
         return lbl + border  # Count border pixels twice
@@ -588,6 +593,9 @@ class AddBorderd(Transform):
         """
 
         # Make sure the label datatype is torch.int32
+        if type(data["label"]) is np.ndarray:
+            data["label"] = torch.Tensor(data["label"].astype(np.int32)).to(torch.int32)
+
         if data["label"].dtype != torch.int32:
             data["label"] = data["label"].to(torch.int32)
 
@@ -596,7 +604,7 @@ class AddBorderd(Transform):
 
         # Make sure there are only two classes: background and foreground
         if len(torch.unique(label_img)) > 2:
-            raise ValueError("The label image(s) must be binary!")
+            label_img[label_img > 0] = 1
 
         # Prepare the structuring element for the erosion
         footprint = torch.tensor(disk(self.border_width), dtype=torch.int32)
@@ -640,6 +648,161 @@ class AddBorderd(Transform):
         else:
             raise ValueError('Unexpected number of dimensions for data["label"].')
 
+        return data
+
+
+class AddNormalizedDistanceTransform(Transform):
+    """Calculates and normalizes the distance transform per region of the selected pixel class from a labels image
+    and adds it as an additional plane to the image."""
+
+    def __init__(
+        self,
+        pixel_class: int = 1,
+        reverse: bool = False,
+    ) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+
+        pixel_class: int
+            Class of the pixels to be used for calculating the distance transform.
+
+        reverse: bool
+            Whether to reverse the direction of the normalized distance transform: from 1.0 at the center of the
+            objects and 0.0 at the periphery, to 0.0 at the center and 1.0 at the periphery.
+        """
+        super().__init__()
+        self.pixel_class = pixel_class
+        self.reverse = reverse
+
+    def __call__(self, data: np.ndarray) -> np.ndarray:
+        """
+        Calculates and normalizes the distance transform per region of the selected pixel class from a labels image
+        and adds it as an additional plane to the image.
+
+        Returns
+        -------
+
+        data: np.ndarray
+            Updated array with the normalized distance transform added as a new plane.
+        """
+
+        # This Transform works on NumPy arrays
+        if data.dtype in [torch.float32, torch.int32]:
+            data_label = np.array(data.cpu())
+        else:
+            data_label = data
+
+        # Make sure that the dimensions of the data are correct
+        if not (data_label.ndim == 3 and data_label.shape[0] == 1):
+            raise ValueError(
+                "The image array must be of dimensions (1 x height x width)!"
+            )
+
+        # Try extracting the pixels belonging to requested class
+        bw = data_label.squeeze() == self.pixel_class
+
+        # Calculate distance transform
+        dt = distance_transform_edt(bw, return_distances=True)
+
+        # Run region labelling
+        regions_id = label(bw, connectivity=1)
+
+        # Normalize the distance transform by object in place
+        dt = scale_dist_transform_by_region(
+            dt, regions_id, reverse=self.reverse, in_place=True
+        )
+
+        # Add the scaled distance transform as a new channel to the input image
+        data = torch.cat((data, torch.tensor(dt).unsqueeze(0).to(torch.float32)), dim=0)
+
+        print(data.shape, data.min(), data.max())
+
+        # Return the updated data dictionary
+        return data
+
+
+class AddNormalizedDistanceTransformd(Transform):
+    """Calculates and normalizes the distance transform per region of the selected pixel class from a labels image
+    and adds it as an additional plane to the image."""
+
+    def __init__(
+        self,
+        image_key: str = "image",
+        label_key: str = "label",
+        pixel_class: int = 1,
+        reverse: bool = False,
+    ) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+
+        image_key: str
+            Key for the image in the data dictionary.
+
+        label_key: str
+            Key for the label in the data dictionary.
+
+        pixel_class: int
+            Class of the pixels to be used for calculating the distance transform.
+
+        reverse: bool
+            Whether to reverse the direction of the normalized distance transform: from 1.0 at the center of the
+            objects and 0.0 at the periphery, to 0.0 at the center and 1.0 at the periphery.
+        """
+        super().__init__()
+        self.image_key = image_key
+        self.label_key = label_key
+        self.pixel_class = pixel_class
+        self.reverse = reverse
+
+    def __call__(self, data: dict) -> dict:
+        """
+        Calculates and normalizes the distance transform per region of the selected pixel class from a labels image
+        and adds it as an additional plane to the image.
+
+        Returns
+        -------
+
+        data: dict
+            Updated dictionary with modified "image" tensor.
+        """
+
+        # This Transform works on NumPy arrays
+        if data["label"].dtype in [torch.float32, torch.int32]:
+            data_label = np.array(data["label"].cpu())
+        else:
+            data_label = data[self.label_key]
+
+        # Make sure that the dimensions of the data are correct
+        if not (data_label.ndim == 3 and data_label.shape[0] == 1):
+            raise ValueError(
+                "The image array must be of dimensions (1 x height x width)!"
+            )
+
+        # Try extracting the pixels belonging to requested class
+        bw = data_label.squeeze() == self.pixel_class
+
+        # Calculate distance transform
+        dt = distance_transform_edt(bw, return_distances=True)
+
+        # Run region labelling
+        regions_id = label(bw, connectivity=1)
+
+        # Normalize the distance transform by object in place
+        dt = scale_dist_transform_by_region(
+            dt, regions_id, reverse=self.reverse, in_place=True
+        )
+
+        # Add the scaled distance transform as a new channel to the input image
+        data[self.image_key] = torch.cat(
+            (data[self.image_key], torch.tensor(dt).unsqueeze(0).to(torch.float32)),
+            dim=0,
+        )
+
+        # Return the updated data dictionary
         return data
 
 
