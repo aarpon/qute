@@ -24,6 +24,7 @@ from pytorch_lightning.callbacks import (
     LearningRateMonitor,
     ModelCheckpoint,
 )
+from torch.optim.lr_scheduler import PolynomialLR
 
 from qute.data.demos import CellSegmentationDemo
 from qute.models.unet import UNet
@@ -33,8 +34,9 @@ BATCH_SIZE = 8
 INFERENCE_BATCH_SIZE = 4
 NUM_PATCHES = 1
 PATCH_SIZE = (640, 640)
+LEARNING_RATE = 0.01
 PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
-MAX_EPOCHS = 250
+MAX_EPOCHS = 2000
 EXP_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
 MODEL_DIR = Path(userpaths.get_my_documents()) / "qute" / "models" / EXP_NAME
 RESULTS_DIR = Path(userpaths.get_my_documents()) / "qute" / "results" / EXP_NAME
@@ -59,6 +61,10 @@ if __name__ == "__main__":
     # Metrics
     metrics = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
 
+    # Learning rate scheduler
+    lr_scheduler_class = PolynomialLR
+    lr_scheduler_parameters = {"total_iters": BATCH_SIZE * MAX_EPOCHS, "power": 0.95}
+
     # Model
     model = UNet(
         in_channels=1,
@@ -70,7 +76,9 @@ if __name__ == "__main__":
         metrics=metrics,
         val_metrics_transforms=data_module.get_val_metrics_transforms(),
         test_metrics_transforms=data_module.get_test_metrics_transforms(),
-        learning_rate=1e-2,
+        learning_rate=LEARNING_RATE,
+        lr_scheduler_class=lr_scheduler_class,
+        lr_scheduler_parameters=lr_scheduler_parameters,
     )
 
     # Callbacks
@@ -86,7 +94,8 @@ if __name__ == "__main__":
         accelerator="gpu",
         devices=1,
         precision=PRECISION,
-        callbacks=[model_checkpoint, early_stopping, lr_monitor],
+        # callbacks=[model_checkpoint, early_stopping, lr_monitor],
+        callbacks=[model_checkpoint, lr_monitor],
         max_epochs=MAX_EPOCHS,
         log_every_n_steps=1,
     )

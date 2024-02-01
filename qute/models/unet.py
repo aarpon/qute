@@ -52,6 +52,8 @@ class UNet(pl.LightningModule):
         predict_post_transforms=None,
         learning_rate: float = 1e-2,
         optimizer_class=AdamW,
+        lr_scheduler_class=PolynomialLR,
+        lr_scheduler_parameters: dict = {"total_iters": 100, "power": 0.95},
         num_res_units: int = 0,
         dropout: float = 0.0,
     ):
@@ -101,6 +103,12 @@ class UNet(pl.LightningModule):
         optimizer_class=AdamW
             Optimizer.
 
+        lr_scheduler_class=PolynomialLR
+            Learning rate scheduler.
+
+        lr_scheduler_parameters={"total_iters": 100, "power": 0.99}
+            Dictionary of scheduler parameters.
+
         num_res_units: int = 0
             Number of residual units for the UNet.
 
@@ -114,6 +122,8 @@ class UNet(pl.LightningModule):
         self.metrics = metrics
         self.learning_rate = learning_rate
         self.optimizer_class = optimizer_class
+        self.scheduler_class = lr_scheduler_class
+        self.scheduler_parameters = lr_scheduler_parameters
         self.val_metrics_transforms = val_metrics_transforms
         self.test_metrics_transforms = test_metrics_transforms
         self.predict_post_transforms = predict_post_transforms
@@ -135,13 +145,12 @@ class UNet(pl.LightningModule):
     def configure_optimizers(self):
         """Configure and return the optimizer and scheduler."""
         optimizer = self.optimizer_class(self.parameters(), lr=self.learning_rate)
-        lr_scheduler = {
-            "scheduler": PolynomialLR(optimizer, total_iters=100, power=0.9),
-            "name": "learning_rate",
+        scheduler = self.scheduler_class(optimizer, **self.scheduler_parameters)
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": scheduler,
             "monitor": "val_loss",
-            "frequency": 1,
         }
-        return [optimizer], [lr_scheduler]
 
     def training_step(self, batch, batch_idx):
         """Perform a training step."""
