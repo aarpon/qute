@@ -29,14 +29,11 @@ from qute.transforms.util import scale_dist_transform_by_region
 class CellposeLabelReader(Transform):
     """Loads a Cellpose label file and returns it as a NumPy array."""
 
-    def __init__(self, file_name: Union[Path, str], to_int32: bool = True) -> None:
+    def __init__(self, to_int32: bool = True) -> None:
         """Constructor
 
         Parameters
         ----------
-
-        file_name: str
-            File name
 
         to_int32: bool
          Set to True to convert to np.int32.
@@ -48,12 +45,17 @@ class CellposeLabelReader(Transform):
             Labels array.
         """
         super().__init__()
-        self.file_name = Path(file_name)
         self.to_int32 = to_int32
 
-    def __call__(self) -> np.ndarray:
+    def __call__(self, file_name: Union[Path, str]) -> np.ndarray:
         """
         Load the file and return the labels tensor.
+
+        Parameters
+        ----------
+
+        file_name: str
+            File name
 
         Returns
         -------
@@ -61,7 +63,7 @@ class CellposeLabelReader(Transform):
         labels: ndarray
             The labels array from the CellPose labels file.
         """
-        data = np.load(self.file_name, allow_pickle=True)
+        data = np.load(Path(file_name).resolve(), allow_pickle=True)
         d = data[()]
         if self.to_int32:
             return d["masks"].astype(np.int32)
