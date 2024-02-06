@@ -405,6 +405,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
             num_workers=self.num_workers,
             collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
+            persistent_workers=True,
         )
 
     def val_dataloader(self):
@@ -416,6 +417,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
             num_workers=self.num_workers,
             collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
+            persistent_workers=True,
         )
 
     def test_dataloader(self):
@@ -426,6 +428,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
+            persistent_workers=True,
         )
 
     def inference_dataloader(
@@ -453,6 +456,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
             num_workers=self.num_inference_workers,
             collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
+            persistent_workers=True,
         )
 
     def get_train_transforms_dict(self):
