@@ -28,6 +28,8 @@ from tifffile import TiffWriter
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import PolynomialLR
 
+from qute.device import get_device
+
 
 class UNet(pl.LightningModule):
     """Wrap MONAI's UNet architecture into a PyTorch Lightning module.
@@ -145,12 +147,14 @@ class UNet(pl.LightningModule):
     def configure_optimizers(self):
         """Configure and return the optimizer and scheduler."""
         optimizer = self.optimizer_class(self.parameters(), lr=self.learning_rate)
-        scheduler = self.scheduler_class(optimizer, **self.scheduler_parameters)
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": scheduler,
+        scheduler = {
+            "scheduler": self.scheduler_class(optimizer, **self.scheduler_parameters),
             "monitor": "val_loss",
+            "interval": "step",  # Call "scheduler.step()" after every batch (1 step)
+            "frequency": 1,  # Update scheduler after every step
+            "strict": True,  # Ensures the scheduler is strictly followed (PyTorch Lightning parameter)
         }
+        return [optimizer], [scheduler]
 
     def training_step(self, batch, batch_idx):
         """Perform a training step."""
@@ -260,7 +264,7 @@ class UNet(pl.LightningModule):
         Path(target_folder).mkdir(parents=True, exist_ok=True)
 
         # Device
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = get_device()
 
         # Make sure the model is on the device
         self.net.to(device)
@@ -383,7 +387,7 @@ class UNet(pl.LightningModule):
                 fold_subolder = Path(target_folder) / f"fold_{f}"
                 Path(fold_subolder).mkdir(parents=True, exist_ok=True)
         # Device
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = get_device()
 
         # Switch to evaluation mode on all models
         for model in models:

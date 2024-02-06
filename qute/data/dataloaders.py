@@ -27,6 +27,8 @@ from sklearn.model_selection import KFold
 from qute.transforms import (
     AddFFT2,
     AddFFT2d,
+    AddNormalizedDistanceTransform,
+    AddNormalizedDistanceTransformd,
     ClippedZNormalize,
     ClippedZNormalized,
     MinMaxNormalize,
@@ -505,6 +507,12 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
                     lazy=False,
                 ),
                 ZNormalized(image_key="image"),
+                # AddNormalizedDistanceTransformd(
+                #     image_key="image",
+                #     label_key="label",
+                #     pixel_class=1,
+                #     reverse=True
+                # ),
                 # AddFFT2d(
                 #     image_key="image",
                 #     mean_real=243.20000000000144,
@@ -545,6 +553,12 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
                     lazy=False,
                 ),
                 ZNormalized(image_key="image"),
+                # AddNormalizedDistanceTransformd(
+                #     image_key="image",
+                #     label_key="label",
+                #     pixel_class=1,
+                #     reverse=True
+                # ),
                 # AddFFT2d(
                 #     image_key="image",
                 #     mean_real=243.20000000000144,
@@ -586,6 +600,10 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
                     dtype=torch.float32,
                 ),
                 ZNormalize(),
+                # AddNormalizedDistanceTransform(
+                #     pixel_class=1,
+                #     reverse=True
+                # ),
                 # AddFFT2(
                 #     mean_real=243.20000000000144,
                 #     std_real=538086.5132100589,

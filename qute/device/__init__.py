@@ -1,1 +1,1 @@
-from ._device import get_device
+from ._device import get_accelerator, get_device

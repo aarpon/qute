@@ -1,8 +1,9 @@
 import torch
+from pytorch_lightning.accelerators import Accelerator
 
 
 def get_device() -> torch.device:
-    """Return available device depending on platform.
+    """Return available PyTorch device depending on platform.
 
     Returns
     -------
@@ -18,3 +19,22 @@ def get_device() -> torch.device:
         return torch.device("mps")
 
     return torch.device("cpu")
+
+
+def get_accelerator() -> str:
+    """Return available PyTorch Lightning accelerator depending on platform.
+
+    Returns
+    -------
+
+    accelerator: str
+        Accelerator that can be used for training.
+    """
+
+    if torch.cuda.is_available():
+        return "gpu"
+
+    if torch.backends.mps.is_available():
+        return "mps"
+
+    return "cpu"

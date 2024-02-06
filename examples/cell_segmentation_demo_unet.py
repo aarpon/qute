@@ -24,8 +24,9 @@ from pytorch_lightning.callbacks import (
     LearningRateMonitor,
     ModelCheckpoint,
 )
-from torch.optim.lr_scheduler import PolynomialLR
+from torch.optim.lr_scheduler import OneCycleLR
 
+from qute import device
 from qute.data.demos import CellSegmentationDemo
 from qute.models.unet import UNet
 
@@ -34,8 +35,11 @@ BATCH_SIZE = 8
 INFERENCE_BATCH_SIZE = 4
 NUM_PATCHES = 1
 PATCH_SIZE = (640, 640)
-LEARNING_RATE = 0.01
-PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
+LEARNING_RATE = 0.001
+try:
+    PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
+except AssertionError:
+    PRECISION = 32
 MAX_EPOCHS = 2000
 EXP_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
 MODEL_DIR = Path(userpaths.get_my_documents()) / "qute" / "models" / EXP_NAME
@@ -62,8 +66,14 @@ if __name__ == "__main__":
     metrics = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
 
     # Learning rate scheduler
-    lr_scheduler_class = PolynomialLR
-    lr_scheduler_parameters = {"total_iters": BATCH_SIZE * MAX_EPOCHS, "power": 0.95}
+    lr_scheduler_class = OneCycleLR
+    lr_scheduler_parameters = {
+        "total_steps": 8 * MAX_EPOCHS,  # Steps per epoch in this case is 8.
+        "div_factor": 5.0,
+        "max_lr": LEARNING_RATE,
+        "pct_start": 0.5,  # Fraction of total_steps at which the learning rate starts decaying after reaching max_lr
+        "anneal_strategy": "cos",
+    }
 
     # Model
     model = UNet(
@@ -91,7 +101,7 @@ if __name__ == "__main__":
     # Instantiate the Trainer
     trainer = pl.Trainer(
         default_root_dir=RESULTS_DIR / EXP_NAME,
-        accelerator="gpu",
+        accelerator=device.get_accelerator(),
         devices=1,
         precision=PRECISION,
         # callbacks=[model_checkpoint, early_stopping, lr_monitor],
