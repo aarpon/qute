@@ -17,6 +17,8 @@ from ._transforms import (
     CellposeLabelReader,
     ClippedZNormalize,
     ClippedZNormalized,
+    CustomTIFFReader,
+    CustomTIFFReaderd,
     DebugInformer,
     DebugMinNumVoxelCheckerd,
     MinMaxNormalize,

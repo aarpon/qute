@@ -12,8 +12,6 @@ from monai.transforms import (
     AsDiscrete,
     AsDiscreted,
     Compose,
-    LoadImage,
-    LoadImaged,
     RandCropByPosNegLabeld,
     RandGaussianNoised,
     RandGaussianSmoothd,
@@ -25,14 +23,8 @@ from numpy.random import default_rng
 from sklearn.model_selection import KFold
 
 from qute.transforms import (
-    AddFFT2,
-    AddFFT2d,
-    AddNormalizedDistanceTransform,
-    AddNormalizedDistanceTransformd,
-    ClippedZNormalize,
-    ClippedZNormalized,
-    MinMaxNormalize,
-    MinMaxNormalized,
+    CustomTIFFReader,
+    CustomTIFFReaderd,
     ToLabel,
     ToPyTorchLightningOutputd,
     ZNormalize,
@@ -491,10 +483,9 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         """Define default training set transforms."""
         train_transforms = Compose(
             [
-                LoadImaged(
-                    keys=["image", "label"],
-                    reader="PILReader",
-                    image_only=True,
+                CustomTIFFReaderd(
+                    image_key="image",
+                    label_key="label",
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
@@ -511,19 +502,6 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
                     lazy=False,
                 ),
                 ZNormalized(image_key="image"),
-                # AddNormalizedDistanceTransformd(
-                #     image_key="image",
-                #     label_key="label",
-                #     pixel_class=1,
-                #     reverse=True
-                # ),
-                # AddFFT2d(
-                #     image_key="image",
-                #     mean_real=243.20000000000144,
-                #     std_real=538086.5132100589,
-                #     mean_imag=-1.2471390320969179e-14,
-                #     std_imag=369479.19867306296
-                # ),
                 RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=(0, 1)),
                 RandGaussianNoised(keys="image", prob=0.2),
                 RandGaussianSmoothd(keys="image", prob=0.2),
@@ -537,10 +515,9 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         """Define default validation set transforms."""
         val_transforms = Compose(
             [
-                LoadImaged(
-                    keys=["image", "label"],
-                    reader="PILReader",
-                    image_only=True,
+                CustomTIFFReaderd(
+                    image_key="image",
+                    label_key="label",
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
@@ -557,19 +534,6 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
                     lazy=False,
                 ),
                 ZNormalized(image_key="image"),
-                # AddNormalizedDistanceTransformd(
-                #     image_key="image",
-                #     label_key="label",
-                #     pixel_class=1,
-                #     reverse=True
-                # ),
-                # AddFFT2d(
-                #     image_key="image",
-                #     mean_real=243.20000000000144,
-                #     std_real=538086.5132100589,
-                #     mean_imag=-1.2471390320969179e-14,
-                #     std_imag=369479.19867306296
-                # ),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
                 ToPyTorchLightningOutputd(),
             ]
@@ -597,23 +561,11 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         """Define default inference set transforms."""
         inference_transforms = Compose(
             [
-                LoadImage(
-                    reader="PILReader",
-                    image_only=True,
+                CustomTIFFReader(
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
                 ZNormalize(),
-                # AddNormalizedDistanceTransform(
-                #     pixel_class=1,
-                #     reverse=True
-                # ),
-                # AddFFT2(
-                #     mean_real=243.20000000000144,
-                #     std_real=538086.5132100589,
-                #     mean_imag=-1.2471390320969179e-14,
-                #     std_imag=369479.19867306296
-                # ),
             ]
         )
         return inference_transforms

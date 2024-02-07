@@ -18,10 +18,12 @@ import numpy as np
 import torch
 from kornia.morphology import erosion
 from monai.data import MetaTensor
-from monai.transforms import Transform
+from monai.transforms import MapTransform, Transform
 from scipy.ndimage import distance_transform_edt
 from skimage.measure import label, regionprops
 from skimage.morphology import disk
+from tifffile import imread
+from torch import Tensor
 
 from qute.transforms.util import scale_dist_transform_by_region
 
@@ -71,11 +73,136 @@ class CellposeLabelReader(Transform):
             return d["masks"]
 
 
+class CustomTIFFReader(Transform):
+    """Loads a TIFF file using the tifffile library."""
+
+    def __init__(
+        self,
+        ensure_channel_first: bool = True,
+        dtype: torch.dtype = torch.float32,
+    ) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+
+        ensure_channel_first: bool
+            Ensure that the image is in the channel first format.
+
+        dtype: torch.dtype = torch.float32
+            Type of the image.
+        """
+        super().__init__()
+        self.ensure_channel_first = ensure_channel_first
+        self.dtype = dtype
+
+    def __call__(self, file_name: Union[Path, str]) -> torch.Tensor:
+        """
+        Load the file and return the image/labels Tensor.
+
+        Parameters
+        ----------
+
+        file_name: str
+            File name
+
+        Returns
+        -------
+
+        tensor: torch.Tensor
+            Torch tensor with requested type and shape.
+        """
+
+        # File path
+        image_path = str(Path(file_name).resolve())
+
+        # Load and process image
+        data = torch.Tensor(imread(image_path).astype(np.float32))
+        if self.ensure_channel_first:
+            data = data.unsqueeze(0)
+        if self.dtype is not None:
+            data = data.to(self.dtype)
+        return data
+
+
+class CustomTIFFReaderd(MapTransform):
+    """Loads a TIFF file using the tifffile library."""
+
+    def __init__(
+        self,
+        image_key: str = "image",
+        label_key: str = "label",
+        ensure_channel_first: bool = True,
+        dtype: torch.dtype = torch.float32,
+    ) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+
+        image_key: str
+            Key for the image in the data dictionary.
+
+        label_key: str
+            Key for the labels in the data dictionary.
+
+        ensure_channel_first: bool
+            Ensure that the image is in the channel first format.
+
+        dtype: torch.dtype = torch.float32
+            Type of the image.
+
+        """
+        super().__init__(keys=[image_key, label_key])
+        self.image_key = image_key
+        self.label_key = label_key
+        self.ensure_channel_first = ensure_channel_first
+        self.dtype = dtype
+
+    def __call__(self, data: dict) -> dict:
+        """
+        Load the files and return the image and labels Tensors in the data dictionary.
+
+        Returns
+        -------
+
+        data: dict
+            Updated dictionary with normalized "image" tensor.
+        """
+
+        # Work on a copy of the dictionary
+        d = dict(data)
+
+        # Get arguments
+        image_path = str(Path(d[self.image_key]).resolve())
+        label_path = str(Path(data[self.label_key]).resolve())
+
+        # Load and process images
+        image = torch.Tensor(imread(image_path).astype(np.float32))
+        if self.ensure_channel_first:
+            image = image.unsqueeze(0)
+        if self.dtype is not None:
+            image = image.to(self.dtype)
+        d[self.image_key] = image  # MetaTensor(image)
+
+        labels = torch.Tensor(imread(label_path).astype(np.float32))
+        if self.ensure_channel_first:
+            labels = labels.unsqueeze(0)
+        if self.dtype is not None:
+            labels = labels.to(self.dtype)
+        d[self.label_key] = labels  # MetaTensor(labels)
+
+        return d
+
+
 class MinMaxNormalize(Transform):
     """Normalize a tensor to [0, 1] using given min and max absolute intensities."""
 
     def __init__(
-        self, min_intensity: float = 0.0, max_intensity: float = 65535.0
+        self,
+        min_intensity: float = 0.0,
+        max_intensity: float = 65535.0,
+        in_place: bool = True,
     ) -> None:
         """Constructor
 
@@ -97,8 +224,9 @@ class MinMaxNormalize(Transform):
         self.min_intensity = min_intensity
         self.max_intensity = max_intensity
         self.range_intensity = self.max_intensity - self.min_intensity
+        self.in_place = in_place
 
-    def __call__(self, image: np.ndarray) -> np.ndarray:
+    def __call__(self, data: np.ndarray) -> np.ndarray:
         """
         Apply the transform to `image`.
 
@@ -108,10 +236,19 @@ class MinMaxNormalize(Transform):
         result: tensor
             A stack of images with the same width and height as `label` and with `num_classes` planes.
         """
-        return (image - self.min_intensity) / self.range_intensity
+        if not self.in_place:
+            if isinstance(data, torch.Tensor):
+                data = data.clone()
+            elif isinstance(data, np.ndarray):
+                data = data.copy()
+            else:
+                raise TypeError(
+                    "Unsupported data type. Data should be a PyTorch Tensor or a NumPy array."
+                )
+        return (data - self.min_intensity) / self.range_intensity
 
 
-class MinMaxNormalized(Transform):
+class MinMaxNormalized(MapTransform):
     """Normalize the "image" tensor to [0, 1] using given min and max absolute intensities from the data dictionary."""
 
     def __init__(
@@ -132,7 +269,7 @@ class MinMaxNormalized(Transform):
         max_intensity: float
             Maximum intensity to normalize against (optional, default = 65535.0).
         """
-        super().__init__()
+        super().__init__(keys=[image_key])
         self.image_key = image_key
         self.min_intensity = min_intensity
         self.max_intensity = max_intensity
@@ -146,26 +283,40 @@ class MinMaxNormalized(Transform):
         -------
 
         data: dict
-        data: dict
             Updated dictionary with normalized "image" tensor.
         """
-        data[self.image_key] = (
-            data[self.image_key] - self.min_intensity
+
+        # Work on a copy of the input dictionary data
+        d = dict(data)
+
+        d[self.image_key] = (
+            d[self.image_key] - self.min_intensity
         ) / self.range_intensity
-        return data
+        return d
 
 
 class ToLabel(Transform):
     """
-    Converts tensor from one-hot representation to 2D label image.
+    Converts Tensor from one-hot representation to 2D label image.
     """
 
-    def __init__(self, dtype=torch.int32):
+    def __init__(self, dtype=torch.int32, in_place: bool = True):
         super().__init__()
         self.dtype = dtype
+        self.in_place = in_place
 
     def __call__(self, data: torch.Tensor) -> torch.Tensor:
-        """Unwrap the dictionary."""
+        """Transform one-hot Tensor to 2D label image."""
+        if not self.in_place:
+            if isinstance(data, torch.Tensor):
+                data = data.clone()
+            elif isinstance(data, np.ndarray):
+                data = data.copy()
+            else:
+                raise TypeError(
+                    "Unsupported data type. Data should be a PyTorch Tensor or a NumPy array."
+                )
+
         if data.ndim == 4:
             data = data.argmax(axis=1).type(self.dtype)
         elif data.ndim == 3:
@@ -176,9 +327,9 @@ class ToLabel(Transform):
         return data
 
 
-class ToPyTorchLightningOutputd(Transform):
+class ToPyTorchLightningOutputd(MapTransform):
     """
-    Simple converter to pass from the dictionary output of Monai transfors to the expected (image, label) tuple used by PyTorch Lightning.
+    Simple converter to pass from the dictionary output of Monai transforms to the expected (image, label) tuple used by PyTorch Lightning.
     """
 
     def __init__(
@@ -188,7 +339,7 @@ class ToPyTorchLightningOutputd(Transform):
         label_key: str = "label",
         label_dtype: torch.dtype = torch.int32,
     ):
-        super().__init__()
+        super().__init__(keys=[image_key, label_key])
         self.image_key = image_key
         self.label_key = label_key
         self.image_dtype = image_dtype
@@ -196,7 +347,11 @@ class ToPyTorchLightningOutputd(Transform):
 
     def __call__(self, data: dict) -> tuple:
         """Unwrap the dictionary."""
-        return data[self.image_key].type(self.image_dtype), data[self.label_key].type(
+
+        # Work on a copy of the input dictionary data
+        d = dict(data)
+
+        return d[self.image_key].type(self.image_dtype), d[self.label_key].type(
             self.label_dtype
         )
 
@@ -204,9 +359,10 @@ class ToPyTorchLightningOutputd(Transform):
 class ZNormalize(Transform):
     """Standardize the passed tensor by subtracting the mean and dividing by the standard deviation."""
 
-    def __init__(self) -> None:
+    def __init__(self, in_place: bool = True) -> None:
         """Constructor"""
         super().__init__()
+        self.in_place = in_place
 
     def __call__(self, data: torch.Tensor) -> torch.Tensor:
         """
@@ -218,15 +374,25 @@ class ZNormalize(Transform):
         data: torch.Tensor
             Normalized tensor.
         """
+        if not self.in_place:
+            if isinstance(data, torch.Tensor):
+                data = data.clone()
+            elif isinstance(data, np.ndarray):
+                data = data.copy()
+            else:
+                raise TypeError(
+                    "Unsupported data type. Data should be a PyTorch Tensor or a NumPy array."
+                )
+
         return (data - data.mean()) / data.std()
 
 
-class ZNormalized(Transform):
+class ZNormalized(MapTransform):
     """Standardize the "image" tensor by subtracting the mean and dividing by the standard deviation."""
 
     def __init__(self, image_key: str = "image") -> None:
         """Constructor"""
-        super().__init__()
+        super().__init__(keys=[image_key])
         self.image_key = image_key
 
     def __call__(self, data: dict) -> dict:
@@ -239,17 +405,26 @@ class ZNormalized(Transform):
         data: dict
             Updated dictionary with normalized "image" tensor.
         """
-        mn = data[self.image_key].mean()
-        sd = data[self.image_key].std()
-        data[self.image_key] = (data[self.image_key] - mn) / sd
-        return data
+
+        # Work on a copy of the input dictionary data
+        d = dict(data)
+
+        mn = d[self.image_key].mean()
+        sd = d[self.image_key].std()
+        d[self.image_key] = (d[self.image_key] - mn) / sd
+        return d
 
 
 class ClippedZNormalize(Transform):
     """Standardize the passed tensor by subtracting the mean and dividing by the standard deviation."""
 
     def __init__(
-        self, mean: float, std: float, min_clip: float, max_clip: float
+        self,
+        mean: float,
+        std: float,
+        min_clip: float,
+        max_clip: float,
+        in_place: bool = True,
     ) -> None:
         """Constructor"""
         super().__init__()
@@ -257,6 +432,7 @@ class ClippedZNormalize(Transform):
         self.std = np.max([std, 1e-8])
         self.min_clip = min_clip
         self.max_clip = max_clip
+        self.in_place = in_place
 
     def __call__(self, data: torch.Tensor) -> torch.Tensor:
         """
@@ -268,12 +444,22 @@ class ClippedZNormalize(Transform):
         data: torch.Tensor
             Normalized tensor.
         """
+        if not self.in_place:
+            if isinstance(data, torch.Tensor):
+                data = data.clone()
+            elif isinstance(data, np.ndarray):
+                data = data.copy()
+            else:
+                raise TypeError(
+                    "Unsupported data type. Data should be a PyTorch Tensor or a NumPy array."
+                )
+
         tmp = torch.clip(data, self.min_clip, self.max_clip)
         tmp = (tmp - self.mean) / self.std
         return tmp
 
 
-class ClippedZNormalized(Transform):
+class ClippedZNormalized(MapTransform):
     """Standardize the "image" tensor by subtracting the mean and dividing by the standard deviation."""
 
     def __init__(
@@ -285,7 +471,7 @@ class ClippedZNormalized(Transform):
         image_key: str = "image",
     ) -> None:
         """Constructor"""
-        super().__init__()
+        super().__init__(keys=[image_key])
         self.image_key = image_key
         self.mean = mean
         self.std = np.max([std, 1e-8])
@@ -302,14 +488,16 @@ class ClippedZNormalized(Transform):
         data: dict
             Updated dictionary with normalized "image" tensor.
         """
-        data[self.image_key] = torch.clip(
-            data[self.image_key], self.min_clip, self.max_clip
-        )
-        data[self.image_key] = (data[self.image_key] - self.mean) / self.std
-        return data
+
+        # Work on a copy of the input dictionary data
+        d = dict(data)
+
+        d[self.image_key] = torch.clip(d[self.image_key], self.min_clip, self.max_clip)
+        d[self.image_key] = (d[self.image_key] - self.mean) / self.std
+        return d
 
 
-class SelectPatchesByLabeld(Transform):
+class SelectPatchesByLabeld(MapTransform):
     """Pick labels at random and extract the requested window from both label and image."""
 
     def __init__(
@@ -340,7 +528,7 @@ class SelectPatchesByLabeld(Transform):
             tensor. This ensures that the dataloader does not require a custom collate function to handle the double
             batching. If num_windows > 1, this parameter is ignored.
         """
-        super().__init__()
+        super().__init__(keys=[image_key, label_key])
         self.label_key = label_key
         self.image_key = image_key
         self.patch_size = patch_size
@@ -446,6 +634,7 @@ class AddFFT2(Transform):
         std_real: Optional[float] = None,
         mean_imag: Optional[float] = None,
         std_imag: Optional[float] = None,
+        in_place: bool = True,
     ) -> None:
         """Constructor"""
         super().__init__()
@@ -453,6 +642,7 @@ class AddFFT2(Transform):
         self.std_real = std_real
         self.mean_imag = mean_imag
         self.std_imag = std_imag
+        self.in_place = in_place
 
     def __call__(self, data: torch.Tensor) -> torch.Tensor:
         """
@@ -483,6 +673,10 @@ class AddFFT2(Transform):
         else:
             f.imag = (f.imag - f.imag.mean()) / f.imag.std()
 
+        # Do we modify the input Tensor in place?
+        if not self.in_place:
+            data = data.clone()
+
         # Add it as a new plane
         data = torch.cat((data, f.real, f.imag), dim=0)
 
@@ -490,7 +684,7 @@ class AddFFT2(Transform):
         return data
 
 
-class AddFFT2d(Transform):
+class AddFFT2d(MapTransform):
     """Calculates the Fourier transform of the selected single-channel image and adds its z-normalized real
     and imaginary parts as two additional planes."""
 
@@ -510,7 +704,7 @@ class AddFFT2d(Transform):
         image_key: str
             Key for the image in the data dictionary.
         """
-        super().__init__()
+        super().__init__(keys=[image_key])
         self.image_key = image_key
         self.mean_real = mean_real
         self.std_real = std_real
@@ -547,14 +741,17 @@ class AddFFT2d(Transform):
         else:
             f.imag = (f.imag - f.imag.mean()) / f.imag.std()
 
+        # Make a copy of the original dictionary
+        d = dict(data)
+
         # Add it as a new plane
-        data[self.image_key] = torch.cat((data[self.image_key], f.real, f.imag), dim=0)
+        d[self.image_key] = torch.cat((d[self.image_key], f.real, f.imag), dim=0)
 
         # Return the updated data dictionary
-        return data
+        return d
 
 
-class AddBorderd(Transform):
+class AddBorderd(MapTransform):
     """Add a border class to the (binary) label image.
 
     Please notice that the border is obtained from the erosion of the objects (that is, it does not extend outside of the original connected components.
@@ -571,7 +768,7 @@ class AddBorderd(Transform):
         border_width: int
             Width of the border to be eroded from the binary image and added as new class.
         """
-        super().__init__()
+        super().__init__(keys=[label_key])
         self.label_key = label_key
         self.border_width = border_width
 
@@ -594,15 +791,18 @@ class AddBorderd(Transform):
             Updated dictionary with new and "label" tensor.
         """
 
-        # Make sure the label datatype is torch.int32
-        if type(data["label"]) is np.ndarray:
-            data["label"] = torch.Tensor(data["label"].astype(np.int32)).to(torch.int32)
+        # Make a copy of the input dictionary
+        d = dict(data)
 
-        if data["label"].dtype != torch.int32:
-            data["label"] = data["label"].to(torch.int32)
+        # Make sure the label datatype is torch.int32
+        if type(d["label"]) is np.ndarray:
+            d["label"] = torch.Tensor(d["label"].astype(np.int32)).to(torch.int32)
+
+        if d["label"].dtype != torch.int32:
+            d["label"] = d["label"].to(torch.int32)
 
         # Get the 2D label image to work with
-        label_img = data["label"][..., :, :].squeeze()
+        label_img = d["label"][..., :, :].squeeze()
 
         # Make sure there are only two classes: background and foreground
         if len(torch.unique(label_img)) > 2:
@@ -612,45 +812,43 @@ class AddBorderd(Transform):
         footprint = torch.tensor(disk(self.border_width), dtype=torch.int32)
 
         # Number of dimensions in the data tensor
-        num_dims = len(data["label"].shape)
+        num_dims = len(d["label"].shape)
 
         # Prepare the input
         if num_dims == 2:
 
             # Add batch and channel dimension
-            label_batch = data["label"].unsqueeze(0).unsqueeze(0)
+            label_batch = d["label"].unsqueeze(0).unsqueeze(0)
 
             # Process and update
-            data["label"] = (
+            d["label"] = (
                 self.process_label(label_batch, footprint).squeeze(0).squeeze(0)
             )
 
         elif num_dims == 3:
             # We have a channel dimension: make sure there only one channel!
-            if data["label"].shape[0] > 1:
+            if d["label"].shape[0] > 1:
                 raise ValueError("The label image must be binary!")
 
             # Add batch dimension
-            label_batch = data["label"].unsqueeze(0)
+            label_batch = d["label"].unsqueeze(0)
 
             # Process and update
-            data["label"][0, :, :] = self.process_label(label_batch, footprint).squeeze(
-                0
-            )
+            d["label"][0, :, :] = self.process_label(label_batch, footprint).squeeze(0)
 
         elif num_dims == 4:
 
             # We have a batch. Make sure that there is only one channel!
-            if data["label"][0].shape[0] > 1:
+            if d["label"][0].shape[0] > 1:
                 raise ValueError("The label image must be binary!")
 
             # Process and update
-            data["label"] = self.process_label(data["label"], footprint)
+            d["label"] = self.process_label(d["label"], footprint)
 
         else:
             raise ValueError('Unexpected number of dimensions for data["label"].')
 
-        return data
+        return d
 
 
 class AddNormalizedDistanceTransform(Transform):
@@ -658,9 +856,7 @@ class AddNormalizedDistanceTransform(Transform):
     and adds it as an additional plane to the image."""
 
     def __init__(
-        self,
-        pixel_class: int = 1,
-        reverse: bool = False,
+        self, pixel_class: int = 1, reverse: bool = False, in_place: bool = True
     ) -> None:
         """Constructor
 
@@ -677,8 +873,9 @@ class AddNormalizedDistanceTransform(Transform):
         super().__init__()
         self.pixel_class = pixel_class
         self.reverse = reverse
+        self.in_place = in_place
 
-    def __call__(self, data: np.ndarray) -> np.ndarray:
+    def __call__(self, data: np.ndarray) -> torch.Tensor:
         """
         Calculates and normalizes the distance transform per region of the selected pixel class from a labels image
         and adds it as an additional plane to the image.
@@ -725,7 +922,7 @@ class AddNormalizedDistanceTransform(Transform):
         return data
 
 
-class AddNormalizedDistanceTransformd(Transform):
+class AddNormalizedDistanceTransformd(MapTransform):
     """Calculates and normalizes the distance transform per region of the selected pixel class from a labels image
     and adds it as an additional plane to the image."""
 
@@ -754,7 +951,7 @@ class AddNormalizedDistanceTransformd(Transform):
             Whether to reverse the direction of the normalized distance transform: from 1.0 at the center of the
             objects and 0.0 at the periphery, to 0.0 at the center and 1.0 at the periphery.
         """
-        super().__init__()
+        super().__init__(keys=[image_key, label_key])
         self.image_key = image_key
         self.label_key = label_key
         self.pixel_class = pixel_class
@@ -772,11 +969,14 @@ class AddNormalizedDistanceTransformd(Transform):
             Updated dictionary with modified "image" tensor.
         """
 
+        # Make a copy of the input dictionary
+        d = dict(data)
+
         # This Transform works on NumPy arrays
-        if data["label"].dtype in [torch.float32, torch.int32]:
-            data_label = np.array(data["label"].cpu())
+        if d["label"].dtype in [torch.float32, torch.int32]:
+            data_label = np.array(d["label"].cpu())
         else:
-            data_label = data[self.label_key]
+            data_label = d[self.label_key]
 
         # Make sure that the dimensions of the data are correct
         if not (data_label.ndim == 3 and data_label.shape[0] == 1):
@@ -799,13 +999,13 @@ class AddNormalizedDistanceTransformd(Transform):
         )
 
         # Add the scaled distance transform as a new channel to the input image
-        data[self.image_key] = torch.cat(
-            (data[self.image_key], torch.tensor(dt).unsqueeze(0).to(torch.float32)),
+        d[self.image_key] = torch.cat(
+            (d[self.image_key], torch.tensor(dt).unsqueeze(0).to(torch.float32)),
             dim=0,
         )
 
         # Return the updated data dictionary
-        return data
+        return d
 
 
 class DebugInformer(Transform):
@@ -896,7 +1096,7 @@ class DebugInformer(Transform):
         return data
 
 
-class DebugMinNumVoxelCheckerd(Transform):
+class DebugMinNumVoxelCheckerd(MapTransform):
     """
     Simple reporter to be added to a Composed list of Transforms
     to return some information. The data is returned untouched.
@@ -911,7 +1111,7 @@ class DebugMinNumVoxelCheckerd(Transform):
         class_num: int
             Number of the class to check for presence.
         """
-        super().__init__()
+        super().__init__(keys=keys)
         self.keys = keys
         self.class_num = class_num
         self.min_fraction = min_fraction
@@ -919,8 +1119,11 @@ class DebugMinNumVoxelCheckerd(Transform):
     def __call__(self, data):
         """Call the Transform."""
 
+        # Make a copy of the input dictionary
+        d = dict(data)
+
         # Get the keys
-        keys = data.keys()
+        keys = d.keys()
 
         # Only work on the expected keys
         for key in keys:
@@ -929,22 +1132,22 @@ class DebugMinNumVoxelCheckerd(Transform):
 
             # The Tensor should be in OneHot format, and the class number should
             # map to the index of the first dimension.
-            if self.class_num > (data[key].shape[0] - 1):
+            if self.class_num > (d[key].shape[0] - 1):
                 raise Exception("`num_class` is out of boundaries.")
 
-            num_voxels = data[key][self.class_num].sum()
+            num_voxels = d[key][self.class_num].sum()
             if self.min_fraction == 0.0:
                 if num_voxels > 0:
-                    return data
+                    return d
 
             if self.min_fraction > 0.0:
-                area = data[key].shape[1] * data[key].shape[2]
+                area = d[key].shape[1] * d[key].shape[2]
                 if num_voxels / area >= self.min_fraction:
-                    return data
+                    return d
 
             raise Exception(
                 f"The number of voxels for {self.class_num} is lower than expected ({num_voxels})."
             )
 
         # Return data
-        return data
+        return d

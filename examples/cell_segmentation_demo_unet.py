@@ -136,7 +136,7 @@ if __name__ == "__main__":
         inference_post_transforms=data_module.get_post_inference_transforms(),
         roi_size=PATCH_SIZE,
         batch_size=INFERENCE_BATCH_SIZE,
-        transpose=True,
+        transpose=False,
     )
 
     sys.exit(0)
