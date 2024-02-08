@@ -316,12 +316,13 @@ class UNet(pl.LightningModule):
     @staticmethod
     def full_inference_ensemble(
         models: list,
-        weights: list,
         data_loader: DataLoader,
         target_folder: Union[Path, str],
         inference_post_transforms: Transform,
         roi_size: Tuple[int, int],
         batch_size: int,
+        voting_mechanism: str = "mode",
+        weights: Optional[list] = None,
         overlap: float = 0.25,
         transpose: bool = True,
         save_individual_preds: bool = False,
@@ -333,9 +334,6 @@ class UNet(pl.LightningModule):
 
         models: list
             List of trained UNet models to use for ensemble prediction.
-
-        weights: list
-            List of weights for each of the contributions.
 
         data_loader: DataLoader
             DataLoader for the image files names to be predicted on.
@@ -351,6 +349,16 @@ class UNet(pl.LightningModule):
 
         batch_size: int
             Number of parallel batches to run.
+
+        voting_mechanism: str = "mode"
+            Voting mechanism to assign the final class among the predictions from the ensemble of models.
+            One of "mode" (default" and "mean").
+            "mode": pick the most common class among the predictions for each pixel.
+            "mean": (rounded) weighted mean of the predicted classed per pixel. The `weights` argument defines
+                    the relative contribution of the models.
+
+        weights: Optional[list]
+            List of weights for each of the contributions. Only used if `voting_mechanism` is "mean".
 
         overlap: float
             Fraction of overlap between rois.
@@ -368,24 +376,30 @@ class UNet(pl.LightningModule):
             True if the inference was successful, False otherwise.
         """
 
-        if len(models) != len(weights):
-            raise ValueError("The number of weights must match the number of models.")
+        if voting_mechanism not in ["mode", "mean"]:
+            raise ValueError("`voting mechanism` must be one of 'mode' or 'mean'.")
+
+        if voting_mechanism == "mean":
+            if len(models) != len(weights):
+                raise ValueError(
+                    "The number of weights must match the number of models."
+                )
+
+            # Turn the weights into a NumPy array of float 32 bit
+            weights = np.array(weights, dtype=np.float32)
+            weights = weights / weights.sum()
 
         if not isinstance(models[0], UNet) or not hasattr(models[0], "net"):
             raise ValueError("The models must be of type `qute.models.unet.UNet`.")
 
-        # Turn the weights into a NumPy array of float 32 bit
-        weights = np.array(weights, dtype=np.float32)
-        weights = weights / weights.sum()
-
         # Make sure the target folder exists
         Path(target_folder).mkdir(parents=True, exist_ok=True)
 
-        # If needed, create the sub-folders for the invidual predictions
+        # If needed, create the sub-folders for the individual predictions
         if save_individual_preds:
             for f in range(len(models)):
-                fold_subolder = Path(target_folder) / f"fold_{f}"
-                Path(fold_subolder).mkdir(parents=True, exist_ok=True)
+                fold_subfolder = Path(target_folder) / f"fold_{f}"
+                Path(fold_subfolder).mkdir(parents=True, exist_ok=True)
         # Device
         device = get_device()
 
@@ -394,7 +408,7 @@ class UNet(pl.LightningModule):
             model.net.eval()
 
         c = 0
-        with torch.no_grad():
+        with (torch.no_grad()):
             for images in data_loader:
 
                 predictions = [[] for _ in range(len(models))]
@@ -432,16 +446,44 @@ class UNet(pl.LightningModule):
                     predictions[n] = stored_preds
 
                 # Iterate over all images in the batch
-                for i in range(len(predictions[0])):
+                pred_dim = len(models)
+                batch_dim = len(predictions[0])
 
-                    # Iterate over all predictions from the models
-                    for j in range(len(predictions)):
+                for b in range(batch_dim):
 
-                        if j == 0:
-                            ensemble_pred = weights[j] * predictions[j][i]
-                        else:
-                            ensemble_pred += weights[j] * predictions[j][i]
-                    ensemble_pred = np.round(ensemble_pred).astype(np.int32)
+                    # Apply selected voting mechanism
+                    if voting_mechanism == "mean":
+                        # Apply weighted mean (and rounding) of the predictions per pixel
+
+                        # Iterate over all predictions from the models
+                        for p in range(pred_dim):
+                            if p == 0:
+                                ensemble_pred = weights[p] * predictions[p][b]
+                            else:
+                                ensemble_pred += weights[p] * predictions[p][b]
+                        ensemble_pred = np.round(ensemble_pred).astype(np.int32)
+
+                    elif voting_mechanism == "mode":
+                        # Select the mode of the predictions per pixel
+
+                        # Store predictions in a stack
+                        target = np.zeros(
+                            (
+                                pred_dim,
+                                predictions[0][0].shape[0],
+                                predictions[0][0].shape[1],
+                            )
+                        )
+
+                        # Iterate over all predictions from the models
+                        for p in range(pred_dim):
+                            target[p, :, :] = predictions[p][b]
+                        values, _ = torch.mode(torch.tensor(target), dim=0)
+                        ensemble_pred = values.numpy().astype(np.int32)
+                    else:
+                        raise ValueError(
+                            "`voting mechanism` must be one of 'mode' or 'mean'."
+                        )
 
                     # Save ensemble prediction image as tiff file
                     output_name = Path(target_folder) / f"ensemble_pred_{c:04}.tif"
@@ -454,13 +496,13 @@ class UNet(pl.LightningModule):
                     # Save individual predictions?
                     if save_individual_preds:
                         # Iterate over all predictions from the models
-                        for j in range(len(predictions)):
+                        for p in range(len(predictions)):
                             # Save prediction image as tiff file
                             output_name = (
-                                Path(target_folder) / f"fold_{j}" / f"pred_{c:04}.tif"
+                                Path(target_folder) / f"fold_{p}" / f"pred_{c:04}.tif"
                             )
                             with TiffWriter(output_name) as tif:
-                                tif.write(predictions[j][i])
+                                tif.write(predictions[p][b])
 
                     # Update global file counter c
                     c += 1

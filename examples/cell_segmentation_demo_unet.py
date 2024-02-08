@@ -121,6 +121,8 @@ if __name__ == "__main__":
     print(f"Best model: {model_checkpoint.best_model_path}")
 
     # Load weights from best model
+    # For more flexibility, see:
+    # https://lightning.ai/docs/pytorch/stable/common/checkpointing_basic.html#initialize-with-other-parameters
     model = UNet.load_from_checkpoint(model_checkpoint.best_model_path)
 
     # Test

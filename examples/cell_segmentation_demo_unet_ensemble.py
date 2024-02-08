@@ -24,6 +24,7 @@ from pytorch_lightning.callbacks import (
     LearningRateMonitor,
     ModelCheckpoint,
 )
+from torch.optim.lr_scheduler import OneCycleLR
 
 from qute.data.demos import CellSegmentationDemo
 from qute.models.unet import UNet
@@ -33,7 +34,11 @@ BATCH_SIZE = 8
 INFERENCE_BATCH_SIZE = 4
 NUM_PATCHES = 1
 PATCH_SIZE = (640, 640)
-PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
+LEARNING_RATE = 0.001
+try:
+    PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
+except AssertionError:
+    PRECISION = 32
 MAX_EPOCHS = 250
 EXP_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
 MODEL_DIR = Path(userpaths.get_my_documents()) / "qute" / "models" / EXP_NAME
@@ -52,7 +57,6 @@ if __name__ == "__main__":
         patch_size=PATCH_SIZE,
         num_patches=NUM_PATCHES,
         inference_batch_size=INFERENCE_BATCH_SIZE,
-        num_workers=os.cpu_count() - 1,
     )
 
     # Run the prepare/setup steps
@@ -71,6 +75,16 @@ if __name__ == "__main__":
         # Set the fold for current training
         data_module.set_fold(fold)
 
+        # Learning rate scheduler
+        lr_scheduler_class = OneCycleLR
+        lr_scheduler_parameters = {
+            "total_steps": len(data_module.train_dataloader()) * MAX_EPOCHS,
+            "div_factor": 5.0,
+            "max_lr": LEARNING_RATE,
+            "pct_start": 0.5,  # Fraction of total_steps at which the learning rate starts decaying after reaching max_lr
+            "anneal_strategy": "cos",
+        }
+
         # Initialize new UNet model
         model = UNet(
             in_channels=1,
@@ -82,7 +96,9 @@ if __name__ == "__main__":
             metrics=metrics,
             val_metrics_transforms=data_module.get_val_metrics_transforms(),
             test_metrics_transforms=data_module.get_test_metrics_transforms(),
-            learning_rate=1e-2,
+            learning_rate=LEARNING_RATE,
+            lr_scheduler_class=lr_scheduler_class,
+            lr_scheduler_parameters=lr_scheduler_parameters,
         )
 
         # Callbacks
@@ -100,7 +116,8 @@ if __name__ == "__main__":
             accelerator="gpu",
             devices=1,
             precision=PRECISION,
-            callbacks=[model_checkpoint, early_stopping, lr_monitor],
+            # callbacks=[model_checkpoint, early_stopping, lr_monitor],
+            callbacks=[model_checkpoint, lr_monitor],
             max_epochs=MAX_EPOCHS,
             log_every_n_steps=1,
         )
@@ -146,7 +163,6 @@ if __name__ == "__main__":
     # @TODO Weigh the predictions by the final validation metrics
     UNet.full_inference_ensemble(
         models,
-        [1.0] * len(models),
         data_loader=data_module.inference_dataloader(data_module.data_dir / "images/"),
         target_folder=RESULTS_DIR / "ensemble_predictions",
         inference_post_transforms=data_module.get_post_inference_transforms(),
@@ -154,6 +170,8 @@ if __name__ == "__main__":
         batch_size=INFERENCE_BATCH_SIZE,
         transpose=False,
         save_individual_preds=True,
+        voting_mechanism="mode",
+        weights=None,
     )
 
     sys.exit(0)
