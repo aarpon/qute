@@ -51,9 +51,11 @@ def get_cell_segmentation_demo_dataset(
 
     if three_classes:
         dataset_name = "demo_segmentation_3_classes"
+        archive_url = "https://polybox.ethz.ch/index.php/s/YfPPa54ahuSfylJ/download"
         archive_file_size = 69416524
     else:
         dataset_name = "demo_segmentation_2_classes"
+        archive_url = "https://polybox.ethz.ch/index.php/s/Q0H9O5OggjNjJ3s/download"
         archive_file_size = 69831143
 
     # Check if the demo data folder already exists
@@ -79,7 +81,7 @@ def get_cell_segmentation_demo_dataset(
 
     if not archive_found:
         # Get binary stream
-        r = requests.get(f"https://obit.ethz.ch/qute/{dataset_name}.zip")
+        r = requests.get(archive_url)
 
         # Target file
         with open(data_folder / f"{dataset_name}.zip", "wb") as f:
@@ -120,6 +122,9 @@ def get_cell_restoration_demo_dataset(download_dir: Optional[Union[Path, str]] =
     path: Path of the extracted restoration demo dataset.
     """
 
+    # Archive URL
+    archive_url = "https://polybox.ethz.ch/index.php/s/3UWRc7hKLfop4s8/download"
+
     # Data folder
     if download_dir is None:
         data_folder = Path(userpaths.get_my_documents()) / "qute" / "data"
@@ -152,7 +157,7 @@ def get_cell_restoration_demo_dataset(download_dir: Optional[Union[Path, str]] =
 
     if not archive_found:
         # Get binary stream
-        r = requests.get("https://obit.ethz.ch/qute/demo_restoration.zip")
+        r = requests.get(archive_url)
 
         # Target file
         with open(data_folder / "demo_restoration.zip", "wb") as f:
