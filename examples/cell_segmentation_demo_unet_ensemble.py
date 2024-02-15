@@ -26,9 +26,9 @@ from pytorch_lightning.callbacks import (
 )
 from torch.optim.lr_scheduler import OneCycleLR
 
+from qute.campaigns import SegmentationCampaignTransforms
 from qute.data.demos import CellSegmentationDemo
 from qute.models.unet import UNet
-from qute.transforms import SegmentationCampaignTransforms
 
 SEED = 2022
 BATCH_SIZE = 8
@@ -40,7 +40,7 @@ try:
     PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
 except AssertionError:
     PRECISION = 32
-MAX_EPOCHS = 5
+MAX_EPOCHS = 3
 EXP_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
 MODEL_DIR = Path(userpaths.get_my_documents()) / "qute" / "models" / EXP_NAME
 RESULTS_DIR = Path(userpaths.get_my_documents()) / "qute" / "results" / EXP_NAME

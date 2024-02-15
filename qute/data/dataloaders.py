@@ -21,7 +21,7 @@ from natsort import natsorted
 from numpy.random import default_rng
 from sklearn.model_selection import KFold
 
-from qute.transforms import CampaignTransforms
+from qute.campaigns import CampaignTransforms
 
 
 class SegmentationDataModuleLocalFolder(pl.LightningDataModule):

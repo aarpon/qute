@@ -30,8 +30,8 @@ from tifffile import TiffWriter
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import PolynomialLR
 
+from qute.campaigns import CampaignTransforms
 from qute.device import get_device
-from qute.transforms import CampaignTransforms
 
 
 class UNet(pl.LightningModule):

@@ -23,7 +23,6 @@ from scipy.ndimage import distance_transform_edt
 from skimage.measure import label, regionprops
 from skimage.morphology import disk
 from tifffile import imread
-from torch import Tensor
 
 from qute.transforms.util import scale_dist_transform_by_region
 
@@ -282,6 +281,60 @@ class MinMaxNormalized(MapTransform):
         for key in self.keys:
             d[key] = (d[key] - self.min_intensity) / self.range_intensity
         return d
+
+
+class Scale(Transform):
+    """Scale the image by a constant factor and optionally type-casts it."""
+
+    def __init__(
+        self,
+        factor: float = 65535.0,
+        dtype: torch.dtype = torch.int32,
+        in_place: bool = True,
+    ) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+
+        factor: float
+            Factor by which to scale the images (optional, default = 65535.0).
+        dtype: torch.dtype
+            Data type of the final image (optional, default = torch.int32).
+
+        Returns
+        -------
+
+        norm: tensor
+            Normalized tensor.
+        """
+        super().__init__()
+        self.factor = factor
+        self.dtype = dtype
+        self.in_place = in_place
+
+    def __call__(self, data: np.ndarray) -> np.ndarray:
+        """
+        Apply the transform to `image`.
+
+        Returns
+        -------
+
+        result: tensor
+            Tensor or NumPy array with scaled intensities and type-cast.
+        """
+        if not self.in_place:
+            if isinstance(data, torch.Tensor):
+                data = data.clone()
+            elif isinstance(data, np.ndarray):
+                data = data.copy()
+            else:
+                raise TypeError(
+                    "Unsupported data type. Data should be a PyTorch Tensor or a NumPy array."
+                )
+
+        # Process the images
+        return (data * self.factor).to(self.dtype)
 
 
 class Scaled(MapTransform):

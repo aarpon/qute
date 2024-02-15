@@ -13,37 +13,13 @@ import os
 from pathlib import Path
 from typing import Optional, Union
 
-import torch
 import userpaths
-from monai.transforms import (
-    Activations,
-    AsDiscrete,
-    AsDiscreted,
-    Compose,
-    RandCropByPosNegLabeld,
-    RandGaussianNoised,
-    RandGaussianSmoothd,
-    RandRotate90d,
-    RandSpatialCropd,
-    Transform,
-)
-from natsort import natsorted
-from numpy.random import default_rng
-from sklearn.model_selection import KFold
 
+from qute.campaigns import CampaignTransforms
 from qute.data.dataloaders import SegmentationDataModuleLocalFolder
 from qute.data.io import (
     get_cell_restoration_demo_dataset,
     get_cell_segmentation_demo_dataset,
-)
-from qute.transforms import (
-    CampaignTransforms,
-    CustomTIFFReader,
-    CustomTIFFReaderd,
-    ToLabel,
-    ToPyTorchLightningOutputd,
-    ZNormalize,
-    ZNormalized,
 )
 
 
@@ -188,6 +164,7 @@ class CellRestorationDemo(SegmentationDataModuleLocalFolder):
 
     def __init__(
         self,
+        campaign_transforms: CampaignTransforms,
         download_dir: Union[Path, str, None] = None,
         num_folds: int = 1,
         train_fraction: float = 0.7,
@@ -197,12 +174,8 @@ class CellRestorationDemo(SegmentationDataModuleLocalFolder):
         inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
         num_patches: int = 1,
-        train_transforms: Optional[Transform] = None,
-        val_transforms: Optional[Transform] = None,
-        test_transforms: Optional[Transform] = None,
-        inference_transforms: Optional[Transform] = None,
         images_sub_folder: str = "images",
-        labels_sub_folder: str = "labels",
+        labels_sub_folder: str = "targets",
         seed: int = 42,
         num_workers: Optional[int] = os.cpu_count() - 1,
         num_inference_workers: Optional[int] = os.cpu_count() - 1,
@@ -213,6 +186,10 @@ class CellRestorationDemo(SegmentationDataModuleLocalFolder):
 
         Parameters
         ----------
+
+        campaign_transforms: CampaignTransforms
+            Define all transforms necessary for training, validation, testing and (full) prediction.
+            @see `qute.transforms.CampaignTransforms` for documentation.
 
         download_dir: Path | str = Path()
             Directory where the cell segmentation datasets will be downloaded and extracted.
@@ -245,15 +222,6 @@ class CellRestorationDemo(SegmentationDataModuleLocalFolder):
         num_patches: int = 1
             Number of patches per image to be extracted (and collated in the batch).
 
-        train_transforms: Optional[list] = None
-            Dictionary transforms to be applied to the training images and labels. If omitted some default transforms will be applied.
-
-        val_transforms: Optional[list] = None
-            Dictionary transforms to be applied to the validation images and labels. If omitted some default transforms will be applied.
-
-        test_transforms: Optional[list] = None
-            Dictionary transforms to be applied to the test images and labels. If omitted some default transforms will be applied.
-
         images_sub_folder: str = "images"
             Name of the images sub-folder. It can be used to override the default "images".
 
@@ -285,6 +253,7 @@ class CellRestorationDemo(SegmentationDataModuleLocalFolder):
 
         # Call base constructor
         super().__init__(
+            campaign_transforms=campaign_transforms,
             data_dir=data_dir,
             num_folds=num_folds,
             train_fraction=train_fraction,
@@ -294,10 +263,6 @@ class CellRestorationDemo(SegmentationDataModuleLocalFolder):
             inference_batch_size=inference_batch_size,
             patch_size=patch_size,
             num_patches=num_patches,
-            train_transforms=train_transforms,
-            val_transforms=val_transforms,
-            test_transforms=test_transforms,
-            inference_transforms=inference_transforms,
             images_sub_folder=images_sub_folder,
             labels_sub_folder=labels_sub_folder,
             seed=seed,

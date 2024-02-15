@@ -9,6 +9,7 @@
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
 
+
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -16,19 +17,19 @@ from pathlib import Path
 import pytorch_lightning as pl
 import torch
 import userpaths
-from monai.losses import DiceCELoss
-from monai.metrics import DiceMetric
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import (
     EarlyStopping,
     LearningRateMonitor,
     ModelCheckpoint,
 )
+from torch.nn import MSELoss
 from torch.optim.lr_scheduler import OneCycleLR
+from torchmetrics import MeanAbsoluteError
 
 from qute import device
-from qute.campaigns import SegmentationCampaignTransforms
-from qute.data.demos import CellSegmentationDemo
+from qute.campaigns import RestorationCampaignTransforms
+from qute.data.demos import CellRestorationDemo
 from qute.models.unet import UNet
 
 SEED = 2022
@@ -50,26 +51,30 @@ if __name__ == "__main__":
     # Seeding
     seed_everything(SEED, workers=True)
 
-    # Initialize default, example Segmentation Campaign Transform
-    campaign_transforms = SegmentationCampaignTransforms(
-        num_classes=3, patch_size=PATCH_SIZE, num_patches=NUM_PATCHES
+    # Initialize default, example Restoration Campaign Transform
+    campaign_transforms = RestorationCampaignTransforms(
+        min_intensity=0,
+        max_intensity=15472,
+        patch_size=PATCH_SIZE,
+        num_patches=NUM_PATCHES,
     )
 
     # Data module
-    data_module = CellSegmentationDemo(
+    data_module = CellRestorationDemo(
         campaign_transforms=campaign_transforms,
         seed=SEED,
         batch_size=BATCH_SIZE,
         patch_size=PATCH_SIZE,
         num_patches=NUM_PATCHES,
         inference_batch_size=INFERENCE_BATCH_SIZE,
+        labels_sub_folder="targets",
     )
 
     # Loss
-    criterion = DiceCELoss(include_background=True, to_onehot_y=False, softmax=True)
+    criterion = MSELoss()
 
     # Metrics
-    metrics = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
+    metrics = MeanAbsoluteError()
 
     # Learning rate scheduler
     lr_scheduler_class = OneCycleLR
@@ -85,11 +90,11 @@ if __name__ == "__main__":
     model = UNet(
         campaign_transforms=campaign_transforms,
         in_channels=1,
-        out_channels=3,
+        out_channels=1,
         num_res_units=4,
         criterion=criterion,
-        channels=(16, 32, 64),
-        strides=(2, 2),
+        channels=(16, 32, 64, 128),
+        strides=(2, 2, 2),
         metrics=metrics,
         learning_rate=LEARNING_RATE,
         lr_scheduler_class=lr_scheduler_class,

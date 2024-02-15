@@ -22,9 +22,10 @@ from pytorch_lightning import seed_everything
 from pytorch_lightning.loggers import TensorBoardLogger
 from ray import air, tune
 from ray.tune import CLIReporter
-from ray.tune.integration.pytorch_lightning import TuneReportCallback
+from ray.tune.integration.pytorch_lightning import TuneReportCheckpointCallback
 from ray.tune.schedulers import ASHAScheduler
 
+from qute.campaigns import SegmentationCampaignTransforms
 from qute.data.demos import CellSegmentationDemo
 from qute.models.unet import UNet
 
@@ -40,7 +41,7 @@ BATCH_SIZE = 32
 INFERENCE_BATCH_SIZE = 4
 PATCH_SIZE = (512, 512)
 PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
-MAX_EPOCHS = 250
+MAX_EPOCHS = 2000
 
 
 def train_fn(config, criterion, metrics, num_epochs=MAX_EPOCHS, num_gpus=1):
@@ -53,8 +54,14 @@ def train_fn(config, criterion, metrics, num_epochs=MAX_EPOCHS, num_gpus=1):
     num_patches = config["num_patches"]
     batch_size = config["batch_size"]
 
+    # Initialize default, example Segmentation Campaign Transform
+    campaign_transforms = SegmentationCampaignTransforms(
+        num_classes=3, patch_size=PATCH_SIZE, num_patches=num_patches
+    )
+
     # Instantiate data module
     data_module = CellSegmentationDemo(
+        campaign_transforms=campaign_transforms,
         seed=SEED,
         batch_size=batch_size,
         patch_size=patch_size,
@@ -64,21 +71,20 @@ def train_fn(config, criterion, metrics, num_epochs=MAX_EPOCHS, num_gpus=1):
 
     # Instantiate the model
     model = UNet(
-        in_channels=2,
+        campaign_transforms=campaign_transforms,
+        in_channels=1,
         out_channels=3,
         num_res_units=num_res_units,
         criterion=criterion,
         channels=channels,
         strides=None,
         metrics=metrics,
-        val_metrics_transforms=data_module.get_val_metrics_transforms(),
-        test_metrics_transforms=data_module.get_test_metrics_transforms(),
         learning_rate=learning_rate,
         dropout=dropout,
     )
 
     # Tune report callback
-    report_callback = TuneReportCallback(
+    report_callback = TuneReportCheckpointCallback(
         {"loss": "val_loss", "dice": "val_metrics"}, on="validation_end"
     )
 
@@ -103,7 +109,7 @@ def tune_fn(criterion, metrics, num_samples=10, num_epochs=MAX_EPOCHS):
         "learning_rate": tune.loguniform(0.0005, 0.5),
         "channels": tune.choice([(16, 32), (16, 32, 64), (32, 64), (32, 64, 128)]),
         "dropout": tune.choice([0, 0.1, 0.2, 0.3, 0.4, 0.5]),
-        "patch_size": tune.choice([(256, 256), (384, 384), (512, 512)]),
+        "patch_size": tune.choice([(256, 256), (384, 384), (512, 512), (640, 640)]),
         "num_patches": tune.choice([1, 2, 4, 8]),
         "batch_size": tune.choice([1, 2, 4, 8]),
     }
