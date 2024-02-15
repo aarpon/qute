@@ -219,11 +219,11 @@ class UNet(pl.LightningModule):
         self,
         data_loader: DataLoader,
         target_folder: Union[Path, str],
-        # inference_post_transforms: Transform,
         roi_size: Tuple[int, int],
         batch_size: int,
         overlap: float = 0.25,
         transpose: bool = True,
+        output_dtype: Optional[np.dtype] = None,
     ):
         """Run inference on full images using given model.
 
@@ -247,6 +247,9 @@ class UNet(pl.LightningModule):
 
         transpose: bool
             Whether the transpose the image before saving, to compensate for the default behavior of monai.transforms.LoadImage().
+
+        output_dtype: Optional[np.dtype]
+            Optional NumPy dtype for the output image. Omit to save the output of inference without casting.
 
         Returns
         -------
@@ -296,6 +299,10 @@ class UNet(pl.LightningModule):
                         # Transpose to undo the effect of monai.transform.LoadImage(d)
                         pred = pred.T
 
+                    # Type-cast if needed
+                    if output_dtype is not None:
+                        pred = pred.astype(output_dtype)
+
                     # Save prediction image as tiff file
                     output_name = Path(target_folder) / f"pred_{c:04}.tif"
                     c += 1
@@ -323,6 +330,7 @@ class UNet(pl.LightningModule):
         overlap: float = 0.25,
         transpose: bool = True,
         save_individual_preds: bool = False,
+        output_dtype: Optional[np.dtype] = None,
     ):
         """Run inference on full images using given model.
 
@@ -365,6 +373,9 @@ class UNet(pl.LightningModule):
 
         save_individual_preds: bool
             Whether to save the individual predictions of each model.
+
+        output_dtype: Optional[np.dtype]
+            Optional NumPy dtype for the output image. Omit to save the output of inference without casting.
 
         Returns
         -------
@@ -482,6 +493,10 @@ class UNet(pl.LightningModule):
                             "`voting mechanism` must be one of 'mode' or 'mean'."
                         )
 
+                    # Type-cast if needed
+                    if output_dtype is not None:
+                        ensemble_pred = ensemble_pred.astype(output_dtype)
+
                     # Save ensemble prediction image as tiff file
                     output_name = Path(target_folder) / f"ensemble_pred_{c:04}.tif"
                     with TiffWriter(output_name) as tif:
@@ -498,8 +513,17 @@ class UNet(pl.LightningModule):
                             output_name = (
                                 Path(target_folder) / f"fold_{p}" / f"pred_{c:04}.tif"
                             )
+
+                            # Get current prediction
+                            current_pred = predictions[p][b]
+
+                            # Type-cast if needed
+                            if output_dtype is not None:
+                                current_pred = current_pred.astype(output_dtype)
+
+                            # Save
                             with TiffWriter(output_name) as tif:
-                                tif.write(predictions[p][b])
+                                tif.write(current_pred)
 
                     # Update global file counter c
                     c += 1

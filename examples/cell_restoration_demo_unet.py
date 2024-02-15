@@ -14,6 +14,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
 import userpaths
@@ -148,6 +149,7 @@ if __name__ == "__main__":
         roi_size=PATCH_SIZE,
         batch_size=INFERENCE_BATCH_SIZE,
         transpose=False,
+        output_dtype=np.uint16,
     )
 
     sys.exit(0)
