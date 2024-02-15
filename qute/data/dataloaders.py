@@ -1,3 +1,14 @@
+# ******************************************************************************
+# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# All rights reserved. This program and the accompanying materials
+# are made available under the terms of the Apache License Version 2.0
+# which accompanies this distribution, and is available at
+# https://www.apache.org/licenses/LICENSE-2.0.txt
+#
+# Contributors:
+#   Aaron Ponti - initial API and implementation
+# ******************************************************************************
+
 import os
 import time
 from pathlib import Path
@@ -5,31 +16,12 @@ from typing import Optional, Union
 
 import numpy as np
 import pytorch_lightning as pl
-import torch
 from monai.data import ArrayDataset, DataLoader, Dataset, list_data_collate
-from monai.transforms import (
-    Activations,
-    AsDiscrete,
-    AsDiscreted,
-    Compose,
-    RandCropByPosNegLabeld,
-    RandGaussianNoised,
-    RandGaussianSmoothd,
-    RandRotate90d,
-    Transform,
-)
 from natsort import natsorted
 from numpy.random import default_rng
 from sklearn.model_selection import KFold
 
-from qute.transforms import (
-    CustomTIFFReader,
-    CustomTIFFReaderd,
-    ToLabel,
-    ToPyTorchLightningOutputd,
-    ZNormalize,
-    ZNormalized,
-)
+from qute.transforms import CampaignTransforms
 
 
 class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
@@ -37,6 +29,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
 
     def __init__(
         self,
+        campaign_transforms: CampaignTransforms,
         data_dir: Union[Path, str] = Path(),
         num_classes: int = 3,
         num_folds: int = 1,
@@ -47,13 +40,6 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
         num_patches: int = 1,
-        train_transforms_dict: Optional[Transform] = None,
-        val_transforms_dict: Optional[Transform] = None,
-        test_transforms_dict: Optional[Transform] = None,
-        inference_transforms_dict: Optional[Transform] = None,
-        post_inference_transforms_dict: Optional[Transform] = None,
-        val_metrics_transforms_dict: Optional[Transform] = None,
-        test_metrics_transforms_dict: Optional[Transform] = None,
         images_sub_folder: str = "images",
         labels_sub_folder: str = "labels",
         seed: int = 42,
@@ -66,6 +52,10 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
 
         Parameters
         ----------
+
+        campaign_transforms: CampaignTransforms
+            Define all transforms necessary for training, validation, testing and (full) prediction.
+            @see `qute.transforms.CampaignTransforms` for documentation.
 
         data_dir: Path | str = Path()
             Data directory, containing two sub-folders "images" and "labels". The subfolder names can be overwritten.
@@ -104,34 +94,6 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         num_patches: int = 1
             Number of patches per image to be extracted (and collated in the batch).
 
-        train_transforms_dict: Optional[list] = None
-            Dictionary transforms to be applied to the training images and labels.
-            If omitted some default transforms will be applied.
-
-        val_transforms_dict: Optional[list] = None
-            Dictionary transforms to be applied to the validation images and labels.
-            If omitted some default transforms will be applied.
-
-        test_transforms_dict: Optional[list] = None
-            Dictionary transforms to be applied to the test images and labels.
-            If omitted some default transforms will be applied.
-
-        inference_transforms_dict: Optional[Transform] = None
-            Dictionary transforms to be applied to the images for inference.
-            If omitted some default transforms will be applied.
-
-        post_inference_transforms_dict: Optional[Transform] = None
-            Dictionary transforms to be applied to the inference output to create the final image.
-            If omitted some default transforms will be applied.
-
-        val_metrics_transforms_dict: Optional[Transform] = None
-            Dictionary transforms to be applied to the validation output to compatible to the selected metrics.
-            If omitted some default transforms will be applied.
-
-        test_metrics_transforms_dict: Optional[Transform] = None
-            Dictionary transforms to be applied to the test output to compatible to the selected metrics.
-            If omitted, it will default to the val_metrics_transforms_dict.
-
         images_sub_folder: str = "images"
             Name of the images sub-folder. It can be used to override the default "images".
 
@@ -152,6 +114,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         """
 
         super().__init__()
+        self.campaign_transforms = campaign_transforms
         self.data_dir = Path(data_dir).resolve()
         self.batch_size = batch_size
         self.inference_batch_size = inference_batch_size
@@ -167,57 +130,6 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         # Set the sub-folder names
         self.images_sub_folder = images_sub_folder
         self.labels_sub_folder = labels_sub_folder
-
-        # Set the training transforms if passed
-        self.train_transforms_dict = None
-        if train_transforms_dict is not None:
-            self.train_transforms_dict = train_transforms_dict
-        else:
-            self.train_transforms_dict = self.__default_train_transforms_dict()
-
-        # Set the validation transforms if passed
-        self.val_transforms_dict = None
-        if val_transforms_dict is not None:
-            self.val_transforms_dict = val_transforms_dict
-        else:
-            self.val_transforms_dict = self.__default_val_transforms_dict()
-
-        # Set the test transforms if passed
-        self.test_transforms_dict = None
-        if test_transforms_dict is not None:
-            self.test_transforms_dict = test_transforms_dict
-        else:
-            self.test_transforms_dict = self.__default_test_transforms_dict()
-
-        # Set the inference transforms if passed
-        self.inference_transforms_dict = None
-        if inference_transforms_dict is not None:
-            self.inference_transforms_dict = inference_transforms_dict
-        else:
-            self.inference_transforms_dict = self.__default_inference_transforms()
-
-        # Set the post inference transforms if passed
-        self.post_inference_transforms_dict = None
-        if post_inference_transforms_dict is not None:
-            self.post_inference_transforms_dict = post_inference_transforms_dict
-        else:
-            self.post_inference_transforms_dict = (
-                self.__default_post_inference_transforms()
-            )
-
-        # Set the validation metrics transform
-        self.val_metrics_transforms_dict = None
-        if val_metrics_transforms_dict is not None:
-            self.val_metrics_transforms_dict = val_metrics_transforms_dict
-        else:
-            self.val_metrics_transforms_dict = self.__default_val_metrics_transforms()
-
-        # Set the test metrics transform
-        self.test_metrics_transforms_dict = None
-        if test_metrics_transforms_dict is not None:
-            self.test_metrics_transforms_dict = test_metrics_transforms_dict
-        else:
-            self.test_metrics_transforms_dict = self.__default_test_metrics_transforms()
 
         # Set the seed
         if seed is None:
@@ -349,7 +261,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
             )
         ]
         self.train_dataset = Dataset(
-            data=train_files, transform=self.train_transforms_dict
+            data=train_files, transform=self.campaign_transforms.get_train_transforms()
         )
 
         # Create the validation dataset
@@ -359,7 +271,9 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
                 self._all_images[self._val_indices], self._all_labels[self._val_indices]
             )
         ]
-        self.val_dataset = Dataset(data=val_files, transform=self.val_transforms_dict)
+        self.val_dataset = Dataset(
+            data=val_files, transform=self.campaign_transforms.get_valid_transforms()
+        )
 
         # Create the testing dataset
         test_files = [
@@ -370,7 +284,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
             )
         ]
         self.test_dataset = Dataset(
-            data=test_files, transform=self.test_transforms_dict
+            data=test_files, transform=self.campaign_transforms.get_test_transforms()
         )
 
         # Inform
@@ -434,7 +348,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         # Create a DataSet
         inference_dataset = ArrayDataset(
             image_names,
-            img_transform=self.inference_transforms_dict,
+            img_transform=self.campaign_transforms.get_inference_transforms(),
             seg=None,
             seg_transform=None,
             labels=None,
@@ -450,127 +364,3 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
             pin_memory=self.pin_memory,
             persistent_workers=True,
         )
-
-    def get_train_transforms_dict(self):
-        """Return train set transforms."""
-        return self.train_transforms_dict
-
-    def get_val_transforms_dict(self):
-        """Return validation set transforms."""
-        return self.val_transforms_dict
-
-    def get_test_transforms_dict(self):
-        """Return test set transforms."""
-        return self.test_transforms_dict
-
-    def get_val_metrics_transforms(self):
-        """Return transforms for validation for metric calculation."""
-        return self.val_metrics_transforms_dict
-
-    def get_test_metrics_transforms(self):
-        """Return transforms for testing for metric calculation."""
-        return self.test_metrics_transforms_dict
-
-    def get_inference_transforms(self):
-        """Return inference set transforms."""
-        return self.inference_transforms_dict
-
-    def get_post_inference_transforms(self):
-        """Return post transforms for full inference."""
-        return self.post_inference_transforms_dict
-
-    def __default_train_transforms_dict(self):
-        """Define default training set transforms."""
-        train_transforms = Compose(
-            [
-                CustomTIFFReaderd(
-                    image_key="image",
-                    label_key="label",
-                    ensure_channel_first=True,
-                    dtype=torch.float32,
-                ),
-                RandCropByPosNegLabeld(
-                    keys=["image", "label"],
-                    label_key="label",
-                    spatial_size=self.patch_size,
-                    pos=1.0,
-                    neg=1.0,
-                    num_samples=self.num_patches,
-                    image_key="image",
-                    image_threshold=0.0,
-                    allow_smaller=False,
-                    lazy=False,
-                ),
-                ZNormalized(image_key="image"),
-                RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=(0, 1)),
-                RandGaussianNoised(keys="image", prob=0.2),
-                RandGaussianSmoothd(keys="image", prob=0.2),
-                AsDiscreted(keys=["label"], to_onehot=self.num_classes),
-                ToPyTorchLightningOutputd(),
-            ]
-        )
-        return train_transforms
-
-    def __default_val_transforms_dict(self):
-        """Define default validation set transforms."""
-        val_transforms = Compose(
-            [
-                CustomTIFFReaderd(
-                    image_key="image",
-                    label_key="label",
-                    ensure_channel_first=True,
-                    dtype=torch.float32,
-                ),
-                RandCropByPosNegLabeld(
-                    keys=["image", "label"],
-                    label_key="label",
-                    spatial_size=self.patch_size,
-                    pos=1.0,
-                    neg=1.0,
-                    num_samples=self.num_patches,
-                    image_key="image",
-                    image_threshold=0.0,
-                    allow_smaller=False,
-                    lazy=False,
-                ),
-                ZNormalized(image_key="image"),
-                AsDiscreted(keys=["label"], to_onehot=self.num_classes),
-                ToPyTorchLightningOutputd(),
-            ]
-        )
-        return val_transforms
-
-    def __default_test_transforms_dict(self):
-        """Define default test set transforms."""
-
-        # For testing, we apply the same transforms as by validation
-        return self.__default_val_transforms_dict()
-
-    def __default_val_metrics_transforms(self):
-        """Define default transforms for validation for metric calculation."""
-        post_transforms = Compose(
-            [Activations(sigmoid=True), AsDiscrete(threshold=0.5)]
-        )
-        return post_transforms
-
-    def __default_test_metrics_transforms(self):
-        """Define default transforms for testing for metric calculation."""
-        return self.__default_val_metrics_transforms()
-
-    def __default_inference_transforms(self):
-        """Define default inference set transforms."""
-        inference_transforms = Compose(
-            [
-                CustomTIFFReader(
-                    ensure_channel_first=True,
-                    dtype=torch.float32,
-                ),
-                ZNormalize(),
-            ]
-        )
-        return inference_transforms
-
-    def __default_post_inference_transforms(self):
-        """Define default post transforms for full inference."""
-        post_transforms = Compose([ToLabel()])
-        return post_transforms

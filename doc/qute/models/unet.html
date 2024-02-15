@@ -40,20 +40,23 @@
 #  ******************************************************************************/
 
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
 from monai.data import DataLoader
 from monai.inferers import sliding_window_inference
-from monai.losses import DiceCELoss
+from monai.losses import DiceCELoss, FocalLoss
 from monai.metrics import DiceMetric
 from monai.networks.nets import UNet as MonaiUNet
 from monai.transforms import Transform
+from monai.utils import BlendMode
 from tifffile import TiffWriter
 from torch.optim import AdamW
+from torch.optim.lr_scheduler import PolynomialLR
 
-import qute
+from qute.device import get_device
 
 
 class UNet(pl.LightningModule):
@@ -69,15 +72,18 @@ class UNet(pl.LightningModule):
         in_channels: int = 1,
         out_channels: int = 3,
         channels=(16, 32, 64),
-        strides=(2, 2),
-        criterion=DiceCELoss(include_background=False, to_onehot_y=False, softmax=True),
+        strides: Optional[tuple] = None,
+        criterion=DiceCELoss(include_background=True, to_onehot_y=False, softmax=True),
         metrics=DiceMetric(
-            include_background=False, reduction=&#34;mean&#34;, get_not_nans=False
+            include_background=True, reduction=&#34;mean&#34;, get_not_nans=False
         ),
         val_metrics_transforms=None,
+        test_metrics_transforms=None,
         predict_post_transforms=None,
         learning_rate: float = 1e-2,
         optimizer_class=AdamW,
+        lr_scheduler_class=PolynomialLR,
+        lr_scheduler_parameters: dict = {&#34;total_iters&#34;: 100, &#34;power&#34;: 0.95},
         num_res_units: int = 0,
         dropout: float = 0.0,
     ):
@@ -99,7 +105,7 @@ class UNet(pl.LightningModule):
         channels: tuple = (16, 32, 64)
             Number of neuron per layer.
 
-        strides: tuple = (2, 2)
+        strides: Optional[tuple] = (2, 2)
             Strides for down-sampling.
 
         criterion: DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)
@@ -107,13 +113,16 @@ class UNet(pl.LightningModule):
             The default loss function applies to a multi-label target where the background class is omitted.
 
         metrics: DiceMetric(include_background=False, reduction=&#34;mean&#34;, get_not_nans=False)
-            Metrics used for validation. Set to None to omit.
+            Metrics used for validation and test. Set to None to omit.
 
             The default metrics applies to a three-label target where the background (index = 0) class
             is omitted from calculation.
 
         val_metrics_transforms: None
             Post transform for the output of the forward pass in the validation step for metric calculation.
+
+        test_metrics_transforms: None
+            Post transform for the output of the forward pass in the test step for metric calculation.
 
         predict_post_transforms: None
             Post transform for the output of the forward pass in the prediction step (only).
@@ -123,6 +132,12 @@ class UNet(pl.LightningModule):
 
         optimizer_class=AdamW
             Optimizer.
+
+        lr_scheduler_class=PolynomialLR
+            Learning rate scheduler.
+
+        lr_scheduler_parameters={&#34;total_iters&#34;: 100, &#34;power&#34;: 0.99}
+            Dictionary of scheduler parameters.
 
         num_res_units: int = 0
             Number of residual units for the UNet.
@@ -137,8 +152,13 @@ class UNet(pl.LightningModule):
         self.metrics = metrics
         self.learning_rate = learning_rate
         self.optimizer_class = optimizer_class
+        self.scheduler_class = lr_scheduler_class
+        self.scheduler_parameters = lr_scheduler_parameters
         self.val_metrics_transforms = val_metrics_transforms
+        self.test_metrics_transforms = test_metrics_transforms
         self.predict_post_transforms = predict_post_transforms
+        if strides is None:
+            strides = (2,) * (len(channels) - 1)
         self.net = MonaiUNet(
             spatial_dims=spatial_dims,
             in_channels=in_channels,
@@ -148,12 +168,21 @@ class UNet(pl.LightningModule):
             num_res_units=num_res_units,
             dropout=dropout,
         )
+
+        # Log the hyperparameters
         self.save_hyperparameters(ignore=[&#34;criterion&#34;, &#34;metrics&#34;])
 
     def configure_optimizers(self):
-        &#34;&#34;&#34;Configure and return the optimizer.&#34;&#34;&#34;
+        &#34;&#34;&#34;Configure and return the optimizer and scheduler.&#34;&#34;&#34;
         optimizer = self.optimizer_class(self.parameters(), lr=self.learning_rate)
-        return optimizer
+        scheduler = {
+            &#34;scheduler&#34;: self.scheduler_class(optimizer, **self.scheduler_parameters),
+            &#34;monitor&#34;: &#34;val_loss&#34;,
+            &#34;interval&#34;: &#34;step&#34;,  # Call &#34;scheduler.step()&#34; after every batch (1 step)
+            &#34;frequency&#34;: 1,  # Update scheduler after every step
+            &#34;strict&#34;: True,  # Ensures the scheduler is strictly followed (PyTorch Lightning parameter)
+        }
+        return [optimizer], [scheduler]
 
     def training_step(self, batch, batch_idx):
         &#34;&#34;&#34;Perform a training step.&#34;&#34;&#34;
@@ -168,13 +197,21 @@ class UNet(pl.LightningModule):
         x, y = batch
         y_hat = self.net(x)
         val_loss = self.criterion(y_hat, y)
-        self.log(&#34;val_loss&#34;, torch.tensor([val_loss]), on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            &#34;val_loss&#34;,
+            torch.tensor([val_loss]),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
         if self.metrics is not None:
             if self.val_metrics_transforms is not None:
                 val_metrics = self.metrics(self.val_metrics_transforms(y_hat), y).mean()
             else:
                 val_metrics = self.metrics(y_hat, y).mean()
-            self.log(&#34;val_metrics&#34;, torch.tensor([val_metrics]), on_step=False, on_epoch=True)
+            self.log(
+                &#34;val_metrics&#34;, torch.tensor([val_metrics]), on_step=False, on_epoch=True
+            )
         return val_loss
 
     def test_step(self, batch, batch_idx):
@@ -183,6 +220,19 @@ class UNet(pl.LightningModule):
         y_hat = self.net(x)
         test_loss = self.criterion(y_hat, y)
         self.log(&#34;test_loss&#34;, test_loss)
+        if self.metrics is not None:
+            if self.test_metrics_transforms is not None:
+                test_metrics = self.metrics(
+                    self.test_metrics_transforms(y_hat), y
+                ).mean()
+            else:
+                test_metrics = self.metrics(y_hat, y).mean()
+            self.log(
+                &#34;test_metrics&#34;,
+                torch.tensor([test_metrics]),
+                on_step=False,
+                on_epoch=True,
+            )
         return test_loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
@@ -224,7 +274,7 @@ class UNet(pl.LightningModule):
 
         batch_size: int
             Number of parallel batches to run.
-        
+
         overlap: float
             Fraction of overlap between rois.
 
@@ -242,7 +292,10 @@ class UNet(pl.LightningModule):
         Path(target_folder).mkdir(parents=True, exist_ok=True)
 
         # Device
-        device = &#34;cpu&#34;  # torch.device(&#34;cuda&#34; if torch.cuda.is_available() else &#34;cpu&#34;)
+        device = get_device()
+
+        # Make sure the model is on the device
+        self.net.to(device)
 
         # Switch to evaluation mode
         self.net.eval()
@@ -253,11 +306,13 @@ class UNet(pl.LightningModule):
             for images in data_loader:
                 # Apply sliding inference over ROI size
                 outputs = sliding_window_inference(
-                    inputs=images,
+                    inputs=images.to(device),
                     roi_size=roi_size,
                     sw_batch_size=batch_size,
                     overlap=overlap,
                     predictor=self.net,
+                    mode=BlendMode.GAUSSIAN,
+                    sigma_scale=0.125,
                     device=device,
                 )
 
@@ -284,6 +339,163 @@ class UNet(pl.LightningModule):
         print(f&#34;Prediction completed.&#34;)
 
         # Return success
+        return True
+
+    @staticmethod
+    def full_inference_ensemble(
+        models: list,
+        weights: list,
+        data_loader: DataLoader,
+        target_folder: Union[Path, str],
+        inference_post_transforms: Transform,
+        roi_size: Tuple[int, int],
+        batch_size: int,
+        overlap: float = 0.25,
+        transpose: bool = True,
+        save_individual_preds: bool = False,
+    ):
+        &#34;&#34;&#34;Run inference on full images using given model.
+
+        Parameters
+        ----------
+
+        models: list
+            List of trained UNet models to use for ensemble prediction.
+
+        weights: list
+            List of weights for each of the contributions.
+
+        data_loader: DataLoader
+            DataLoader for the image files names to be predicted on.
+
+        target_folder: Union[Path|str]
+            Path to the folder where to store the predicted images.
+
+        inference_post_transforms: Transform
+            Composition of transforms to be applied to the result of the forward pass of the network.
+
+        roi_size: Tuple[int, int]
+            Size of the patch for the sliding window prediction. It must match the patch size during training.
+
+        batch_size: int
+            Number of parallel batches to run.
+
+        overlap: float
+            Fraction of overlap between rois.
+
+        transpose: bool
+            Whether the transpose the image before saving, to compensate for the default behavior of monai.transforms.LoadImage().
+
+        save_individual_preds: bool
+            Whether to save the individual predictions of each model.
+
+        Returns
+        -------
+
+        result: bool
+            True if the inference was successful, False otherwise.
+        &#34;&#34;&#34;
+
+        if len(models) != len(weights):
+            raise ValueError(&#34;The number of weights must match the number of models.&#34;)
+
+        if not isinstance(models[0], UNet) or not hasattr(models[0], &#34;net&#34;):
+            raise ValueError(&#34;The models must be of type `qute.models.unet.UNet`.&#34;)
+
+        # Turn the weights into a NumPy array of float 32 bit
+        weights = np.array(weights, dtype=np.float32)
+        weights = weights / weights.sum()
+
+        # Make sure the target folder exists
+        Path(target_folder).mkdir(parents=True, exist_ok=True)
+
+        # If needed, create the sub-folders for the invidual predictions
+        if save_individual_preds:
+            for f in range(len(models)):
+                fold_subolder = Path(target_folder) / f&#34;fold_{f}&#34;
+                Path(fold_subolder).mkdir(parents=True, exist_ok=True)
+        # Device
+        device = get_device()
+
+        # Switch to evaluation mode on all models
+        for model in models:
+            model.net.eval()
+
+        c = 0
+        with torch.no_grad():
+            for images in data_loader:
+
+                predictions = [[] for _ in range(len(models))]
+
+                # Not process all models
+                for n, model in enumerate(models):
+
+                    # Make sure the model is on the device
+                    model.to(device)
+
+                    # Apply sliding inference over ROI size
+                    outputs = sliding_window_inference(
+                        inputs=images.to(device),
+                        roi_size=roi_size,
+                        sw_batch_size=batch_size,
+                        overlap=overlap,
+                        predictor=model.net,
+                        device=device,
+                    )
+
+                    # Apply post-transforms?
+                    outputs = inference_post_transforms(outputs)
+
+                    # Retrieve the image from the GPU (if needed)
+                    preds = outputs.cpu().numpy().squeeze()
+
+                    stored_preds = []
+                    for pred in preds:
+                        if transpose:
+                            # Transpose to undo the effect of monai.transform.LoadImage(d)
+                            pred = pred.T
+                        stored_preds.append(pred)
+
+                    # Store
+                    predictions[n] = stored_preds
+
+                # Iterate over all images in the batch
+                for i in range(len(predictions[0])):
+
+                    # Iterate over all predictions from the models
+                    for j in range(len(predictions)):
+
+                        if j == 0:
+                            ensemble_pred = weights[j] * predictions[j][i]
+                        else:
+                            ensemble_pred += weights[j] * predictions[j][i]
+                    ensemble_pred = np.round(ensemble_pred).astype(np.int32)
+
+                    # Save ensemble prediction image as tiff file
+                    output_name = Path(target_folder) / f&#34;ensemble_pred_{c:04}.tif&#34;
+                    with TiffWriter(output_name) as tif:
+                        tif.write(ensemble_pred)
+
+                    # Inform
+                    print(f&#34;Saved {output_name}.&#34;)
+
+                    # Save individual predictions?
+                    if save_individual_preds:
+                        # Iterate over all predictions from the models
+                        for j in range(len(predictions)):
+                            # Save prediction image as tiff file
+                            output_name = (
+                                Path(target_folder) / f&#34;fold_{j}&#34; / f&#34;pred_{c:04}.tif&#34;
+                            )
+                            with TiffWriter(output_name) as tif:
+                                tif.write(predictions[j][i])
+
+                    # Update global file counter c
+                    c += 1
+
+        print(f&#34;Ensemble prediction completed.&#34;)
+
+        # Return success
         return True</code></pre>
 </details>
 </section>
@@ -298,10 +510,11 @@ class UNet(pl.LightningModule):
 <dl>
 <dt id="qute.models.unet.UNet"><code class="flex name class">
 <span>class <span class="ident">UNet</span></span>
-<span>(</span><span>spatial_dims: int = 2, in_channels: int = 1, out_channels: int = 3, channels=(16, 32, 64), strides=(2, 2), criterion=DiceCELoss(
+<span>(</span><span>spatial_dims: int = 2, in_channels: int = 1, out_channels: int = 3, channels=(16, 32, 64), strides: Optional[tuple] = None, criterion=DiceCELoss(
 (dice): DiceLoss()
 (cross_entropy): CrossEntropyLoss()
-), metrics=&lt;monai.metrics.meandice.DiceMetric object&gt;, val_metrics_transforms=None, predict_post_transforms=None, learning_rate: float = 0.01, optimizer_class=torch.optim.adamw.AdamW, num_res_units: int = 0, dropout: float = 0.0)</span>
+(binary_cross_entropy): BCEWithLogitsLoss()
+), metrics=&lt;monai.metrics.meandice.DiceMetric object&gt;, val_metrics_transforms=None, test_metrics_transforms=None, predict_post_transforms=None, learning_rate: float = 0.01, optimizer_class=torch.optim.adamw.AdamW, lr_scheduler_class=torch.optim.lr_scheduler.PolynomialLR, lr_scheduler_parameters: dict = {'total_iters': 100, 'power': 0.95}, num_res_units: int = 0, dropout: float = 0.0)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Wrap MONAI's UNet architecture into a PyTorch Lightning module.</p>
@@ -318,19 +531,21 @@ a single-channel input image is transformed into a three-class label image.</p>
 <dd>Number of output channels (or labels, or classes)</dd>
 <dt><strong><code>channels</code></strong> :&ensp;<code>tuple = (16, 32, 64)</code></dt>
 <dd>Number of neuron per layer.</dd>
-<dt><strong><code>strides</code></strong> :&ensp;<code>tuple = (2, 2)</code></dt>
+<dt><strong><code>strides</code></strong> :&ensp;<code>Optional[tuple] = (2, 2)</code></dt>
 <dd>Strides for down-sampling.</dd>
 <dt><strong><code>criterion</code></strong> :&ensp;<code>DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)</code></dt>
 <dd>Loss function. Please NOTE: for classification, the loss function must convert <code>y</code> to OneHot.
 The default loss function applies to a multi-label target where the background class is omitted.</dd>
 <dt><strong><code>metrics</code></strong> :&ensp;<code>DiceMetric(include_background=False, reduction="mean", get_not_nans=False)</code></dt>
 <dd>
-<p>Metrics used for validation. Set to None to omit.</p>
+<p>Metrics used for validation and test. Set to None to omit.</p>
 <p>The default metrics applies to a three-label target where the background (index = 0) class
 is omitted from calculation.</p>
 </dd>
 <dt><strong><code>val_metrics_transforms</code></strong> :&ensp;<code>None</code></dt>
 <dd>Post transform for the output of the forward pass in the validation step for metric calculation.</dd>
+<dt><strong><code>test_metrics_transforms</code></strong> :&ensp;<code>None</code></dt>
+<dd>Post transform for the output of the forward pass in the test step for metric calculation.</dd>
 <dt><strong><code>predict_post_transforms</code></strong> :&ensp;<code>None</code></dt>
 <dd>Post transform for the output of the forward pass in the prediction step (only).</dd>
 <dt><strong><code>learning_rate</code></strong> :&ensp;<code>float = 1e-2</code></dt>
@@ -338,6 +553,10 @@ is omitted from calculation.</p>
 </dl>
 <p>optimizer_class=AdamW
 Optimizer.</p>
+<p>lr_scheduler_class=PolynomialLR
+Learning rate scheduler.</p>
+<p>lr_scheduler_parameters={"total_iters": 100, "power": 0.99}
+Dictionary of scheduler parameters.</p>
 <dl>
 <dt><strong><code>num_res_units</code></strong> :&ensp;<code>int = 0</code></dt>
 <dd>Number of residual units for the UNet.</dd>
@@ -361,15 +580,18 @@ Optimizer.</p>
         in_channels: int = 1,
         out_channels: int = 3,
         channels=(16, 32, 64),
-        strides=(2, 2),
-        criterion=DiceCELoss(include_background=False, to_onehot_y=False, softmax=True),
+        strides: Optional[tuple] = None,
+        criterion=DiceCELoss(include_background=True, to_onehot_y=False, softmax=True),
         metrics=DiceMetric(
-            include_background=False, reduction=&#34;mean&#34;, get_not_nans=False
+            include_background=True, reduction=&#34;mean&#34;, get_not_nans=False
         ),
         val_metrics_transforms=None,
+        test_metrics_transforms=None,
         predict_post_transforms=None,
         learning_rate: float = 1e-2,
         optimizer_class=AdamW,
+        lr_scheduler_class=PolynomialLR,
+        lr_scheduler_parameters: dict = {&#34;total_iters&#34;: 100, &#34;power&#34;: 0.95},
         num_res_units: int = 0,
         dropout: float = 0.0,
     ):
@@ -391,7 +613,7 @@ Optimizer.</p>
         channels: tuple = (16, 32, 64)
             Number of neuron per layer.
 
-        strides: tuple = (2, 2)
+        strides: Optional[tuple] = (2, 2)
             Strides for down-sampling.
 
         criterion: DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)
@@ -399,13 +621,16 @@ Optimizer.</p>
             The default loss function applies to a multi-label target where the background class is omitted.
 
         metrics: DiceMetric(include_background=False, reduction=&#34;mean&#34;, get_not_nans=False)
-            Metrics used for validation. Set to None to omit.
+            Metrics used for validation and test. Set to None to omit.
 
             The default metrics applies to a three-label target where the background (index = 0) class
             is omitted from calculation.
 
         val_metrics_transforms: None
             Post transform for the output of the forward pass in the validation step for metric calculation.
+
+        test_metrics_transforms: None
+            Post transform for the output of the forward pass in the test step for metric calculation.
 
         predict_post_transforms: None
             Post transform for the output of the forward pass in the prediction step (only).
@@ -415,6 +640,12 @@ Optimizer.</p>
 
         optimizer_class=AdamW
             Optimizer.
+
+        lr_scheduler_class=PolynomialLR
+            Learning rate scheduler.
+
+        lr_scheduler_parameters={&#34;total_iters&#34;: 100, &#34;power&#34;: 0.99}
+            Dictionary of scheduler parameters.
 
         num_res_units: int = 0
             Number of residual units for the UNet.
@@ -429,8 +660,13 @@ Optimizer.</p>
         self.metrics = metrics
         self.learning_rate = learning_rate
         self.optimizer_class = optimizer_class
+        self.scheduler_class = lr_scheduler_class
+        self.scheduler_parameters = lr_scheduler_parameters
         self.val_metrics_transforms = val_metrics_transforms
+        self.test_metrics_transforms = test_metrics_transforms
         self.predict_post_transforms = predict_post_transforms
+        if strides is None:
+            strides = (2,) * (len(channels) - 1)
         self.net = MonaiUNet(
             spatial_dims=spatial_dims,
             in_channels=in_channels,
@@ -440,12 +676,21 @@ Optimizer.</p>
             num_res_units=num_res_units,
             dropout=dropout,
         )
+
+        # Log the hyperparameters
         self.save_hyperparameters(ignore=[&#34;criterion&#34;, &#34;metrics&#34;])
 
     def configure_optimizers(self):
-        &#34;&#34;&#34;Configure and return the optimizer.&#34;&#34;&#34;
+        &#34;&#34;&#34;Configure and return the optimizer and scheduler.&#34;&#34;&#34;
         optimizer = self.optimizer_class(self.parameters(), lr=self.learning_rate)
-        return optimizer
+        scheduler = {
+            &#34;scheduler&#34;: self.scheduler_class(optimizer, **self.scheduler_parameters),
+            &#34;monitor&#34;: &#34;val_loss&#34;,
+            &#34;interval&#34;: &#34;step&#34;,  # Call &#34;scheduler.step()&#34; after every batch (1 step)
+            &#34;frequency&#34;: 1,  # Update scheduler after every step
+            &#34;strict&#34;: True,  # Ensures the scheduler is strictly followed (PyTorch Lightning parameter)
+        }
+        return [optimizer], [scheduler]
 
     def training_step(self, batch, batch_idx):
         &#34;&#34;&#34;Perform a training step.&#34;&#34;&#34;
@@ -460,13 +705,21 @@ Optimizer.</p>
         x, y = batch
         y_hat = self.net(x)
         val_loss = self.criterion(y_hat, y)
-        self.log(&#34;val_loss&#34;, torch.tensor([val_loss]), on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            &#34;val_loss&#34;,
+            torch.tensor([val_loss]),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
         if self.metrics is not None:
             if self.val_metrics_transforms is not None:
                 val_metrics = self.metrics(self.val_metrics_transforms(y_hat), y).mean()
             else:
                 val_metrics = self.metrics(y_hat, y).mean()
-            self.log(&#34;val_metrics&#34;, torch.tensor([val_metrics]), on_step=False, on_epoch=True)
+            self.log(
+                &#34;val_metrics&#34;, torch.tensor([val_metrics]), on_step=False, on_epoch=True
+            )
         return val_loss
 
     def test_step(self, batch, batch_idx):
@@ -475,6 +728,19 @@ Optimizer.</p>
         y_hat = self.net(x)
         test_loss = self.criterion(y_hat, y)
         self.log(&#34;test_loss&#34;, test_loss)
+        if self.metrics is not None:
+            if self.test_metrics_transforms is not None:
+                test_metrics = self.metrics(
+                    self.test_metrics_transforms(y_hat), y
+                ).mean()
+            else:
+                test_metrics = self.metrics(y_hat, y).mean()
+            self.log(
+                &#34;test_metrics&#34;,
+                torch.tensor([test_metrics]),
+                on_step=False,
+                on_epoch=True,
+            )
         return test_loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
@@ -516,7 +782,7 @@ Optimizer.</p>
 
         batch_size: int
             Number of parallel batches to run.
-        
+
         overlap: float
             Fraction of overlap between rois.
 
@@ -534,7 +800,10 @@ Optimizer.</p>
         Path(target_folder).mkdir(parents=True, exist_ok=True)
 
         # Device
-        device = &#34;cpu&#34;  # torch.device(&#34;cuda&#34; if torch.cuda.is_available() else &#34;cpu&#34;)
+        device = get_device()
+
+        # Make sure the model is on the device
+        self.net.to(device)
 
         # Switch to evaluation mode
         self.net.eval()
@@ -545,11 +814,13 @@ Optimizer.</p>
             for images in data_loader:
                 # Apply sliding inference over ROI size
                 outputs = sliding_window_inference(
-                    inputs=images,
+                    inputs=images.to(device),
                     roi_size=roi_size,
                     sw_batch_size=batch_size,
                     overlap=overlap,
                     predictor=self.net,
+                    mode=BlendMode.GAUSSIAN,
+                    sigma_scale=0.125,
                     device=device,
                 )
 
@@ -576,6 +847,163 @@ Optimizer.</p>
         print(f&#34;Prediction completed.&#34;)
 
         # Return success
+        return True
+
+    @staticmethod
+    def full_inference_ensemble(
+        models: list,
+        weights: list,
+        data_loader: DataLoader,
+        target_folder: Union[Path, str],
+        inference_post_transforms: Transform,
+        roi_size: Tuple[int, int],
+        batch_size: int,
+        overlap: float = 0.25,
+        transpose: bool = True,
+        save_individual_preds: bool = False,
+    ):
+        &#34;&#34;&#34;Run inference on full images using given model.
+
+        Parameters
+        ----------
+
+        models: list
+            List of trained UNet models to use for ensemble prediction.
+
+        weights: list
+            List of weights for each of the contributions.
+
+        data_loader: DataLoader
+            DataLoader for the image files names to be predicted on.
+
+        target_folder: Union[Path|str]
+            Path to the folder where to store the predicted images.
+
+        inference_post_transforms: Transform
+            Composition of transforms to be applied to the result of the forward pass of the network.
+
+        roi_size: Tuple[int, int]
+            Size of the patch for the sliding window prediction. It must match the patch size during training.
+
+        batch_size: int
+            Number of parallel batches to run.
+
+        overlap: float
+            Fraction of overlap between rois.
+
+        transpose: bool
+            Whether the transpose the image before saving, to compensate for the default behavior of monai.transforms.LoadImage().
+
+        save_individual_preds: bool
+            Whether to save the individual predictions of each model.
+
+        Returns
+        -------
+
+        result: bool
+            True if the inference was successful, False otherwise.
+        &#34;&#34;&#34;
+
+        if len(models) != len(weights):
+            raise ValueError(&#34;The number of weights must match the number of models.&#34;)
+
+        if not isinstance(models[0], UNet) or not hasattr(models[0], &#34;net&#34;):
+            raise ValueError(&#34;The models must be of type `qute.models.unet.UNet`.&#34;)
+
+        # Turn the weights into a NumPy array of float 32 bit
+        weights = np.array(weights, dtype=np.float32)
+        weights = weights / weights.sum()
+
+        # Make sure the target folder exists
+        Path(target_folder).mkdir(parents=True, exist_ok=True)
+
+        # If needed, create the sub-folders for the invidual predictions
+        if save_individual_preds:
+            for f in range(len(models)):
+                fold_subolder = Path(target_folder) / f&#34;fold_{f}&#34;
+                Path(fold_subolder).mkdir(parents=True, exist_ok=True)
+        # Device
+        device = get_device()
+
+        # Switch to evaluation mode on all models
+        for model in models:
+            model.net.eval()
+
+        c = 0
+        with torch.no_grad():
+            for images in data_loader:
+
+                predictions = [[] for _ in range(len(models))]
+
+                # Not process all models
+                for n, model in enumerate(models):
+
+                    # Make sure the model is on the device
+                    model.to(device)
+
+                    # Apply sliding inference over ROI size
+                    outputs = sliding_window_inference(
+                        inputs=images.to(device),
+                        roi_size=roi_size,
+                        sw_batch_size=batch_size,
+                        overlap=overlap,
+                        predictor=model.net,
+                        device=device,
+                    )
+
+                    # Apply post-transforms?
+                    outputs = inference_post_transforms(outputs)
+
+                    # Retrieve the image from the GPU (if needed)
+                    preds = outputs.cpu().numpy().squeeze()
+
+                    stored_preds = []
+                    for pred in preds:
+                        if transpose:
+                            # Transpose to undo the effect of monai.transform.LoadImage(d)
+                            pred = pred.T
+                        stored_preds.append(pred)
+
+                    # Store
+                    predictions[n] = stored_preds
+
+                # Iterate over all images in the batch
+                for i in range(len(predictions[0])):
+
+                    # Iterate over all predictions from the models
+                    for j in range(len(predictions)):
+
+                        if j == 0:
+                            ensemble_pred = weights[j] * predictions[j][i]
+                        else:
+                            ensemble_pred += weights[j] * predictions[j][i]
+                    ensemble_pred = np.round(ensemble_pred).astype(np.int32)
+
+                    # Save ensemble prediction image as tiff file
+                    output_name = Path(target_folder) / f&#34;ensemble_pred_{c:04}.tif&#34;
+                    with TiffWriter(output_name) as tif:
+                        tif.write(ensemble_pred)
+
+                    # Inform
+                    print(f&#34;Saved {output_name}.&#34;)
+
+                    # Save individual predictions?
+                    if save_individual_preds:
+                        # Iterate over all predictions from the models
+                        for j in range(len(predictions)):
+                            # Save prediction image as tiff file
+                            output_name = (
+                                Path(target_folder) / f&#34;fold_{j}&#34; / f&#34;pred_{c:04}.tif&#34;
+                            )
+                            with TiffWriter(output_name) as tif:
+                                tif.write(predictions[j][i])
+
+                    # Update global file counter c
+                    c += 1
+
+        print(f&#34;Ensemble prediction completed.&#34;)
+
+        # Return success
         return True</code></pre>
 </details>
 <h3>Ancestors</h3>
@@ -588,21 +1016,226 @@ Optimizer.</p>
 <li>pytorch_lightning.core.hooks.CheckpointHooks</li>
 <li>torch.nn.modules.module.Module</li>
 </ul>
+<h3>Static methods</h3>
+<dl>
+<dt id="qute.models.unet.UNet.full_inference_ensemble"><code class="name flex">
+<span>def <span class="ident">full_inference_ensemble</span></span>(<span>models: list, weights: list, data_loader: monai.data.dataloader.DataLoader, target_folder: Union[pathlib.Path, str], inference_post_transforms: monai.transforms.transform.Transform, roi_size: Tuple[int, int], batch_size: int, overlap: float = 0.25, transpose: bool = True, save_individual_preds: bool = False)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Run inference on full images using given model.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>models</code></strong> :&ensp;<code>list</code></dt>
+<dd>List of trained UNet models to use for ensemble prediction.</dd>
+<dt><strong><code>weights</code></strong> :&ensp;<code>list</code></dt>
+<dd>List of weights for each of the contributions.</dd>
+<dt><strong><code>data_loader</code></strong> :&ensp;<code>DataLoader</code></dt>
+<dd>DataLoader for the image files names to be predicted on.</dd>
+<dt><strong><code>target_folder</code></strong> :&ensp;<code>Union[Path|str]</code></dt>
+<dd>Path to the folder where to store the predicted images.</dd>
+<dt><strong><code>inference_post_transforms</code></strong> :&ensp;<code>Transform</code></dt>
+<dd>Composition of transforms to be applied to the result of the forward pass of the network.</dd>
+<dt><strong><code>roi_size</code></strong> :&ensp;<code>Tuple[int, int]</code></dt>
+<dd>Size of the patch for the sliding window prediction. It must match the patch size during training.</dd>
+<dt><strong><code>batch_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of parallel batches to run.</dd>
+<dt><strong><code>overlap</code></strong> :&ensp;<code>float</code></dt>
+<dd>Fraction of overlap between rois.</dd>
+<dt><strong><code>transpose</code></strong> :&ensp;<code>bool</code></dt>
+<dd>Whether the transpose the image before saving, to compensate for the default behavior of monai.transforms.LoadImage().</dd>
+<dt><strong><code>save_individual_preds</code></strong> :&ensp;<code>bool</code></dt>
+<dd>Whether to save the individual predictions of each model.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>result</code></strong> :&ensp;<code>bool</code></dt>
+<dd>True if the inference was successful, False otherwise.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@staticmethod
+def full_inference_ensemble(
+    models: list,
+    weights: list,
+    data_loader: DataLoader,
+    target_folder: Union[Path, str],
+    inference_post_transforms: Transform,
+    roi_size: Tuple[int, int],
+    batch_size: int,
+    overlap: float = 0.25,
+    transpose: bool = True,
+    save_individual_preds: bool = False,
+):
+    &#34;&#34;&#34;Run inference on full images using given model.
+
+    Parameters
+    ----------
+
+    models: list
+        List of trained UNet models to use for ensemble prediction.
+
+    weights: list
+        List of weights for each of the contributions.
+
+    data_loader: DataLoader
+        DataLoader for the image files names to be predicted on.
+
+    target_folder: Union[Path|str]
+        Path to the folder where to store the predicted images.
+
+    inference_post_transforms: Transform
+        Composition of transforms to be applied to the result of the forward pass of the network.
+
+    roi_size: Tuple[int, int]
+        Size of the patch for the sliding window prediction. It must match the patch size during training.
+
+    batch_size: int
+        Number of parallel batches to run.
+
+    overlap: float
+        Fraction of overlap between rois.
+
+    transpose: bool
+        Whether the transpose the image before saving, to compensate for the default behavior of monai.transforms.LoadImage().
+
+    save_individual_preds: bool
+        Whether to save the individual predictions of each model.
+
+    Returns
+    -------
+
+    result: bool
+        True if the inference was successful, False otherwise.
+    &#34;&#34;&#34;
+
+    if len(models) != len(weights):
+        raise ValueError(&#34;The number of weights must match the number of models.&#34;)
+
+    if not isinstance(models[0], UNet) or not hasattr(models[0], &#34;net&#34;):
+        raise ValueError(&#34;The models must be of type `qute.models.unet.UNet`.&#34;)
+
+    # Turn the weights into a NumPy array of float 32 bit
+    weights = np.array(weights, dtype=np.float32)
+    weights = weights / weights.sum()
+
+    # Make sure the target folder exists
+    Path(target_folder).mkdir(parents=True, exist_ok=True)
+
+    # If needed, create the sub-folders for the invidual predictions
+    if save_individual_preds:
+        for f in range(len(models)):
+            fold_subolder = Path(target_folder) / f&#34;fold_{f}&#34;
+            Path(fold_subolder).mkdir(parents=True, exist_ok=True)
+    # Device
+    device = get_device()
+
+    # Switch to evaluation mode on all models
+    for model in models:
+        model.net.eval()
+
+    c = 0
+    with torch.no_grad():
+        for images in data_loader:
+
+            predictions = [[] for _ in range(len(models))]
+
+            # Not process all models
+            for n, model in enumerate(models):
+
+                # Make sure the model is on the device
+                model.to(device)
+
+                # Apply sliding inference over ROI size
+                outputs = sliding_window_inference(
+                    inputs=images.to(device),
+                    roi_size=roi_size,
+                    sw_batch_size=batch_size,
+                    overlap=overlap,
+                    predictor=model.net,
+                    device=device,
+                )
+
+                # Apply post-transforms?
+                outputs = inference_post_transforms(outputs)
+
+                # Retrieve the image from the GPU (if needed)
+                preds = outputs.cpu().numpy().squeeze()
+
+                stored_preds = []
+                for pred in preds:
+                    if transpose:
+                        # Transpose to undo the effect of monai.transform.LoadImage(d)
+                        pred = pred.T
+                    stored_preds.append(pred)
+
+                # Store
+                predictions[n] = stored_preds
+
+            # Iterate over all images in the batch
+            for i in range(len(predictions[0])):
+
+                # Iterate over all predictions from the models
+                for j in range(len(predictions)):
+
+                    if j == 0:
+                        ensemble_pred = weights[j] * predictions[j][i]
+                    else:
+                        ensemble_pred += weights[j] * predictions[j][i]
+                ensemble_pred = np.round(ensemble_pred).astype(np.int32)
+
+                # Save ensemble prediction image as tiff file
+                output_name = Path(target_folder) / f&#34;ensemble_pred_{c:04}.tif&#34;
+                with TiffWriter(output_name) as tif:
+                    tif.write(ensemble_pred)
+
+                # Inform
+                print(f&#34;Saved {output_name}.&#34;)
+
+                # Save individual predictions?
+                if save_individual_preds:
+                    # Iterate over all predictions from the models
+                    for j in range(len(predictions)):
+                        # Save prediction image as tiff file
+                        output_name = (
+                            Path(target_folder) / f&#34;fold_{j}&#34; / f&#34;pred_{c:04}.tif&#34;
+                        )
+                        with TiffWriter(output_name) as tif:
+                            tif.write(predictions[j][i])
+
+                # Update global file counter c
+                c += 1
+
+    print(f&#34;Ensemble prediction completed.&#34;)
+
+    # Return success
+    return True</code></pre>
+</details>
+</dd>
+</dl>
 <h3>Methods</h3>
 <dl>
 <dt id="qute.models.unet.UNet.configure_optimizers"><code class="name flex">
 <span>def <span class="ident">configure_optimizers</span></span>(<span>self)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Configure and return the optimizer.</p></div>
+<div class="desc"><p>Configure and return the optimizer and scheduler.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def configure_optimizers(self):
-    &#34;&#34;&#34;Configure and return the optimizer.&#34;&#34;&#34;
+    &#34;&#34;&#34;Configure and return the optimizer and scheduler.&#34;&#34;&#34;
     optimizer = self.optimizer_class(self.parameters(), lr=self.learning_rate)
-    return optimizer</code></pre>
+    scheduler = {
+        &#34;scheduler&#34;: self.scheduler_class(optimizer, **self.scheduler_parameters),
+        &#34;monitor&#34;: &#34;val_loss&#34;,
+        &#34;interval&#34;: &#34;step&#34;,  # Call &#34;scheduler.step()&#34; after every batch (1 step)
+        &#34;frequency&#34;: 1,  # Update scheduler after every step
+        &#34;strict&#34;: True,  # Ensures the scheduler is strictly followed (PyTorch Lightning parameter)
+    }
+    return [optimizer], [scheduler]</code></pre>
 </details>
 </dd>
 <dt id="qute.models.unet.UNet.full_inference"><code class="name flex">
@@ -665,7 +1298,7 @@ Optimizer.</p>
 
     batch_size: int
         Number of parallel batches to run.
-    
+
     overlap: float
         Fraction of overlap between rois.
 
@@ -683,7 +1316,10 @@ Optimizer.</p>
     Path(target_folder).mkdir(parents=True, exist_ok=True)
 
     # Device
-    device = &#34;cpu&#34;  # torch.device(&#34;cuda&#34; if torch.cuda.is_available() else &#34;cpu&#34;)
+    device = get_device()
+
+    # Make sure the model is on the device
+    self.net.to(device)
 
     # Switch to evaluation mode
     self.net.eval()
@@ -694,11 +1330,13 @@ Optimizer.</p>
         for images in data_loader:
             # Apply sliding inference over ROI size
             outputs = sliding_window_inference(
-                inputs=images,
+                inputs=images.to(device),
                 roi_size=roi_size,
                 sw_batch_size=batch_size,
                 overlap=overlap,
                 predictor=self.net,
+                mode=BlendMode.GAUSSIAN,
+                sigma_scale=0.125,
                 device=device,
             )
 
@@ -763,6 +1401,19 @@ Optimizer.</p>
     y_hat = self.net(x)
     test_loss = self.criterion(y_hat, y)
     self.log(&#34;test_loss&#34;, test_loss)
+    if self.metrics is not None:
+        if self.test_metrics_transforms is not None:
+            test_metrics = self.metrics(
+                self.test_metrics_transforms(y_hat), y
+            ).mean()
+        else:
+            test_metrics = self.metrics(y_hat, y).mean()
+        self.log(
+            &#34;test_metrics&#34;,
+            torch.tensor([test_metrics]),
+            on_step=False,
+            on_epoch=True,
+        )
     return test_loss</code></pre>
 </details>
 </dd>
@@ -798,13 +1449,21 @@ Optimizer.</p>
     x, y = batch
     y_hat = self.net(x)
     val_loss = self.criterion(y_hat, y)
-    self.log(&#34;val_loss&#34;, torch.tensor([val_loss]), on_step=False, on_epoch=True, prog_bar=True)
+    self.log(
+        &#34;val_loss&#34;,
+        torch.tensor([val_loss]),
+        on_step=False,
+        on_epoch=True,
+        prog_bar=True,
+    )
     if self.metrics is not None:
         if self.val_metrics_transforms is not None:
             val_metrics = self.metrics(self.val_metrics_transforms(y_hat), y).mean()
         else:
             val_metrics = self.metrics(y_hat, y).mean()
-        self.log(&#34;val_metrics&#34;, torch.tensor([val_metrics]), on_step=False, on_epoch=True)
+        self.log(
+            &#34;val_metrics&#34;, torch.tensor([val_metrics]), on_step=False, on_epoch=True
+        )
     return val_loss</code></pre>
 </details>
 </dd>
@@ -831,6 +1490,7 @@ Optimizer.</p>
 <ul class="">
 <li><code><a title="qute.models.unet.UNet.configure_optimizers" href="#qute.models.unet.UNet.configure_optimizers">configure_optimizers</a></code></li>
 <li><code><a title="qute.models.unet.UNet.full_inference" href="#qute.models.unet.UNet.full_inference">full_inference</a></code></li>
+<li><code><a title="qute.models.unet.UNet.full_inference_ensemble" href="#qute.models.unet.UNet.full_inference_ensemble">full_inference_ensemble</a></code></li>
 <li><code><a title="qute.models.unet.UNet.predict_step" href="#qute.models.unet.UNet.predict_step">predict_step</a></code></li>
 <li><code><a title="qute.models.unet.UNet.test_step" href="#qute.models.unet.UNet.test_step">test_step</a></code></li>
 <li><code><a title="qute.models.unet.UNet.training_step" href="#qute.models.unet.UNet.training_step">training_step</a></code></li>

@@ -44,6 +44,7 @@ from typing import Optional, Union
 from zipfile import ZipFile
 
 import requests
+import userpaths
 
 
 def get_cell_segmentation_demo_dataset(
@@ -69,7 +70,7 @@ def get_cell_segmentation_demo_dataset(
 
     # Data folder
     if download_dir is None:
-        data_folder = Path.home() / &#34;.qute&#34; / &#34;data&#34;
+        data_folder = Path(userpaths.get_my_documents()) / &#34;qute&#34; / &#34;data&#34;
     else:
         data_folder = Path(download_dir).resolve()
 
@@ -149,7 +150,7 @@ def get_cell_restoration_demo_dataset(download_dir: Optional[Union[Path, str]] =
 
     # Data folder
     if download_dir is None:
-        data_folder = Path.home() / &#34;.qute&#34; / &#34;data&#34;
+        data_folder = Path(userpaths.get_my_documents()) / &#34;qute&#34; / &#34;data&#34;
     else:
         data_folder = Path(download_dir).resolve()
 
@@ -249,7 +250,7 @@ if False, the segmentation demo with two classes (Background, Object).</p>
 
     # Data folder
     if download_dir is None:
-        data_folder = Path.home() / &#34;.qute&#34; / &#34;data&#34;
+        data_folder = Path(userpaths.get_my_documents()) / &#34;qute&#34; / &#34;data&#34;
     else:
         data_folder = Path(download_dir).resolve()
 
@@ -344,7 +345,7 @@ if False, the segmentation demo with two classes (Background, Object).</p>
 
     # Data folder
     if download_dir is None:
-        data_folder = Path.home() / &#34;.qute&#34; / &#34;data&#34;
+        data_folder = Path(userpaths.get_my_documents()) / &#34;qute&#34; / &#34;data&#34;
     else:
         data_folder = Path(download_dir).resolve()
 

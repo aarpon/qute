@@ -1,14 +1,14 @@
-#  ********************************************************************************
-#   Copyright © 2022 - 2003, ETH Zurich, D-BSSE, Aaron Ponti
-#   All rights reserved. This program and the accompanying materials
-#   are made available under the terms of the Apache License Version 2.0
-#   which accompanies this distribution, and is available at
-#   https://www.apache.org/licenses/LICENSE-2.0.txt
+# ******************************************************************************
+# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# All rights reserved. This program and the accompanying materials
+# are made available under the terms of the Apache License Version 2.0
+# which accompanies this distribution, and is available at
+# https://www.apache.org/licenses/LICENSE-2.0.txt
 #
-#   Contributors:
-#       Aaron Ponti - initial API and implementation
-#  ******************************************************************************/
-import os
+# Contributors:
+#   Aaron Ponti - initial API and implementation
+# ******************************************************************************
+
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -16,7 +16,7 @@ from pathlib import Path
 import pytorch_lightning as pl
 import torch
 import userpaths
-from monai.losses import DiceCELoss, FocalLoss
+from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import (
@@ -28,6 +28,7 @@ from torch.optim.lr_scheduler import OneCycleLR
 
 from qute.data.demos import CellSegmentationDemo
 from qute.models.unet import UNet
+from qute.transforms import SegmentationCampaignTransforms
 
 SEED = 2022
 BATCH_SIZE = 8
@@ -39,7 +40,7 @@ try:
     PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
 except AssertionError:
     PRECISION = 32
-MAX_EPOCHS = 250
+MAX_EPOCHS = 5
 EXP_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
 MODEL_DIR = Path(userpaths.get_my_documents()) / "qute" / "models" / EXP_NAME
 RESULTS_DIR = Path(userpaths.get_my_documents()) / "qute" / "results" / EXP_NAME
@@ -49,8 +50,14 @@ if __name__ == "__main__":
     # Seeding
     seed_everything(SEED, workers=True)
 
+    # Initialize default, example Segmentation Campaign Transform
+    campaign_transforms = SegmentationCampaignTransforms(
+        num_classes=3, patch_size=PATCH_SIZE, num_patches=NUM_PATCHES
+    )
+
     # Data module: set up for k-fold cross validation (k = NUM_FOLDS)
     data_module = CellSegmentationDemo(
+        campaign_transforms=campaign_transforms,
         seed=SEED,
         num_folds=NUM_FOLDS,
         batch_size=BATCH_SIZE,
@@ -87,6 +94,7 @@ if __name__ == "__main__":
 
         # Initialize new UNet model
         model = UNet(
+            campaign_transforms=campaign_transforms,
             in_channels=1,
             out_channels=3,
             num_res_units=4,
@@ -94,8 +102,6 @@ if __name__ == "__main__":
             channels=(16, 32, 64),
             strides=(2, 2),
             metrics=metrics,
-            val_metrics_transforms=data_module.get_val_metrics_transforms(),
-            test_metrics_transforms=data_module.get_test_metrics_transforms(),
             learning_rate=LEARNING_RATE,
             lr_scheduler_class=lr_scheduler_class,
             lr_scheduler_parameters=lr_scheduler_parameters,
@@ -165,7 +171,7 @@ if __name__ == "__main__":
         models,
         data_loader=data_module.inference_dataloader(data_module.data_dir / "images/"),
         target_folder=RESULTS_DIR / "ensemble_predictions",
-        inference_post_transforms=data_module.get_post_inference_transforms(),
+        inference_post_transforms=campaign_transforms.get_post_inference_transforms(),
         roi_size=PATCH_SIZE,
         batch_size=INFERENCE_BATCH_SIZE,
         transpose=False,

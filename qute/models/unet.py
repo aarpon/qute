@@ -1,15 +1,17 @@
-#  ********************************************************************************
-#   Copyright © 2022 - 2003, ETH Zurich, D-BSSE, Aaron Ponti
-#   All rights reserved. This program and the accompanying materials
-#   are made available under the terms of the Apache License Version 2.0
-#   which accompanies this distribution, and is available at
-#   https://www.apache.org/licenses/LICENSE-2.0.txt
+# ******************************************************************************
+# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# All rights reserved. This program and the accompanying materials
+# are made available under the terms of the Apache License Version 2.0
+# which accompanies this distribution, and is available at
+# https://www.apache.org/licenses/LICENSE-2.0.txt
 #
-#   Contributors:
-#       Aaron Ponti - initial API and implementation
+# Contributors:
+#   Aaron Ponti - initial API and implementation
 #
+# Notes:
 #   This file adapted from: https://github.com/hiepph/unet-lightning
-#  ******************************************************************************/
+# ******************************************************************************
+
 
 from pathlib import Path
 from typing import Optional, Tuple, Union
@@ -19,7 +21,7 @@ import pytorch_lightning as pl
 import torch
 from monai.data import DataLoader
 from monai.inferers import sliding_window_inference
-from monai.losses import DiceCELoss, FocalLoss
+from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
 from monai.networks.nets import UNet as MonaiUNet
 from monai.transforms import Transform
@@ -29,6 +31,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import PolynomialLR
 
 from qute.device import get_device
+from qute.transforms import CampaignTransforms
 
 
 class UNet(pl.LightningModule):
@@ -40,6 +43,7 @@ class UNet(pl.LightningModule):
 
     def __init__(
         self,
+        campaign_transforms: CampaignTransforms,
         spatial_dims: int = 2,
         in_channels: int = 1,
         out_channels: int = 3,
@@ -49,9 +53,6 @@ class UNet(pl.LightningModule):
         metrics=DiceMetric(
             include_background=True, reduction="mean", get_not_nans=False
         ),
-        val_metrics_transforms=None,
-        test_metrics_transforms=None,
-        predict_post_transforms=None,
         learning_rate: float = 1e-2,
         optimizer_class=AdamW,
         lr_scheduler_class=PolynomialLR,
@@ -64,6 +65,10 @@ class UNet(pl.LightningModule):
 
         Parameters
         ----------
+
+        campaign_transforms: CampaignTransforms
+            Define all transforms necessary for training, validation, testing and (full) prediction.
+            @see `qute.transforms.CampaignTransforms` for documentation.
 
         spatial_dims: int = 2
             Whether 2D or 3D data.
@@ -90,15 +95,6 @@ class UNet(pl.LightningModule):
             The default metrics applies to a three-label target where the background (index = 0) class
             is omitted from calculation.
 
-        val_metrics_transforms: None
-            Post transform for the output of the forward pass in the validation step for metric calculation.
-
-        test_metrics_transforms: None
-            Post transform for the output of the forward pass in the test step for metric calculation.
-
-        predict_post_transforms: None
-            Post transform for the output of the forward pass in the prediction step (only).
-
         learning_rate: float = 1e-2
             Learning rate for optimization.
 
@@ -120,15 +116,13 @@ class UNet(pl.LightningModule):
 
         super().__init__()
 
+        self.campaign_transforms = campaign_transforms
         self.criterion = criterion
         self.metrics = metrics
         self.learning_rate = learning_rate
         self.optimizer_class = optimizer_class
         self.scheduler_class = lr_scheduler_class
         self.scheduler_parameters = lr_scheduler_parameters
-        self.val_metrics_transforms = val_metrics_transforms
-        self.test_metrics_transforms = test_metrics_transforms
-        self.predict_post_transforms = predict_post_transforms
         if strides is None:
             strides = (2,) * (len(channels) - 1)
         self.net = MonaiUNet(
@@ -177,8 +171,10 @@ class UNet(pl.LightningModule):
             prog_bar=True,
         )
         if self.metrics is not None:
-            if self.val_metrics_transforms is not None:
-                val_metrics = self.metrics(self.val_metrics_transforms(y_hat), y).mean()
+            if self.campaign_transforms.get_val_metrics_transforms() is not None:
+                val_metrics = self.metrics(
+                    self.campaign_transforms.get_val_metrics_transforms()(y_hat), y
+                ).mean()
             else:
                 val_metrics = self.metrics(y_hat, y).mean()
             self.log(
@@ -193,9 +189,9 @@ class UNet(pl.LightningModule):
         test_loss = self.criterion(y_hat, y)
         self.log("test_loss", test_loss)
         if self.metrics is not None:
-            if self.test_metrics_transforms is not None:
+            if self.campaign_transforms.get_test_metrics_transforms() is not None:
                 test_metrics = self.metrics(
-                    self.test_metrics_transforms(y_hat), y
+                    self.campaign_transforms.get_test_metrics_transforms()(y_hat), y
                 ).mean()
             else:
                 test_metrics = self.metrics(y_hat, y).mean()
@@ -211,8 +207,10 @@ class UNet(pl.LightningModule):
         """The predict step creates a label image from the output one-hot tensor."""
         x, _ = batch
         y_hat = self.net(x)
-        if self.predict_post_transforms is not None:
-            label = self.predict_post_transforms(y_hat).argmax(axis=1)
+        if self.campaign_transforms.get_post_inference_transforms() is not None:
+            label = self.campaign_transforms.get_post_inference_transforms()(
+                y_hat
+            ).argmax(axis=1)
         else:
             label = y_hat.argmax(axis=1)
         return label
@@ -221,7 +219,7 @@ class UNet(pl.LightningModule):
         self,
         data_loader: DataLoader,
         target_folder: Union[Path, str],
-        inference_post_transforms: Transform,
+        # inference_post_transforms: Transform,
         roi_size: Tuple[int, int],
         batch_size: int,
         overlap: float = 0.25,
@@ -237,9 +235,6 @@ class UNet(pl.LightningModule):
 
         target_folder: Union[Path|str]
             Path to the folder where to store the predicted images.
-
-        inference_post_transforms: Transform
-            Composition of transforms to be applied to the result of the forward pass of the network.
 
         roi_size: Tuple[int, int]
             Size of the patch for the sliding window prediction. It must match the patch size during training.
@@ -289,7 +284,9 @@ class UNet(pl.LightningModule):
                 )
 
                 # Apply post-transforms?
-                outputs = inference_post_transforms(outputs)
+                outputs = self.campaign_transforms.get_post_inference_transforms()(
+                    outputs
+                )
 
                 # Retrieve the image from the GPU (if needed)
                 preds = outputs.cpu().numpy().squeeze()

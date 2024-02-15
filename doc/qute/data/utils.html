@@ -36,11 +36,20 @@
 #   Contributors:
 #       Aaron Ponti - initial API and implementation
 #  ******************************************************************************/
-
+import json
+import os
+import re
+import shutil
+import sys
 import time
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Union
 
 import numpy as np
+import userpaths
+from imio import load, save
+from natsort import natsorted
+from numpy.random import default_rng
 
 
 def sample(
@@ -98,7 +107,342 @@ def sample(
         x0 = int(rng.uniform(0, max_x))
 
     # Return the subset and the starting coordinates
-    return image[y0 : y0 + patch_size[0], x0 : x0 + patch_size[1]], y0, x0</code></pre>
+    return image[y0 : y0 + patch_size[0], x0 : x0 + patch_size[1]], y0, x0
+
+
+def qute_to_msd_format(
+    input_folder: Union[Path, str],
+    output_folder: Union[Path, str],
+    channel_names: tuple = (&#34;fluorescence_microscopy&#34;,),
+    label_names: tuple = (&#34;background&#34;, &#34;cell&#34;, &#34;cell_border&#34;),
+    dataset_id: int = 1,
+    dataset_name: Optional[str] = None,
+    stem_name: str = &#34;demo_&#34;,
+    images_suffix: str = &#34;_0000&#34;,
+    to_nii_gz: bool = False,
+    test_perc: float = 0.2,
+    num_folds: int = 5,
+    force: bool = False,
+    seed=None,
+) -&gt; tuple[bool, str]:
+    &#34;&#34;&#34;Convert a qute dataset (with sub-folders &#34;images&#34; and &#34;labels&#34;) to an MSD dataset.
+
+
+
+    Parameters
+    ----------
+
+    input_folder: Union[Path, str]
+        Full path of the dataset in qute format.
+
+    output_folder: Union[Path, str]
+        Full path of the nnUnetv2-compatible dataset. It is recommended to set this to `$nnNet_raw`.
+
+    channel_names: tuple
+        Name of the channels, e.g. (&#34;fluorescence_microscopy&#34;, )
+
+    label_names: tuple
+        Name of the segmentation classes, e.g. (&#34;background&#34;, &#34;cell&#34;, &#34;cell_border&#34;)
+
+    dataset_id: int
+        Integer ID of the dataset.
+
+    dataset_name: str
+        Name of the dataset. If not specified, it will be derived from `input_folder`.
+
+    stem_name: str
+        Stem name of all images. In contrast to the qute format, all training images, labels and test
+        images must have the same stem name.
+
+    images_suffix: str (default is &#34;_0000&#34;)
+        Numeric suffix (as 0-padded string and leading _) for the images (it won&#39;t be applied to the labels).
+        For instance, imagesTr/demo_001_0000.tif is matched by labelsTr/demo_001.tif.
+
+    to_nii_gz: bool (default is False)
+        Set to True to convert the TIFF images to nii.gz; otherwise, the TIFF files are just copied over.
+
+    test_perc: float (default is 0.2)
+        Fraction of the images to be used for testing.
+
+    num_folds: int (default is 5)
+        Number of folds for k-fold cross-validation during training.
+
+    force: bool (default is False)
+        Set to True to delete and recreate if a converted Dataset already exists in the `output_folder`, otherwise
+        abort.
+
+    seed: int (default is 2022)
+        Seed for the random number generator (for training/test splitting).
+
+    Returns
+    -------
+
+    res, msg: tuple(bool, str)
+        res: True if the dataset was created, False otherwise
+        msg: &#34;&#34; if successful; otherwise, contains error message.
+    &#34;&#34;&#34;
+
+    # Check the structure of the input folder
+    input_folder = Path(input_folder)
+    if not input_folder.is_dir():
+        return False, f&#34;Input folder {input_folder} does not exit.&#34;
+
+    # Check tha value of dataset_id
+    if dataset_id != int(dataset_id) or dataset_id &lt; 1:
+        raise ValueError(&#34;`dataset_id` must be a positive integer.&#34;)
+
+    # Check the value of test_perc
+    if test_perc &lt; 0.0 or test_perc &gt; 1.0:
+        raise ValueError(&#34;`test_perc` must be between 0 and 1.&#34;)
+
+    # Make sure the images and labels sub-folders exist
+    images_folder = input_folder / &#34;images&#34;
+    if not images_folder.is_dir():
+        return False, f&#34;The `images` sub-folder does not exit.&#34;
+
+    labels_folder = input_folder / &#34;labels&#34;
+    if not labels_folder.is_dir():
+        return False, f&#34;The `labels` sub-folder does not exit.&#34;
+
+    # Get the contents of images_folder and labels_folder
+    images_files = list(images_folder.glob(&#34;*.tif*&#34;))
+    labels_files = list(labels_folder.glob(&#34;*.tif*&#34;))
+    if len(images_files) == 0 or len(labels_files) == 0:
+        return False, f&#34;No `images` or `labels` found.&#34;
+    if len(images_files) != len(labels_files):
+        return False, f&#34;Unmatched number of `images` and `labels`.&#34;
+
+    # Check whether the output folder already exists, otherwise create
+    output_folder = Path(output_folder)
+    output_folder.mkdir(exist_ok=True)
+
+    # Check whether the dataset folder already exists, otherwise create
+    if dataset_name is None:
+        dataset_name = input_folder.name
+    dataset_folder = output_folder / f&#34;Dataset{dataset_id:03}_{dataset_name}&#34;
+    dataset_folder.mkdir(exist_ok=True)
+
+    # Check whether the training and test sub-folders already exist, otherwise create
+    images_tr_folder = dataset_folder / &#34;imagesTr&#34;
+    images_tr_folder.mkdir(exist_ok=True)
+    labels_tr_folder = dataset_folder / &#34;labelsTr&#34;
+    labels_tr_folder.mkdir(exist_ok=True)
+    images_ts_folder = dataset_folder / &#34;imagesTs&#34;
+    images_ts_folder.mkdir(exist_ok=True)
+
+    # Check if the sub-folders already contain images
+    empty = True
+    if len(list(images_ts_folder.glob(&#34;*.tif*&#34;))) &gt; 0:
+        empty = False
+    if len(list(labels_tr_folder.glob(&#34;*.tif*&#34;))) &gt; 0:
+        empty = False
+    if len(list(images_ts_folder.glob(&#34;*.tif*&#34;))) &gt; 0:
+        empty = False
+    if not empty:
+        if not force:
+            return False, &#34;Dataset already existing. As requested, we abort here.&#34;
+
+        # Delete sub-folders
+        shutil.rmtree(images_tr_folder)
+        shutil.rmtree(labels_tr_folder)
+        shutil.rmtree(images_ts_folder)
+
+        # Re-create them
+        images_tr_folder.mkdir(exist_ok=True)
+        labels_tr_folder.mkdir(exist_ok=True)
+        images_ts_folder.mkdir(exist_ok=True)
+
+    # Make sure that the filenames are sorted (naturally)
+    images_files = natsorted(images_files)
+    labels_files = natsorted(labels_files)
+
+    # Shuffle a copy of the file names
+    rng = default_rng(seed=seed)
+    shuffled_indices = rng.permutation(len(images_files))
+    shuffled_images_files = np.array(images_files.copy())[shuffled_indices].tolist()
+    shuffled_labels_files = np.array(labels_files.copy())[shuffled_indices].tolist()
+
+    # Split between training and testing sub-sets
+    threshold = int(round((1.0 - test_perc) * len(images_files)))
+    if threshold == 0 or threshold == len(images_files):
+        return False, &#34;The requested `test_perc` fails splitting the images properly.&#34;
+    selected_training_images_files = shuffled_images_files[:threshold]
+    selected_training_labels_files = shuffled_labels_files[:threshold]
+    selected_test_images_files = shuffled_images_files[threshold:]
+
+    def target_name(convert: bool, name: str, stem: str, suffix: str = &#34;&#34;):
+        &#34;&#34;&#34;Rename the target image to fit the nnUNetv2 expected pattern.&#34;&#34;&#34;
+        numbers = re.findall(&#34;(\d+).tif$&#34;, Path(name).name)
+        if len(numbers) != 1:
+            return name
+        if convert:
+            new_name = f&#34;{stem}{numbers[0]}{suffix}.nii.gz&#34;
+        else:
+            new_name = f&#34;{stem}{numbers[0]}{suffix}.tif&#34;
+        return new_name
+
+    # Prepare output file names
+    renamed_selected_training_images_files = []
+    renamed_selected_training_labels_files = []
+    renamed_selected_test_images_files = []
+    for f in selected_training_images_files:
+        renamed_selected_training_images_files.append(
+            f&#34;{images_tr_folder}/{target_name(to_nii_gz, f, stem_name, images_suffix)}&#34;
+        )
+    for f in selected_training_labels_files:
+        renamed_selected_training_labels_files.append(
+            f&#34;{labels_tr_folder}/{target_name(to_nii_gz, f, stem_name)}&#34;
+        )
+    for f in selected_test_images_files:
+        renamed_selected_test_images_files.append(
+            f&#34;{images_ts_folder}/{target_name(to_nii_gz, f, stem_name, images_suffix)}&#34;
+        )
+
+    # Now copy or convert the files
+    for f, o in zip(
+        selected_training_images_files, renamed_selected_training_images_files
+    ):
+        if to_nii_gz:
+            save.to_nii(load.load_any(f), o)
+        else:
+            shutil.copy(f, o)
+    for f, o in zip(
+        selected_training_labels_files, renamed_selected_training_labels_files
+    ):
+        if to_nii_gz:
+            save.to_nii(load.load_any(f), o)
+        else:
+            shutil.copy(f, o)
+    for f, o in zip(selected_test_images_files, renamed_selected_test_images_files):
+        if to_nii_gz:
+            save.to_nii(load.load_any(f), o)
+        else:
+            shutil.copy(f, o)
+
+    # Create the datalist
+    datalist = {
+        # Add all test images to datalist[&#34;testing&#34;]
+        &#34;testing&#34;: [
+            {&#34;image&#34;: &#34;./imagesTs/&#34; + Path(file).name}
+            for file in renamed_selected_test_images_files
+        ],
+        # Add all training images and labels as one fold
+        &#34;training&#34;: [
+            {
+                &#34;image&#34;: f&#34;./imagesTr/{Path(renamed_selected_training_images_files[i]).name}&#34;,
+                &#34;label&#34;: f&#34;./labelsTr/{Path(renamed_selected_training_labels_files[i]).name}&#34;,
+                &#34;fold&#34;: 0,
+            }
+            for i in range(len(renamed_selected_training_images_files))
+        ],
+    }
+
+    # Split training data into num_folds random folds
+    fold_size = len(datalist[&#34;training&#34;]) // num_folds
+    for i in range(num_folds):
+        for j in range(fold_size):
+            datalist[&#34;training&#34;][i * fold_size + j][&#34;fold&#34;] = i
+
+    # Create dictionaries to store in the dataset.json file
+    channel_names_dict = {}
+    for i, channel in enumerate(channel_names):
+        channel_names_dict[str(i)] = channel
+    label_names_dict = {}
+    for i, label in enumerate(label_names):
+        label_names_dict[label] = i
+    dataset = {
+        &#34;channel_names&#34;: channel_names_dict,
+        &#34;labels&#34;: label_names_dict,
+        &#34;numTraining&#34;: len(datalist[&#34;training&#34;]),
+        &#34;file_ending&#34;: &#34;.tif&#34;,
+        &#34;dataset_name&#34;: f&#34;Dataset{dataset_id:03}_{dataset_name}&#34;,
+    }
+    with open(dataset_folder / &#34;dataset.json&#34;, &#34;w&#34;) as f:
+        # write the dictionary to the file in JSON format
+        json.dump(dataset, f)
+
+    # Save the datalist
+    datalist_file = (
+        dataset_folder / f&#34;msd_{Path(dataset_folder).name.lower()}_folds.json&#34;
+    )
+    with open(datalist_file, &#34;w&#34;, encoding=&#34;utf-8&#34;) as f:
+        json.dump(datalist, f, ensure_ascii=False, indent=4)
+
+    # Finally, create input.yaml
+    with open(dataset_folder / &#34;input.yaml&#34;, &#34;w&#34;) as f:
+        f.write(f&#34;dataset_name_or_id: {dataset_id}\n&#34;)
+        f.write(f&#34;modality: CT\n&#34;)
+        f.write(f&#34;datalist: {datalist_file}\n&#34;)
+        f.write(f&#34;dataroot: {dataset_folder}\n&#34;)
+
+    # Inform
+    print(f&#34;\n\n* * * All done! * * *&#34;)
+    print(f&#34;\nData and configuration files written to `{dataset_folder}`.&#34;)
+    print(
+        f&#34;\nIf it is not already there, please make sure to copy/move `{dataset_folder.name}` to the folder &#34;
+    )
+    print(
+        f&#34;pointed at by the environment variable `nnUNet_raw`. Then, assuming the dataset id is `1`\n&#34;
+        f&#34;and the dataset is 2D, run the following (adapt accordingly): &#34;
+    )
+    print(f&#34;\n$ nnUNetv2_plan_and_preprocess -d 1 --verify_dataset_integrity&#34;)
+    print(
+        &#34;$ for i in {0..4}; do nnUNetv2_train 1 2d $i --npz; done   # Fold 0 through 4, adapt as necessary&#34;
+    )
+    print(f&#34;$ nnUNetv2_find_best_configuration -d 1 -f 0 1 2 3 4 -c 2d&#34;)
+    print(
+        f&#34;$ nnUNetv2_predict -d 1 -i $nnUNet_raw/$Dataset/imagesTs -o $nnUNet_results/$Dataset/inference -f 0 1 2 3 4 \\&#34;
+    )
+    print(f&#34;       -tr nnUNetTrainer -c 2d -p nnUNetPlans&#34;)
+    print(
+        f&#34;$ nnUNetv2_apply_postprocessing -i $nnUNet_results/$Dataset/inference -o $nnUNet_results/$Dataset/postprocessing \\&#34;
+    )
+    print(
+        f&#34;       -pp_pkl_file $nnUNet_results/$Dataset/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/postprocessing.pkl \\&#34;
+    )
+    print(
+        f&#34;     -np 8 -plans_json $nnUNet_results/$Dataset/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/plans.json&#34;
+    )
+    print(f&#34;\nIn the commands above, replace `$Dataset` with the dataset name.&#34;)
+    print(f&#34;\nPlease see: &#34;)
+    print(
+        f&#34;  * https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/set_environment_variables.md&#34;
+    )
+    print(
+        f&#34;  * https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/how_to_use_nnunet.md&#34;
+    )
+    print(
+        f&#34;  * https://transformhealthcare.medium.com/glioblastoma-brain-tumor-segmentation-part-6-neural-network-model-training-5de238e9b195&#34;
+    )
+    print(
+        f&#34;  * https://transformhealthcare.medium.com/glioblastoma-brain-tumor-segmentation-part-7-inference-58d4287a040d&#34;
+    )
+
+    # Return success
+    return True, &#34;&#34;
+
+
+if __name__ == &#34;__main__&#34;:
+
+    # Path to qute demo segmentation dataset
+    qute_dataset_folder = (
+        Path(userpaths.get_my_documents())
+        / &#34;qute&#34;
+        / &#34;data&#34;
+        / &#34;demo_segmentation_3_classes/&#34;
+    )
+
+    if &#34;nnUNet_raw&#34; in os.environ:
+        nnUnet_raw_folder = Path(os.environ[&#34;nnUNet_raw&#34;])
+    else:
+        print(&#34;The environment variable `nnUNet_raw` is not defined.&#34;)
+        sys.exit(1)
+
+    qute_to_msd_format(
+        input_folder=qute_dataset_folder,
+        output_folder=nnUnet_raw_folder,
+        force=True,
+    )</code></pre>
 </details>
 </section>
 <section>
@@ -108,6 +452,365 @@ def sample(
 <section>
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
+<dt id="qute.data.utils.qute_to_msd_format"><code class="name flex">
+<span>def <span class="ident">qute_to_msd_format</span></span>(<span>input_folder: Union[pathlib.Path, str], output_folder: Union[pathlib.Path, str], channel_names: tuple = ('fluorescence_microscopy',), label_names: tuple = ('background', 'cell', 'cell_border'), dataset_id: int = 1, dataset_name: Optional[str] = None, stem_name: str = 'demo_', images_suffix: str = '_0000', to_nii_gz: bool = False, test_perc: float = 0.2, num_folds: int = 5, force: bool = False, seed=None) ‑> tuple[bool, str]</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Convert a qute dataset (with sub-folders "images" and "labels") to an MSD dataset.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>input_folder</code></strong> :&ensp;<code>Union[Path, str]</code></dt>
+<dd>Full path of the dataset in qute format.</dd>
+<dt><strong><code>output_folder</code></strong> :&ensp;<code>Union[Path, str]</code></dt>
+<dd>Full path of the nnUnetv2-compatible dataset. It is recommended to set this to <code>$nnNet_raw</code>.</dd>
+<dt><strong><code>channel_names</code></strong> :&ensp;<code>tuple</code></dt>
+<dd>Name of the channels, e.g. ("fluorescence_microscopy", )</dd>
+<dt><strong><code>label_names</code></strong> :&ensp;<code>tuple</code></dt>
+<dd>Name of the segmentation classes, e.g. ("background", "cell", "cell_border")</dd>
+<dt><strong><code>dataset_id</code></strong> :&ensp;<code>int</code></dt>
+<dd>Integer ID of the dataset.</dd>
+<dt><strong><code>dataset_name</code></strong> :&ensp;<code>str</code></dt>
+<dd>Name of the dataset. If not specified, it will be derived from <code>input_folder</code>.</dd>
+<dt><strong><code>stem_name</code></strong> :&ensp;<code>str</code></dt>
+<dd>Stem name of all images. In contrast to the qute format, all training images, labels and test
+images must have the same stem name.</dd>
+<dt><strong><code>images_suffix</code></strong> :&ensp;<code>str (default is "_0000")</code></dt>
+<dd>Numeric suffix (as 0-padded string and leading _) for the images (it won't be applied to the labels).
+For instance, imagesTr/demo_001_0000.tif is matched by labelsTr/demo_001.tif.</dd>
+<dt><strong><code>to_nii_gz</code></strong> :&ensp;<code>bool (default is False)</code></dt>
+<dd>Set to True to convert the TIFF images to nii.gz; otherwise, the TIFF files are just copied over.</dd>
+<dt><strong><code>test_perc</code></strong> :&ensp;<code>float (default is 0.2)</code></dt>
+<dd>Fraction of the images to be used for testing.</dd>
+<dt><strong><code>num_folds</code></strong> :&ensp;<code>int (default is 5)</code></dt>
+<dd>Number of folds for k-fold cross-validation during training.</dd>
+<dt><strong><code>force</code></strong> :&ensp;<code>bool (default is False)</code></dt>
+<dd>Set to True to delete and recreate if a converted Dataset already exists in the <code>output_folder</code>, otherwise
+abort.</dd>
+<dt><strong><code>seed</code></strong> :&ensp;<code>int (default is 2022)</code></dt>
+<dd>Seed for the random number generator (for training/test splitting).</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>res</code></strong>, <strong><code>msg</code></strong> :&ensp;<code>tuple(bool, str)</code></dt>
+<dd>res: True if the dataset was created, False otherwise
+msg: "" if successful; otherwise, contains error message.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def qute_to_msd_format(
+    input_folder: Union[Path, str],
+    output_folder: Union[Path, str],
+    channel_names: tuple = (&#34;fluorescence_microscopy&#34;,),
+    label_names: tuple = (&#34;background&#34;, &#34;cell&#34;, &#34;cell_border&#34;),
+    dataset_id: int = 1,
+    dataset_name: Optional[str] = None,
+    stem_name: str = &#34;demo_&#34;,
+    images_suffix: str = &#34;_0000&#34;,
+    to_nii_gz: bool = False,
+    test_perc: float = 0.2,
+    num_folds: int = 5,
+    force: bool = False,
+    seed=None,
+) -&gt; tuple[bool, str]:
+    &#34;&#34;&#34;Convert a qute dataset (with sub-folders &#34;images&#34; and &#34;labels&#34;) to an MSD dataset.
+
+
+
+    Parameters
+    ----------
+
+    input_folder: Union[Path, str]
+        Full path of the dataset in qute format.
+
+    output_folder: Union[Path, str]
+        Full path of the nnUnetv2-compatible dataset. It is recommended to set this to `$nnNet_raw`.
+
+    channel_names: tuple
+        Name of the channels, e.g. (&#34;fluorescence_microscopy&#34;, )
+
+    label_names: tuple
+        Name of the segmentation classes, e.g. (&#34;background&#34;, &#34;cell&#34;, &#34;cell_border&#34;)
+
+    dataset_id: int
+        Integer ID of the dataset.
+
+    dataset_name: str
+        Name of the dataset. If not specified, it will be derived from `input_folder`.
+
+    stem_name: str
+        Stem name of all images. In contrast to the qute format, all training images, labels and test
+        images must have the same stem name.
+
+    images_suffix: str (default is &#34;_0000&#34;)
+        Numeric suffix (as 0-padded string and leading _) for the images (it won&#39;t be applied to the labels).
+        For instance, imagesTr/demo_001_0000.tif is matched by labelsTr/demo_001.tif.
+
+    to_nii_gz: bool (default is False)
+        Set to True to convert the TIFF images to nii.gz; otherwise, the TIFF files are just copied over.
+
+    test_perc: float (default is 0.2)
+        Fraction of the images to be used for testing.
+
+    num_folds: int (default is 5)
+        Number of folds for k-fold cross-validation during training.
+
+    force: bool (default is False)
+        Set to True to delete and recreate if a converted Dataset already exists in the `output_folder`, otherwise
+        abort.
+
+    seed: int (default is 2022)
+        Seed for the random number generator (for training/test splitting).
+
+    Returns
+    -------
+
+    res, msg: tuple(bool, str)
+        res: True if the dataset was created, False otherwise
+        msg: &#34;&#34; if successful; otherwise, contains error message.
+    &#34;&#34;&#34;
+
+    # Check the structure of the input folder
+    input_folder = Path(input_folder)
+    if not input_folder.is_dir():
+        return False, f&#34;Input folder {input_folder} does not exit.&#34;
+
+    # Check tha value of dataset_id
+    if dataset_id != int(dataset_id) or dataset_id &lt; 1:
+        raise ValueError(&#34;`dataset_id` must be a positive integer.&#34;)
+
+    # Check the value of test_perc
+    if test_perc &lt; 0.0 or test_perc &gt; 1.0:
+        raise ValueError(&#34;`test_perc` must be between 0 and 1.&#34;)
+
+    # Make sure the images and labels sub-folders exist
+    images_folder = input_folder / &#34;images&#34;
+    if not images_folder.is_dir():
+        return False, f&#34;The `images` sub-folder does not exit.&#34;
+
+    labels_folder = input_folder / &#34;labels&#34;
+    if not labels_folder.is_dir():
+        return False, f&#34;The `labels` sub-folder does not exit.&#34;
+
+    # Get the contents of images_folder and labels_folder
+    images_files = list(images_folder.glob(&#34;*.tif*&#34;))
+    labels_files = list(labels_folder.glob(&#34;*.tif*&#34;))
+    if len(images_files) == 0 or len(labels_files) == 0:
+        return False, f&#34;No `images` or `labels` found.&#34;
+    if len(images_files) != len(labels_files):
+        return False, f&#34;Unmatched number of `images` and `labels`.&#34;
+
+    # Check whether the output folder already exists, otherwise create
+    output_folder = Path(output_folder)
+    output_folder.mkdir(exist_ok=True)
+
+    # Check whether the dataset folder already exists, otherwise create
+    if dataset_name is None:
+        dataset_name = input_folder.name
+    dataset_folder = output_folder / f&#34;Dataset{dataset_id:03}_{dataset_name}&#34;
+    dataset_folder.mkdir(exist_ok=True)
+
+    # Check whether the training and test sub-folders already exist, otherwise create
+    images_tr_folder = dataset_folder / &#34;imagesTr&#34;
+    images_tr_folder.mkdir(exist_ok=True)
+    labels_tr_folder = dataset_folder / &#34;labelsTr&#34;
+    labels_tr_folder.mkdir(exist_ok=True)
+    images_ts_folder = dataset_folder / &#34;imagesTs&#34;
+    images_ts_folder.mkdir(exist_ok=True)
+
+    # Check if the sub-folders already contain images
+    empty = True
+    if len(list(images_ts_folder.glob(&#34;*.tif*&#34;))) &gt; 0:
+        empty = False
+    if len(list(labels_tr_folder.glob(&#34;*.tif*&#34;))) &gt; 0:
+        empty = False
+    if len(list(images_ts_folder.glob(&#34;*.tif*&#34;))) &gt; 0:
+        empty = False
+    if not empty:
+        if not force:
+            return False, &#34;Dataset already existing. As requested, we abort here.&#34;
+
+        # Delete sub-folders
+        shutil.rmtree(images_tr_folder)
+        shutil.rmtree(labels_tr_folder)
+        shutil.rmtree(images_ts_folder)
+
+        # Re-create them
+        images_tr_folder.mkdir(exist_ok=True)
+        labels_tr_folder.mkdir(exist_ok=True)
+        images_ts_folder.mkdir(exist_ok=True)
+
+    # Make sure that the filenames are sorted (naturally)
+    images_files = natsorted(images_files)
+    labels_files = natsorted(labels_files)
+
+    # Shuffle a copy of the file names
+    rng = default_rng(seed=seed)
+    shuffled_indices = rng.permutation(len(images_files))
+    shuffled_images_files = np.array(images_files.copy())[shuffled_indices].tolist()
+    shuffled_labels_files = np.array(labels_files.copy())[shuffled_indices].tolist()
+
+    # Split between training and testing sub-sets
+    threshold = int(round((1.0 - test_perc) * len(images_files)))
+    if threshold == 0 or threshold == len(images_files):
+        return False, &#34;The requested `test_perc` fails splitting the images properly.&#34;
+    selected_training_images_files = shuffled_images_files[:threshold]
+    selected_training_labels_files = shuffled_labels_files[:threshold]
+    selected_test_images_files = shuffled_images_files[threshold:]
+
+    def target_name(convert: bool, name: str, stem: str, suffix: str = &#34;&#34;):
+        &#34;&#34;&#34;Rename the target image to fit the nnUNetv2 expected pattern.&#34;&#34;&#34;
+        numbers = re.findall(&#34;(\d+).tif$&#34;, Path(name).name)
+        if len(numbers) != 1:
+            return name
+        if convert:
+            new_name = f&#34;{stem}{numbers[0]}{suffix}.nii.gz&#34;
+        else:
+            new_name = f&#34;{stem}{numbers[0]}{suffix}.tif&#34;
+        return new_name
+
+    # Prepare output file names
+    renamed_selected_training_images_files = []
+    renamed_selected_training_labels_files = []
+    renamed_selected_test_images_files = []
+    for f in selected_training_images_files:
+        renamed_selected_training_images_files.append(
+            f&#34;{images_tr_folder}/{target_name(to_nii_gz, f, stem_name, images_suffix)}&#34;
+        )
+    for f in selected_training_labels_files:
+        renamed_selected_training_labels_files.append(
+            f&#34;{labels_tr_folder}/{target_name(to_nii_gz, f, stem_name)}&#34;
+        )
+    for f in selected_test_images_files:
+        renamed_selected_test_images_files.append(
+            f&#34;{images_ts_folder}/{target_name(to_nii_gz, f, stem_name, images_suffix)}&#34;
+        )
+
+    # Now copy or convert the files
+    for f, o in zip(
+        selected_training_images_files, renamed_selected_training_images_files
+    ):
+        if to_nii_gz:
+            save.to_nii(load.load_any(f), o)
+        else:
+            shutil.copy(f, o)
+    for f, o in zip(
+        selected_training_labels_files, renamed_selected_training_labels_files
+    ):
+        if to_nii_gz:
+            save.to_nii(load.load_any(f), o)
+        else:
+            shutil.copy(f, o)
+    for f, o in zip(selected_test_images_files, renamed_selected_test_images_files):
+        if to_nii_gz:
+            save.to_nii(load.load_any(f), o)
+        else:
+            shutil.copy(f, o)
+
+    # Create the datalist
+    datalist = {
+        # Add all test images to datalist[&#34;testing&#34;]
+        &#34;testing&#34;: [
+            {&#34;image&#34;: &#34;./imagesTs/&#34; + Path(file).name}
+            for file in renamed_selected_test_images_files
+        ],
+        # Add all training images and labels as one fold
+        &#34;training&#34;: [
+            {
+                &#34;image&#34;: f&#34;./imagesTr/{Path(renamed_selected_training_images_files[i]).name}&#34;,
+                &#34;label&#34;: f&#34;./labelsTr/{Path(renamed_selected_training_labels_files[i]).name}&#34;,
+                &#34;fold&#34;: 0,
+            }
+            for i in range(len(renamed_selected_training_images_files))
+        ],
+    }
+
+    # Split training data into num_folds random folds
+    fold_size = len(datalist[&#34;training&#34;]) // num_folds
+    for i in range(num_folds):
+        for j in range(fold_size):
+            datalist[&#34;training&#34;][i * fold_size + j][&#34;fold&#34;] = i
+
+    # Create dictionaries to store in the dataset.json file
+    channel_names_dict = {}
+    for i, channel in enumerate(channel_names):
+        channel_names_dict[str(i)] = channel
+    label_names_dict = {}
+    for i, label in enumerate(label_names):
+        label_names_dict[label] = i
+    dataset = {
+        &#34;channel_names&#34;: channel_names_dict,
+        &#34;labels&#34;: label_names_dict,
+        &#34;numTraining&#34;: len(datalist[&#34;training&#34;]),
+        &#34;file_ending&#34;: &#34;.tif&#34;,
+        &#34;dataset_name&#34;: f&#34;Dataset{dataset_id:03}_{dataset_name}&#34;,
+    }
+    with open(dataset_folder / &#34;dataset.json&#34;, &#34;w&#34;) as f:
+        # write the dictionary to the file in JSON format
+        json.dump(dataset, f)
+
+    # Save the datalist
+    datalist_file = (
+        dataset_folder / f&#34;msd_{Path(dataset_folder).name.lower()}_folds.json&#34;
+    )
+    with open(datalist_file, &#34;w&#34;, encoding=&#34;utf-8&#34;) as f:
+        json.dump(datalist, f, ensure_ascii=False, indent=4)
+
+    # Finally, create input.yaml
+    with open(dataset_folder / &#34;input.yaml&#34;, &#34;w&#34;) as f:
+        f.write(f&#34;dataset_name_or_id: {dataset_id}\n&#34;)
+        f.write(f&#34;modality: CT\n&#34;)
+        f.write(f&#34;datalist: {datalist_file}\n&#34;)
+        f.write(f&#34;dataroot: {dataset_folder}\n&#34;)
+
+    # Inform
+    print(f&#34;\n\n* * * All done! * * *&#34;)
+    print(f&#34;\nData and configuration files written to `{dataset_folder}`.&#34;)
+    print(
+        f&#34;\nIf it is not already there, please make sure to copy/move `{dataset_folder.name}` to the folder &#34;
+    )
+    print(
+        f&#34;pointed at by the environment variable `nnUNet_raw`. Then, assuming the dataset id is `1`\n&#34;
+        f&#34;and the dataset is 2D, run the following (adapt accordingly): &#34;
+    )
+    print(f&#34;\n$ nnUNetv2_plan_and_preprocess -d 1 --verify_dataset_integrity&#34;)
+    print(
+        &#34;$ for i in {0..4}; do nnUNetv2_train 1 2d $i --npz; done   # Fold 0 through 4, adapt as necessary&#34;
+    )
+    print(f&#34;$ nnUNetv2_find_best_configuration -d 1 -f 0 1 2 3 4 -c 2d&#34;)
+    print(
+        f&#34;$ nnUNetv2_predict -d 1 -i $nnUNet_raw/$Dataset/imagesTs -o $nnUNet_results/$Dataset/inference -f 0 1 2 3 4 \\&#34;
+    )
+    print(f&#34;       -tr nnUNetTrainer -c 2d -p nnUNetPlans&#34;)
+    print(
+        f&#34;$ nnUNetv2_apply_postprocessing -i $nnUNet_results/$Dataset/inference -o $nnUNet_results/$Dataset/postprocessing \\&#34;
+    )
+    print(
+        f&#34;       -pp_pkl_file $nnUNet_results/$Dataset/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/postprocessing.pkl \\&#34;
+    )
+    print(
+        f&#34;     -np 8 -plans_json $nnUNet_results/$Dataset/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/plans.json&#34;
+    )
+    print(f&#34;\nIn the commands above, replace `$Dataset` with the dataset name.&#34;)
+    print(f&#34;\nPlease see: &#34;)
+    print(
+        f&#34;  * https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/set_environment_variables.md&#34;
+    )
+    print(
+        f&#34;  * https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/how_to_use_nnunet.md&#34;
+    )
+    print(
+        f&#34;  * https://transformhealthcare.medium.com/glioblastoma-brain-tumor-segmentation-part-6-neural-network-model-training-5de238e9b195&#34;
+    )
+    print(
+        f&#34;  * https://transformhealthcare.medium.com/glioblastoma-brain-tumor-segmentation-part-7-inference-58d4287a040d&#34;
+    )
+
+    # Return success
+    return True, &#34;&#34;</code></pre>
+</details>
+</dd>
 <dt id="qute.data.utils.sample"><code class="name flex">
 <span>def <span class="ident">sample</span></span>(<span>image: numpy.ndarray, patch_size: tuple, y0: Optional[int] = None, x0: Optional[int] = None, seed: Optional[int] = None) ‑> tuple[numpy.ndarray, int, int]</span>
 </code></dt>
@@ -215,6 +918,7 @@ the extracted subset; x coordinate of the top-left corner of the extracted subse
 </li>
 <li><h3><a href="#header-functions">Functions</a></h3>
 <ul class="">
+<li><code><a title="qute.data.utils.qute_to_msd_format" href="#qute.data.utils.qute_to_msd_format">qute_to_msd_format</a></code></li>
 <li><code><a title="qute.data.utils.sample" href="#qute.data.utils.sample">sample</a></code></li>
 </ul>
 </li>

@@ -1,13 +1,13 @@
-#  ********************************************************************************
-#   Copyright © 2022 - 2003, ETH Zurich, D-BSSE, Aaron Ponti
-#   All rights reserved. This program and the accompanying materials
-#   are made available under the terms of the Apache License Version 2.0
-#   which accompanies this distribution, and is available at
-#   https://www.apache.org/licenses/LICENSE-2.0.txt
+# ******************************************************************************
+# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# All rights reserved. This program and the accompanying materials
+# are made available under the terms of the Apache License Version 2.0
+# which accompanies this distribution, and is available at
+# https://www.apache.org/licenses/LICENSE-2.0.txt
 #
-#   Contributors:
-#       Aaron Ponti - initial API and implementation
-#  ******************************************************************************/
+# Contributors:
+#   Aaron Ponti - initial API and implementation
+# ******************************************************************************
 
 import random
 from copy import deepcopy
@@ -130,8 +130,7 @@ class CustomTIFFReaderd(MapTransform):
 
     def __init__(
         self,
-        image_key: str = "image",
-        label_key: str = "label",
+        keys: list[str] = ["image", "label"],
         ensure_channel_first: bool = True,
         dtype: torch.dtype = torch.float32,
     ) -> None:
@@ -140,11 +139,8 @@ class CustomTIFFReaderd(MapTransform):
         Parameters
         ----------
 
-        image_key: str
-            Key for the image in the data dictionary.
-
-        label_key: str
-            Key for the labels in the data dictionary.
+        keys: list[str]
+            Keys for the data dictionary.
 
         ensure_channel_first: bool
             Ensure that the image is in the channel first format.
@@ -153,9 +149,8 @@ class CustomTIFFReaderd(MapTransform):
             Type of the image.
 
         """
-        super().__init__(keys=[image_key, label_key])
-        self.image_key = image_key
-        self.label_key = label_key
+        super().__init__(keys=keys)
+        self.keys = keys
         self.ensure_channel_first = ensure_channel_first
         self.dtype = dtype
 
@@ -173,24 +168,18 @@ class CustomTIFFReaderd(MapTransform):
         # Work on a copy of the dictionary
         d = dict(data)
 
-        # Get arguments
-        image_path = str(Path(d[self.image_key]).resolve())
-        label_path = str(Path(data[self.label_key]).resolve())
+        for key in self.keys:
 
-        # Load and process images
-        image = torch.Tensor(imread(image_path).astype(np.float32))
-        if self.ensure_channel_first:
-            image = image.unsqueeze(0)
-        if self.dtype is not None:
-            image = image.to(self.dtype)
-        d[self.image_key] = image  # MetaTensor(image)
+            # Get arguments
+            image_path = str(Path(d[key]).resolve())
 
-        labels = torch.Tensor(imread(label_path).astype(np.float32))
-        if self.ensure_channel_first:
-            labels = labels.unsqueeze(0)
-        if self.dtype is not None:
-            labels = labels.to(self.dtype)
-        d[self.label_key] = labels  # MetaTensor(labels)
+            # Load and process images
+            image = torch.Tensor(imread(image_path).astype(np.float32))
+            if self.ensure_channel_first:
+                image = image.unsqueeze(0)
+            if self.dtype is not None:
+                image = image.to(self.dtype)
+            d[key] = image  # MetaTensor(image)
 
         return d
 
@@ -253,7 +242,7 @@ class MinMaxNormalized(MapTransform):
 
     def __init__(
         self,
-        image_key: str = "image",
+        keys: list[str] = ["image", "label"],
         min_intensity: float = 0.0,
         max_intensity: float = 65535.0,
     ) -> None:
@@ -262,15 +251,15 @@ class MinMaxNormalized(MapTransform):
         Parameters
         ----------
 
-        image_key: str
-            Key for the image in the data dictionary.
+        keys: list[str]
+            Keys for the data dictionary.
         min_intensity: float
             Minimum intensity to normalize against (optional, default = 0.0).
         max_intensity: float
             Maximum intensity to normalize against (optional, default = 65535.0).
         """
-        super().__init__(keys=[image_key])
-        self.image_key = image_key
+        super().__init__(keys=keys)
+        self.keys = keys
         self.min_intensity = min_intensity
         self.max_intensity = max_intensity
         self.range_intensity = self.max_intensity - self.min_intensity
@@ -289,9 +278,55 @@ class MinMaxNormalized(MapTransform):
         # Work on a copy of the input dictionary data
         d = dict(data)
 
-        d[self.image_key] = (
-            d[self.image_key] - self.min_intensity
-        ) / self.range_intensity
+        # Process the images
+        for key in self.keys:
+            d[key] = (d[key] - self.min_intensity) / self.range_intensity
+        return d
+
+
+class Scaled(MapTransform):
+    """Scale the images in the data dictionary by a constant factor and optionally type-casts them."""
+
+    def __init__(
+        self,
+        keys: list[str] = ["image", "label"],
+        factor: float = 65535.0,
+        dtype: torch.dtype = torch.int32,
+    ) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+
+        keys: list[str]
+            Keys for the data dictionary.
+        factor: float
+            Factor by which to scale the images (optional, default = 65535.0).
+        dtype: torch.dtype
+            Data type of the final image (optional, default = torch.int32).
+        """
+        super().__init__(keys=keys)
+        self.keys = keys
+        self.factor = factor
+        self.dtype = dtype
+
+    def __call__(self, data: dict) -> dict:
+        """
+        Apply the transform to the tensors in the data dictionary.
+
+        Returns
+        -------
+
+        data: dict
+            Updated dictionary with scaled images.
+        """
+
+        # Work on a copy of the input dictionary data
+        d = dict(data)
+
+        # Process the images
+        for key in self.keys:
+            d[key] = (d[key] * self.factor).to(self.dtype)
         return d
 
 
@@ -390,10 +425,10 @@ class ZNormalize(Transform):
 class ZNormalized(MapTransform):
     """Standardize the "image" tensor by subtracting the mean and dividing by the standard deviation."""
 
-    def __init__(self, image_key: str = "image") -> None:
+    def __init__(self, keys: list[str]) -> None:
         """Constructor"""
-        super().__init__(keys=[image_key])
-        self.image_key = image_key
+        super().__init__(keys=keys)
+        self.keys = keys
 
     def __call__(self, data: dict) -> dict:
         """
@@ -409,9 +444,10 @@ class ZNormalized(MapTransform):
         # Work on a copy of the input dictionary data
         d = dict(data)
 
-        mn = d[self.image_key].mean()
-        sd = d[self.image_key].std()
-        d[self.image_key] = (d[self.image_key] - mn) / sd
+        for key in self.keys:
+            mn = d[key].mean()
+            sd = d[key].std()
+            d[key] = (d[key] - mn) / sd
         return d
 
 
