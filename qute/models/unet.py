@@ -301,6 +301,11 @@ class UNet(pl.LightningModule):
 
                     # Type-cast if needed
                     if output_dtype is not None:
+                        # Make sure not to wrap around
+                        if np.issubdtype(output_dtype, np.integer):
+                            info = np.iinfo(output_dtype)
+                            pred[pred < info.min] = info.min
+                            pred[pred > info.max] = info.max
                         pred = pred.astype(output_dtype)
 
                     # Save prediction image as tiff file
@@ -495,6 +500,11 @@ class UNet(pl.LightningModule):
 
                     # Type-cast if needed
                     if output_dtype is not None:
+                        # Make sure not to wrap around
+                        if np.issubdtype(output_dtype, np.integer):
+                            info = np.iinfo(output_dtype)
+                            ensemble_pred[ensemble_pred < info.min] = info.min
+                            ensemble_pred[ensemble_pred > info.max] = info.max
                         ensemble_pred = ensemble_pred.astype(output_dtype)
 
                     # Save ensemble prediction image as tiff file
@@ -519,6 +529,11 @@ class UNet(pl.LightningModule):
 
                             # Type-cast if needed
                             if output_dtype is not None:
+                                # Make sure not to wrap around
+                                if np.issubdtype(output_dtype, np.integer):
+                                    info = np.iinfo(output_dtype)
+                                    current_pred[current_pred < info.min] = info.min
+                                    current_pred[current_pred > info.max] = info.max
                                 current_pred = current_pred.astype(output_dtype)
 
                             # Save
