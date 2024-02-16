@@ -174,12 +174,20 @@ class UNet(pl.LightningModule):
             if self.campaign_transforms.get_val_metrics_transforms() is not None:
                 val_metrics = self.metrics(
                     self.campaign_transforms.get_val_metrics_transforms()(y_hat), y
-                ).mean()
+                )
             else:
-                val_metrics = self.metrics(y_hat, y).mean()
-            self.log(
-                "val_metrics", torch.tensor([val_metrics]), on_step=False, on_epoch=True
-            )
+                val_metrics = self.metrics(y_hat, y)
+
+            # Compute and log the mean metrics score per class
+            mean_val_per_class = val_metrics.nanmean(dim=0)
+            for i, val_score in enumerate(mean_val_per_class):
+                self.log(
+                    f"val_metrics_class_{i}",
+                    torch.tensor([val_score]),
+                    on_step=False,
+                    on_epoch=True,
+                )
+
         return val_loss
 
     def test_step(self, batch, batch_idx):
@@ -192,15 +200,20 @@ class UNet(pl.LightningModule):
             if self.campaign_transforms.get_test_metrics_transforms() is not None:
                 test_metrics = self.metrics(
                     self.campaign_transforms.get_test_metrics_transforms()(y_hat), y
-                ).mean()
+                )
             else:
-                test_metrics = self.metrics(y_hat, y).mean()
-            self.log(
-                "test_metrics",
-                torch.tensor([test_metrics]),
-                on_step=False,
-                on_epoch=True,
-            )
+                test_metrics = self.metrics(y_hat, y)
+
+            # Compute and log the mean metrics score per class
+            mean_test_per_class = test_metrics.nanmean(dim=0)
+            for i, test_score in enumerate(mean_test_per_class):
+                self.log(
+                    f"test_metrics_class_{i}",
+                    torch.tensor([test_score]),
+                    on_step=False,
+                    on_epoch=True,
+                )
+
         return test_loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):

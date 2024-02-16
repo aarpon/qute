@@ -65,6 +65,11 @@ if __name__ == "__main__":
         inference_batch_size=INFERENCE_BATCH_SIZE,
     )
 
+    # Calculate the number of steps per epoch
+    data_module.prepare_data()
+    data_module.setup("train")
+    steps_per_epoch = len(data_module.train_dataloader())
+
     # Loss
     criterion = DiceCELoss(include_background=True, to_onehot_y=False, softmax=True)
 
@@ -74,7 +79,7 @@ if __name__ == "__main__":
     # Learning rate scheduler
     lr_scheduler_class = OneCycleLR
     lr_scheduler_parameters = {
-        "total_steps": 8 * MAX_EPOCHS,  # Steps per epoch in this case is 8.
+        "total_steps": steps_per_epoch * MAX_EPOCHS,
         "div_factor": 5.0,
         "max_lr": LEARNING_RATE,
         "pct_start": 0.5,  # Fraction of total_steps at which the learning rate starts decaying after reaching max_lr
