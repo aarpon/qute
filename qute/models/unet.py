@@ -222,7 +222,7 @@ class UNet(pl.LightningModule):
 
             # Make sure to log the correct class name in case the background is not
             # considered in the calculation
-            start = len(self.class_names) - mean_test_per_class.shape[1]
+            start = len(self.class_names) - test_metrics.shape[1]
             for i, test_score in enumerate(mean_test_per_class):
                 self.log(
                     f"test_metrics_{self.class_names[start + i]}",
