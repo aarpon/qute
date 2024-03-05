@@ -37,6 +37,8 @@ INFERENCE_BATCH_SIZE = 4
 NUM_PATCHES = 1
 PATCH_SIZE = (640, 640)
 LEARNING_RATE = 0.001
+INCLUDE_BACKGROUND = True
+CLASS_NAMES = ["background", "cell", "membrane"]
 try:
     PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
 except AssertionError:
@@ -71,10 +73,14 @@ if __name__ == "__main__":
     steps_per_epoch = len(data_module.train_dataloader())
 
     # Loss
-    criterion = DiceCELoss(include_background=True, to_onehot_y=False, softmax=True)
+    criterion = DiceCELoss(
+        include_background=INCLUDE_BACKGROUND, to_onehot_y=False, softmax=True
+    )
 
     # Metrics
-    metrics = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
+    metrics = DiceMetric(
+        include_background=INCLUDE_BACKGROUND, reduction="mean", get_not_nans=False
+    )
 
     # Learning rate scheduler
     lr_scheduler_class = OneCycleLR
@@ -91,6 +97,7 @@ if __name__ == "__main__":
         campaign_transforms=campaign_transforms,
         in_channels=1,
         out_channels=3,
+        class_names=CLASS_NAMES,
         num_res_units=4,
         criterion=criterion,
         channels=(16, 32, 64),

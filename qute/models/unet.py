@@ -47,6 +47,7 @@ class UNet(pl.LightningModule):
         spatial_dims: int = 2,
         in_channels: int = 1,
         out_channels: int = 3,
+        class_names: Optional[list] = None,
         channels=(16, 32, 64),
         strides: Optional[tuple] = None,
         criterion=DiceCELoss(include_background=True, to_onehot_y=False, softmax=True),
@@ -78,6 +79,10 @@ class UNet(pl.LightningModule):
 
         out_channels: int = 3
             Number of output channels (or labels, or classes)
+
+        class_names: Optional[list] = None
+            Names of the output classes (for logging purposes). If omitted, they will default
+            to ["class_1", "class_2", ...]
 
         channels: tuple = (16, 32, 64)
             Number of neuron per layer.
@@ -123,6 +128,9 @@ class UNet(pl.LightningModule):
         self.optimizer_class = optimizer_class
         self.scheduler_class = lr_scheduler_class
         self.scheduler_parameters = lr_scheduler_parameters
+        if class_names is None:
+            class_names = [f"class_{i}" for i in range(out_channels)]
+        self.class_names = class_names
         if strides is None:
             strides = (2,) * (len(channels) - 1)
         self.net = MonaiUNet(
@@ -180,9 +188,14 @@ class UNet(pl.LightningModule):
 
             # Compute and log the mean metrics score per class
             mean_val_per_class = val_metrics.nanmean(dim=0)
+
+            # Make sure to log the correct class name in case the background is not
+            # considered in the calculation
+            start = len(self.class_names) - val_metrics.shape[1]
+
             for i, val_score in enumerate(mean_val_per_class):
                 self.log(
-                    f"val_metrics_class_{i}",
+                    f"val_metrics_{self.class_names[start + i]}",
                     torch.tensor([val_score]),
                     on_step=False,
                     on_epoch=True,
@@ -206,9 +219,13 @@ class UNet(pl.LightningModule):
 
             # Compute and log the mean metrics score per class
             mean_test_per_class = test_metrics.nanmean(dim=0)
+
+            # Make sure to log the correct class name in case the background is not
+            # considered in the calculation
+            start = len(self.class_names) - mean_test_per_class.shape[1]
             for i, test_score in enumerate(mean_test_per_class):
                 self.log(
-                    f"test_metrics_class_{i}",
+                    f"test_metrics_{self.class_names[start + i]}",
                     torch.tensor([test_score]),
                     on_step=False,
                     on_epoch=True,
