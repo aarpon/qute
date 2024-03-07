@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "qute"
-version = "0.1.0"
+version = "0.2.0"
 description = "Deep learning workflow manager."
 authors = ["Aaron Ponti <aaron.ponti@bsse.ethz.ch>, Andreas Cuny <andreas.cuny@bsse.ethz.ch>"]
 license = "Apache-2.0"
