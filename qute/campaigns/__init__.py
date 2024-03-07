@@ -14,3 +14,5 @@ from ._campaigns import (
     RestorationCampaignTransforms,
     SegmentationCampaignTransforms,
 )
+
+__doc__ = """Full training campaign definitions."""

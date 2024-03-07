@@ -10,3 +10,5 @@
 # ******************************************************************************
 
 from ._device import get_accelerator, get_device
+
+__doc__ = """Simplify multi-platform device support."""
