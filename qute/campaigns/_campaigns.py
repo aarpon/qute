@@ -45,37 +45,69 @@ class CampaignTransforms(ABC):
 
     @abstractmethod
     def get_train_transforms(self):
-        """Return a composition of (dictionary) MapTransforms needed to train on a patch."""
+        """Return a composition of (dictionary) MapTransforms needed to train on a patch.
+
+        These transforms are applied to the training dataset, to prepare the inputs to
+        be fed into the model for the forward pass of training.
+        """
         pass
 
     @abstractmethod
     def get_valid_transforms(self):
-        """Return a composition of Transforms needed to validate on a patch."""
+        """Return a composition of Transforms needed to validate on a patch.
+
+        These transforms are applied to the validation dataset, to prepare the inputs to
+        be fed into the model for validation.
+        """
         pass
 
     @abstractmethod
     def get_test_transforms(self):
-        """Return a composition of Transforms needed to test on a patch."""
+        """Return a composition of Transforms needed to test on a patch.
+
+        These transforms are applied to the test dataset, to prepare the inputs to
+        be fed into the model for testing.
+        """
         pass
 
     @abstractmethod
     def get_val_metrics_transforms(self):
-        """Define default transforms for validation metric calculation on a patch."""
+        """Define default transforms for validation metric calculation on a patch.
+
+        These transforms are applied to the validation dataset after the images have
+        gone through the forward pass, to prepare the output -- if needed -- for the
+        validation metrics to be applied.
+        """
         pass
 
     @abstractmethod
     def get_test_metrics_transforms(self):
-        """Define default transforms for testing metric calculation on a patch."""
+        """Define default transforms for testing metric calculation on a patch.
+
+        These transforms are applied to the test dataset after the images have
+        gone through the forward pass, to prepare the output -- if needed -- for the
+        test metrics to be applied.
+        """
         pass
 
     @abstractmethod
     def get_inference_transforms(self):
-        """Define inference transforms to predict on patch."""
+        """Define inference transforms to predict on patch.
+
+        These transforms are applied to the output of the full inference (that is the
+        full images, not the patches) to prepare them to be saved to disk as final
+        inference images.
+        """
         pass
 
     @abstractmethod
     def get_post_inference_transforms(self):
-        """Define post inference transforms to apply after prediction on patch."""
+        """Define post inference transforms to apply after prediction on patch.
+
+        These transforms are applied to the images that will go through full inference.
+        Please notice that the patch size will be the same as for training, a sliding
+        windows approach will be used to predict the whole image.
+        """
         pass
 
 
