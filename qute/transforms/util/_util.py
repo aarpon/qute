@@ -13,7 +13,11 @@ import numpy as np
 
 
 def scale_dist_transform_by_region(
-    dt: np.ndarray, regions: np.ndarray, reverse: bool = False, in_place: bool = False
+    dt: np.ndarray,
+    regions: np.ndarray,
+    reverse: bool = False,
+    do_not_zero: bool = False,
+    in_place: bool = False,
 ):
     """Scales the distance transform values by region.
 
@@ -30,7 +34,11 @@ def scale_dist_transform_by_region(
 
     reverse: bool
         Whether to reverse the direction of the normalized distance transform: from 1.0 at the center of the
-        objects and 0.0 at the periphery, to 0.0 at the center and 1.0 at the periphery.
+        objects and 0.0 at the periphery, to (close to) 0.0 at the center and 1.0 at the periphery.
+
+    do_not_zero: bool
+        This is only considered if `reverse` is True. Set to True not to allow that the center pixels in each
+        region have an inverse distance transform of 0.0.
 
     Returns
     -------
@@ -57,8 +65,21 @@ def scale_dist_transform_by_region(
         indices = regions == i
         values = work_dt[indices]
         if reverse:
-            # Reverse the direction of the distance transform?
-            work_dt[indices] = 1.0 - work_dt[indices] / values.max()
+            # Reverse the direction of the distance transform: make sure to stretch
+            # the maximum to 1.0; we can keep a minimum larger than 0.0 in the center.
+            if do_not_zero:
+                # Do not set the distance at the center to 0.0; the gradient is
+                # slightly lower, depending on the original range.
+                tmp = work_dt[indices]
+                tmp = (tmp.max() + 1) - tmp
+                work_dt[indices] = tmp / tmp.max()
+            else:
+                # Plain linear inverse
+                min_value = work_dt[indices].min()
+                max_value = work_dt[indices].max()
+                work_dt[indices] = (work_dt[indices] - max_value) / (
+                    min_value - max_value
+                )
         else:
             work_dt[indices] = work_dt[indices] / values.max()
 

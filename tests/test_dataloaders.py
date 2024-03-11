@@ -11,13 +11,17 @@
 
 import pytest
 
+from qute.campaigns import SegmentationCampaignTransforms
 from qute.data.demos import CellSegmentationDemo
 
 
 def test_k_folds():
 
+    # Initialize default, example Segmentation Campaign Transform
+    campaign_transforms = SegmentationCampaignTransforms()
+
     # Initialize data module
-    data_module = CellSegmentationDemo()
+    data_module = CellSegmentationDemo(campaign_transforms=campaign_transforms)
 
     # Datasets are not yet defined
     assert data_module.train_dataset is None, "Training data is already defined!"
@@ -25,7 +29,9 @@ def test_k_folds():
     assert data_module.test_dataset is None, "Test data is already defined!"
 
     # Initialize data module with k-fold cross-validation
-    data_module = CellSegmentationDemo(num_folds=5)
+    data_module = CellSegmentationDemo(
+        campaign_transforms=campaign_transforms, num_folds=5
+    )
 
     # Datasets are not yet defined
     assert data_module.train_dataset is None, "Training data is already defined!"
@@ -35,8 +41,11 @@ def test_k_folds():
 
 def test_setup():
 
+    # Initialize default, example Segmentation Campaign Transform
+    campaign_transforms = SegmentationCampaignTransforms()
+
     # Initialize data module (no k-fold cross-validation)
-    data_module = CellSegmentationDemo()
+    data_module = CellSegmentationDemo(campaign_transforms=campaign_transforms)
 
     # Run the prepare/setup steps
     data_module.prepare_data()
@@ -101,7 +110,9 @@ def test_setup():
     assert n_labels == 9, "Unexpected number of labels returned."
 
     # Initialize data module with k-fold cross-validation (10 folds)
-    data_module = CellSegmentationDemo(num_folds=10)
+    data_module = CellSegmentationDemo(
+        campaign_transforms=campaign_transforms, num_folds=10
+    )
 
     # Run the prepare/setup steps
     data_module.prepare_data()
@@ -119,7 +130,9 @@ def test_setup():
     ), "Unexpected number of test images/labels pairs."
 
     # Initialize data module with k-fold cross-validation (5 folds)
-    data_module = CellSegmentationDemo(num_folds=5)
+    data_module = CellSegmentationDemo(
+        campaign_transforms=campaign_transforms, num_folds=5
+    )
 
     # Run the prepare/setup steps
     data_module.prepare_data()

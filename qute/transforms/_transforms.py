@@ -915,7 +915,7 @@ class AddBorderd(MapTransform):
 
         # Add the border as class 2
         eroded = erosion(lbl, footprint)
-        border = torch.bitwise_or(lbl, eroded)
+        border = lbl - eroded
         return lbl + border  # Count border pixels twice
 
     def __call__(self, data: dict) -> dict:
@@ -994,7 +994,11 @@ class AddNormalizedDistanceTransform(Transform):
     and adds it as an additional plane to the image."""
 
     def __init__(
-        self, pixel_class: int = 1, reverse: bool = False, in_place: bool = True
+        self,
+        pixel_class: int = 1,
+        reverse: bool = False,
+        do_not_zero: bool = False,
+        in_place: bool = True,
     ) -> None:
         """Constructor
 
@@ -1007,10 +1011,18 @@ class AddNormalizedDistanceTransform(Transform):
         reverse: bool
             Whether to reverse the direction of the normalized distance transform: from 1.0 at the center of the
             objects and 0.0 at the periphery, to 0.0 at the center and 1.0 at the periphery.
+
+        do_not_zero: bool (optional, default is False)
+            This is only considered if `reverse` is True. Set to True not to allow that the center pixels in each
+            region have an inverse distance transform of 0.0.
+
+        in_place: bool (optional, default is True)
+            Set to True to modify the Tensor in place.
         """
         super().__init__()
         self.pixel_class = pixel_class
         self.reverse = reverse
+        self.do_not_zero = do_not_zero
         self.in_place = in_place
 
     def __call__(self, data: np.ndarray) -> torch.Tensor:
@@ -1032,44 +1044,46 @@ class AddNormalizedDistanceTransform(Transform):
             data_label = data
 
         # Make sure that the dimensions of the data are correct
-        if not (data_label.ndim == 3 and data_label.shape[0] == 1):
+        if not (data_label.ndim in [3, 4] and data_label.shape[0] == 1):
             raise ValueError(
                 "The image array must be of dimensions (1 x height x width)!"
             )
 
-        # Try extracting the pixels belonging to requested class
-        bw = data_label.squeeze() == self.pixel_class
+        # Binarize the labels
+        bw = data_label > 0
 
         # Calculate distance transform
         dt = distance_transform_edt(bw, return_distances=True)
 
-        # Run region labelling
-        regions_id = label(bw, connectivity=1)
-
         # Normalize the distance transform by object in place
         dt = scale_dist_transform_by_region(
-            dt, regions_id, reverse=self.reverse, in_place=True
+            dt,
+            data_label,
+            reverse=self.reverse,
+            do_not_zero=self.do_not_zero,
+            in_place=True,
         )
 
         # Add the scaled distance transform as a new channel to the input image
-        data = torch.cat((data, torch.tensor(dt).unsqueeze(0).to(torch.float32)), dim=0)
-
-        print(data.shape, data.min(), data.max())
+        data = torch.cat(
+            (data, torch.tensor(dt).to(torch.float32)),
+            dim=0,
+        )
 
         # Return the updated data dictionary
         return data
 
 
 class AddNormalizedDistanceTransformd(MapTransform):
-    """Calculates and normalizes the distance transform per region of the selected pixel class from a labels image
+    """Calculates and normalizes the distance transform per region from the labels image (from an instance segmentation)
     and adds it as an additional plane to the image."""
 
     def __init__(
         self,
         image_key: str = "image",
         label_key: str = "label",
-        pixel_class: int = 1,
         reverse: bool = False,
+        do_not_zero: bool = False,
     ) -> None:
         """Constructor
 
@@ -1082,23 +1096,24 @@ class AddNormalizedDistanceTransformd(MapTransform):
         label_key: str
             Key for the label in the data dictionary.
 
-        pixel_class: int
-            Class of the pixels to be used for calculating the distance transform.
-
         reverse: bool
             Whether to reverse the direction of the normalized distance transform: from 1.0 at the center of the
             objects and 0.0 at the periphery, to 0.0 at the center and 1.0 at the periphery.
+
+        do_not_zero: bool (optional, default is False)
+            This is only considered if `reverse` is True. Set to True not to allow that the center pixels in each
+            region have an inverse distance transform of 0.0.
         """
         super().__init__(keys=[image_key, label_key])
         self.image_key = image_key
         self.label_key = label_key
-        self.pixel_class = pixel_class
         self.reverse = reverse
+        self.do_not_zero = do_not_zero
 
     def __call__(self, data: dict) -> dict:
         """
-        Calculates and normalizes the distance transform per region of the selected pixel class from a labels image
-        and adds it as an additional plane to the image.
+        Calculates and normalizes the distance transform per region from the labels image (from an instance segmentation)
+        and adds it as an additional plane to the image
 
         Returns
         -------
@@ -1117,28 +1132,29 @@ class AddNormalizedDistanceTransformd(MapTransform):
             data_label = d[self.label_key]
 
         # Make sure that the dimensions of the data are correct
-        if not (data_label.ndim == 3 and data_label.shape[0] == 1):
+        if not (data_label.ndim in [3, 4] and data_label.shape[0] == 1):
             raise ValueError(
-                "The image array must be of dimensions (1 x height x width)!"
+                "The image array must be of dimensions (1 { x depth} x height x width)!"
             )
 
-        # Try extracting the pixels belonging to requested class
-        bw = data_label.squeeze() == self.pixel_class
+        # Binarize the labels
+        bw = data_label > 0
 
         # Calculate distance transform
         dt = distance_transform_edt(bw, return_distances=True)
 
-        # Run region labelling
-        regions_id = label(bw, connectivity=1)
-
         # Normalize the distance transform by object in place
         dt = scale_dist_transform_by_region(
-            dt, regions_id, reverse=self.reverse, in_place=True
+            dt,
+            data_label,
+            reverse=self.reverse,
+            do_not_zero=self.do_not_zero,
+            in_place=True,
         )
 
         # Add the scaled distance transform as a new channel to the input image
         d[self.image_key] = torch.cat(
-            (d[self.image_key], torch.tensor(dt).unsqueeze(0).to(torch.float32)),
+            (d[self.image_key], torch.tensor(dt).to(torch.float32)),
             dim=0,
         )
 
