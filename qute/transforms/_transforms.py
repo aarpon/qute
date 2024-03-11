@@ -14,6 +14,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Optional, Union
 
+import monai.data
 import numpy as np
 import torch
 from kornia.morphology import erosion
@@ -79,6 +80,8 @@ class CustomTIFFReader(Transform):
         self,
         ensure_channel_first: bool = True,
         dtype: torch.dtype = torch.float32,
+        as_meta_tensor: bool = False,
+        pixdim: Optional[tuple] = None,
     ) -> None:
         """Constructor
 
@@ -90,10 +93,19 @@ class CustomTIFFReader(Transform):
 
         dtype: torch.dtype = torch.float32
             Type of the image.
+
+        as_meta_tensor: bool (default = False)
+            Set to True to return a MONAI MetaTensor, set to False for a PyTorch Tensor.
+
+        pixdim: Optional[tuple]
+            Set the voxel size (`pixdim`, in MONAI parlance) as metadata to the MetaTensor (only if `as_meta_tensor` is
+            True; otherwise it is ignored).
         """
         super().__init__()
         self.ensure_channel_first = ensure_channel_first
         self.dtype = dtype
+        self.as_meta_tensor = as_meta_tensor
+        self.pixdim = tuple(pixdim) if pixdim is not None else None
 
     def __call__(self, file_name: Union[Path, str]) -> torch.Tensor:
         """
@@ -108,8 +120,8 @@ class CustomTIFFReader(Transform):
         Returns
         -------
 
-        tensor: torch.Tensor
-            Torch tensor with requested type and shape.
+        tensor: torch.Tensor | monai.MetaTensor
+            Tensor with requested type and shape.
         """
 
         # File path
@@ -117,6 +129,15 @@ class CustomTIFFReader(Transform):
 
         # Load and process image
         data = torch.Tensor(imread(image_path).astype(np.float32))
+        if self.as_meta_tensor:
+            if self.pixdim is not None:
+                if data.ndim != len(self.pixdim):
+                    raise ValueError(
+                        "The size of `pixdim` does not natch the dimensionality of the image."
+                    )
+            else:
+                self.pixdim = tuple((1.0 for _ in range(data.ndim)))
+            data = MetaTensor(data, meta={"pixdim": self.pixdim})
         if self.ensure_channel_first:
             data = data.unsqueeze(0)
         if self.dtype is not None:
@@ -129,16 +150,18 @@ class CustomTIFFReaderd(MapTransform):
 
     def __init__(
         self,
-        keys: list[str] = ["image", "label"],
+        keys: tuple[str] = ("image", "label"),
         ensure_channel_first: bool = True,
         dtype: torch.dtype = torch.float32,
+        as_meta_tensor: bool = False,
+        pixdim: Optional[tuple] = None,
     ) -> None:
         """Constructor
 
         Parameters
         ----------
 
-        keys: list[str]
+        keys: tuple[str]
             Keys for the data dictionary.
 
         ensure_channel_first: bool
@@ -147,11 +170,19 @@ class CustomTIFFReaderd(MapTransform):
         dtype: torch.dtype = torch.float32
             Type of the image.
 
+        as_meta_tensor: bool (default = False)
+            Set to True to return a MONAI MetaTensor, set to False for a PyTorch Tensor.
+
+        pixdim: Optional[tuple]
+            Set the voxel size (`pixdim`, in MONAI parlance) as metadata to the MetaTensor (only if `as_meta_tensor` is
+            True; otherwise it is ignored).
         """
         super().__init__(keys=keys)
         self.keys = keys
         self.ensure_channel_first = ensure_channel_first
         self.dtype = dtype
+        self.as_meta_tensor = as_meta_tensor
+        self.pixdim = pixdim
 
     def __call__(self, data: dict) -> dict:
         """
@@ -174,11 +205,20 @@ class CustomTIFFReaderd(MapTransform):
 
             # Load and process images
             image = torch.Tensor(imread(image_path).astype(np.float32))
+            if self.as_meta_tensor:
+                if self.pixdim is not None:
+                    if image.ndim != len(self.pixdim):
+                        raise ValueError(
+                            "The size of `pixdim` does not natch the dimensionality of the image."
+                        )
+                else:
+                    self.pixdim = tuple((1.0 for _ in range(image.ndim)))
+                image = MetaTensor(image, meta={"pixdim": self.pixdim})
             if self.ensure_channel_first:
                 image = image.unsqueeze(0)
             if self.dtype is not None:
                 image = image.to(self.dtype)
-            d[key] = image  # MetaTensor(image)
+            d[key] = image  # (Meta)Tensor(image)
 
         return d
 
@@ -241,7 +281,7 @@ class MinMaxNormalized(MapTransform):
 
     def __init__(
         self,
-        keys: list[str] = ["image", "label"],
+        keys: tuple[str] = ("image", "label"),
         min_intensity: float = 0.0,
         max_intensity: float = 65535.0,
     ) -> None:
@@ -250,7 +290,7 @@ class MinMaxNormalized(MapTransform):
         Parameters
         ----------
 
-        keys: list[str]
+        keys: tuple[str]
             Keys for the data dictionary.
         min_intensity: float
             Minimum intensity to normalize against (optional, default = 0.0).
@@ -342,7 +382,7 @@ class Scaled(MapTransform):
 
     def __init__(
         self,
-        keys: list[str] = ["image", "label"],
+        keys: tuple[str] = ("image", "label"),
         factor: float = 65535.0,
         dtype: torch.dtype = torch.int32,
     ) -> None:
@@ -351,7 +391,7 @@ class Scaled(MapTransform):
         Parameters
         ----------
 
-        keys: list[str]
+        keys: tuple[str]
             Keys for the data dictionary.
         factor: float
             Factor by which to scale the images (optional, default = 65535.0).
@@ -396,7 +436,9 @@ class ToLabel(Transform):
     def __call__(self, data: torch.Tensor) -> torch.Tensor:
         """Transform one-hot Tensor to 2D label image."""
         if not self.in_place:
-            if isinstance(data, torch.Tensor):
+            if isinstance(data, torch.Tensor) or isinstance(
+                data, monai.data.MetaTensor
+            ):
                 data = data.clone()
             elif isinstance(data, np.ndarray):
                 data = data.copy()
@@ -405,12 +447,19 @@ class ToLabel(Transform):
                     "Unsupported data type. Data should be a PyTorch Tensor or a NumPy array."
                 )
 
-        if data.ndim == 4:
+        if data.ndim == 5:
+            # 3D data: (B, C, Z, H, W)
+            data = data.argmax(axis=1).type(self.dtype)
+        elif data.ndim == 4:
+            # 2D data: (B, C, H, W)
             data = data.argmax(axis=1).type(self.dtype)
         elif data.ndim == 3:
+            # 2D data: (C, H, W)
             data = data.argmax(axis=0).type(self.dtype)
         else:
-            raise ValueError("The input tensor must be of size (NCHW) or (HW).")
+            raise ValueError(
+                "The input tensor must be of size (B, C, Z, H, W), (B, C, H, W) or (C, H, W)."
+            )
 
         return data
 
@@ -478,7 +527,7 @@ class ZNormalize(Transform):
 class ZNormalized(MapTransform):
     """Standardize the "image" tensor by subtracting the mean and dividing by the standard deviation."""
 
-    def __init__(self, keys: list[str]) -> None:
+    def __init__(self, keys: tuple[str]) -> None:
         """Constructor"""
         super().__init__(keys=keys)
         self.keys = keys
