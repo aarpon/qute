@@ -9,6 +9,7 @@
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
 
+import pathlib
 import random
 from copy import deepcopy
 from pathlib import Path
@@ -17,12 +18,11 @@ from typing import Optional, Union
 import monai.data
 import numpy as np
 import torch
-from kornia.morphology import erosion
 from monai.data import MetaTensor
 from monai.transforms import MapTransform, Transform
-from scipy.ndimage import distance_transform_edt
+from scipy.ndimage import binary_erosion, distance_transform_edt
 from skimage.measure import label, regionprops
-from skimage.morphology import disk
+from skimage.morphology import ball, disk
 from tifffile import imread
 
 from qute.transforms.util import scale_dist_transform_by_region
@@ -892,7 +892,8 @@ class AddFFT2d(MapTransform):
 class AddBorderd(MapTransform):
     """Add a border class to the (binary) label image.
 
-    Please notice that the border is obtained from the erosion of the objects (that is, it does not extend outside of the original connected components.
+    Please notice that the border is obtained from the erosion of the objects (that is, it does not extend outside
+    the original connected components.
     """
 
     def __init__(self, label_key: str = "label", border_width: int = 3) -> None:
@@ -910,14 +911,6 @@ class AddBorderd(MapTransform):
         self.label_key = label_key
         self.border_width = border_width
 
-    def process_label(self, lbl, footprint):
-        """Create and add object borders as new class."""
-
-        # Add the border as class 2
-        eroded = erosion(lbl, footprint)
-        border = lbl - eroded
-        return lbl + border  # Count border pixels twice
-
     def __call__(self, data: dict) -> dict:
         """
         Add  the requested number of labels from the label image, and extract region of defined window size for both image and label in stacked Tensors in the data dictionary.
@@ -929,6 +922,14 @@ class AddBorderd(MapTransform):
             Updated dictionary with new and "label" tensor.
         """
 
+        def process_label(lbl, footprint):
+            """Create and add object borders as new class."""
+
+            # Add the border as class 2
+            eroded = binary_erosion(lbl, footprint)
+            border = lbl - eroded
+            return lbl + border  # Count border pixels twice
+
         # Make a copy of the input dictionary
         d = dict(data)
 
@@ -939,52 +940,63 @@ class AddBorderd(MapTransform):
         if d["label"].dtype != torch.int32:
             d["label"] = d["label"].to(torch.int32)
 
-        # Get the 2D label image to work with
-        label_img = d["label"][..., :, :].squeeze()
-
         # Make sure there are only two classes: background and foreground
-        if len(torch.unique(label_img)) > 2:
-            label_img[label_img > 0] = 1
+        if len(torch.unique(d["label"])) > 2:
+            d["label"][d["label"] > 0] = 1
 
-        # Prepare the structuring element for the erosion
-        footprint = torch.tensor(disk(self.border_width), dtype=torch.int32)
+        # Do we have a 2D or a 3D image? Extract the image or stack to work with and
+        # prepare the structuring element for erosion accordingly
+        if d["label"].ndim == 2:
 
-        # Number of dimensions in the data tensor
-        num_dims = len(d["label"].shape)
+            # A plain 2D image
+            label_img = d["label"][..., :, :].squeeze()
 
-        # Prepare the input
-        if num_dims == 2:
-
-            # Add batch and channel dimension
-            label_batch = d["label"].unsqueeze(0).unsqueeze(0)
+            # Create 2D disk footprint
+            footprint = torch.tensor(disk(self.border_width), dtype=torch.int32)
 
             # Process and update
-            d["label"] = (
-                self.process_label(label_batch, footprint).squeeze(0).squeeze(0)
-            )
+            d["label"] = process_label(label_img, footprint)
 
-        elif num_dims == 3:
-            # We have a channel dimension: make sure there only one channel!
+        elif d["label"].ndim == 3:
+
+            if d["label"].shape[0] == 1:
+
+                # A 2D image with a channel or z dimension of 1
+                label_img = d["label"][..., :, :].squeeze()
+
+                # Create 2D disk footprint
+                footprint = torch.tensor(disk(self.border_width), dtype=torch.int32)
+
+                # Process and update
+                d["label"] = process_label(label_img, footprint).unsqueeze(0)
+
+            else:
+
+                # A 3D image with a z extent larger of 1
+                label_img = d["label"]
+
+                # Create 3D ball footprint
+                footprint = torch.tensor(ball(self.border_width), dtype=torch.int32)
+
+                # Process and update
+                d["label"] = process_label(label_img, footprint)
+
+        elif d["label"].ndim == 4:
+
             if d["label"].shape[0] > 1:
-                raise ValueError("The label image must be binary!")
+                raise ValueError("CDHW tensor must have only one channel!")
 
-            # Add batch dimension
-            label_batch = d["label"].unsqueeze(0)
+            # A 3D image with a z extent larger of 1
+            label_img = d["label"][..., :, :].squeeze()
 
-            # Process and update
-            d["label"][0, :, :] = self.process_label(label_batch, footprint).squeeze(0)
-
-        elif num_dims == 4:
-
-            # We have a batch. Make sure that there is only one channel!
-            if d["label"][0].shape[0] > 1:
-                raise ValueError("The label image must be binary!")
+            # Create 3D ball footprint
+            footprint = torch.tensor(ball(self.border_width), dtype=torch.int32)
 
             # Process and update
-            d["label"] = self.process_label(d["label"], footprint)
+            d["label"] = process_label(label_img, footprint).unsqueeze(0)
 
         else:
-            raise ValueError('Unexpected number of dimensions for data["label"].')
+            raise ValueError("Unsupported image dimensions!")
 
         return d
 
@@ -1212,7 +1224,7 @@ class DebugInformer(Transform):
         elif type(data) == str:
             print(f"{prefix}String: value = '{str}'")
         elif str(type(data)).startswith("<class 'itk."):
-            # This is a bit of a hack..."
+            # This is a bit of a hack...
             data_numpy = np.array(data)
             print(
                 f"{prefix}"
@@ -1237,6 +1249,8 @@ class DebugInformer(Transform):
                     )
                 elif t is dict:
                     print(f"'{key}': dict;", end=" ")
+                elif t is pathlib.PosixPath:
+                    print(f"'{key}': path={str(data[key])};", end=" ")
                 else:
                     print(f"'{key}': {t};", end=" ")
             print()

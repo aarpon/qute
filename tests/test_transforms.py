@@ -74,14 +74,93 @@ def test_add_borderd(extract_test_transforms_data):
     addb = AddBorderd()
     data = addb(data)
 
-    # Make sure that the batch and channel dimensions are present
-    assert data["label"].shape == (300, 300), "Unexpected image size."
-
     # Check that there are indeed three classes
+    assert data["label"].shape == (300, 300), "Unexpected output shape."
     assert len(torch.unique(data["label"])) == 3, "Expected three classes."
     assert torch.all(
         torch.unique(data["label"]) == torch.tensor((0, 1, 2))
     ), "Expected classes [0, 1, 2]."
+
+    #
+    # Test support for various dimensions
+    #
+
+    # Simple 2D
+    input_2d = torch.zeros((10, 10), dtype=torch.int32)
+    input_2d[4:7, 4:7] = 1
+    data["label"] = input_2d
+    addb = AddBorderd(label_key="label", border_width=1)
+    data = addb(data)
+
+    # Check that there are indeed three classes with the expected number of pixels
+    assert data["label"].shape == (10, 10), "Unexpected output shape."
+    assert len(torch.unique(data["label"])) == 3, "Expected three classes."
+    assert torch.all(
+        torch.unique(data["label"]) == torch.tensor((0, 1, 2))
+    ), "Expected classes [0, 1, 2]."
+    assert torch.sum(data["label"] == 1) == 1, "One pixel with class 1 expected."
+    assert torch.sum(data["label"] == 2) == 8, "Eight pixels with class 2 expected."
+
+    # 2D with channel first
+    input_2d_c = torch.zeros((1, 10, 10), dtype=torch.int32)
+    input_2d_c[0, 4:7, 4:7] = 1
+    data["label"] = input_2d_c
+    addb = AddBorderd(label_key="label", border_width=1)
+    data = addb(data)
+
+    # Check that there are indeed three classes with the expected number of pixels
+    assert data["label"].shape == (1, 10, 10), "Unexpected output shape."
+    assert len(torch.unique(data["label"])) == 3, "Expected three classes."
+    assert torch.all(
+        torch.unique(data["label"]) == torch.tensor((0, 1, 2))
+    ), "Expected classes [0, 1, 2]."
+    assert torch.sum(data["label"] == 1) == 1, "One pixel with class 1 expected."
+    assert torch.sum(data["label"] == 2) == 8, "Eight pixels with class 2 expected."
+
+    # 3D
+    input_3d = torch.zeros((10, 10, 10), dtype=torch.int32)
+    input_3d[4:7, 4:7, 4:7] = 1
+    data["label"] = input_3d
+    addb = AddBorderd(label_key="label", border_width=1)
+    data = addb(data)
+
+    # Check that there are indeed three classes with the expected number of pixels
+    assert data["label"].shape == (10, 10, 10), "Unexpected output shape."
+    assert len(torch.unique(data["label"])) == 3, "Expected three classes."
+    assert torch.all(
+        torch.unique(data["label"]) == torch.tensor((0, 1, 2))
+    ), "Expected classes [0, 1, 2]."
+    assert torch.sum(data["label"] == 1) == 1, "One pixel with class 1 expected."
+    assert (
+        torch.sum(data["label"] == 2) == 26
+    ), "Twenty-six pixels with class 2 expected."
+
+    # 3D with channel first
+    input_3d_c = torch.zeros((1, 10, 10, 10), dtype=torch.int32)
+    input_3d_c[0, 4:7, 4:7, 4:7] = 1
+    data["label"] = input_3d_c
+    addb = AddBorderd(label_key="label", border_width=1)
+    data = addb(data)
+
+    # Check that there are indeed three classes with the expected number of pixels
+    assert data["label"].shape == (1, 10, 10, 10), "Unexpected output shape."
+    assert len(torch.unique(data["label"])) == 3, "Expected three classes."
+    assert torch.all(
+        torch.unique(data["label"]) == torch.tensor((0, 1, 2))
+    ), "Expected classes [0, 1, 2]."
+    assert torch.sum(data["label"] == 1) == 1, "One pixel with class 1 expected."
+    assert (
+        torch.sum(data["label"] == 2) == 26
+    ), "Twenty-six pixels with class 2 expected."
+
+    # Make sure that 3D with more than one channel is not supported
+    input_3d_2c = torch.zeros((2, 10, 10, 10), dtype=torch.int32)  # 2 channels
+    input_3d_2c[0, 4:7, 4:7, 4:7] = 1
+    data["label"] = input_3d_2c
+    addb = AddBorderd(label_key="label", border_width=1)
+    with pytest.raises(Exception) as e_info:
+        data = addb(data)
+        lomm = e_info
 
 
 def test_custom_tiff_reader(extract_test_transforms_data):
