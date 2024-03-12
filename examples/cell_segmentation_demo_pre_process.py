@@ -16,7 +16,7 @@ import userpaths
 from natsort import natsorted
 
 from qute.data.io import get_cell_segmentation_demo_dataset
-from qute.preprocess.preprocess import extract_fft_stats, extract_intensity_stats
+from qute.preprocess import extract_fft_stats, extract_intensity_stats
 
 DOWNLOAD_DIR = Path(userpaths.get_my_documents()) / "qute" / "data"
 LOW_PERC = 0.5
