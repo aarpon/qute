@@ -322,7 +322,7 @@ class UNet(pl.LightningModule):
                 )
 
                 # Retrieve the image from the GPU (if needed)
-                preds = outputs.cpu().numpy().squeeze()
+                preds = outputs.cpu().numpy()
 
                 for pred in preds:
                     if transpose:
@@ -476,7 +476,7 @@ class UNet(pl.LightningModule):
                     outputs = inference_post_transforms(outputs)
 
                     # Retrieve the image from the GPU (if needed)
-                    preds = outputs.cpu().numpy().squeeze()
+                    preds = outputs.cpu().numpy()
 
                     stored_preds = []
                     for pred in preds:
