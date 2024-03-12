@@ -49,6 +49,9 @@ def two_class_mask_to_label(
         Minimum size for objects to be kept.
     """
 
+    # Make sure both the output folders exist
+    Path(out_folder).mkdir(exist_ok=True)
+
     # Footprint for dilation
     footprint = None
 

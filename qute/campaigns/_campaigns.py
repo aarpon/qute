@@ -28,6 +28,8 @@ from monai.transforms import (
 )
 
 from qute.transforms import (
+    AddNormalizedDistanceTransform,
+    AddNormalizedDistanceTransformd,
     CustomTIFFReader,
     CustomTIFFReaderd,
     MinMaxNormalize,
@@ -233,7 +235,7 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
         num_classes: int = 3,
         patch_size: tuple = (20, 300, 300),
         num_patches: int = 1,
-        pixdim: tuple[float, float, float] = (1.0, 1.0, 1.0),
+        voxel_size: tuple[float, float, float] = (1.0, 1.0, 1.0),
         to_isotropic: bool = False,
         upscale_z: bool = True,
     ):
@@ -254,8 +256,8 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
         num_patches: int = 1
             Number of patches per image to extract.
 
-        pixdim: Optional[tuple] = (1.0, 1.0, 1.0)
-            Voxel size (`pixdim`, in MONAI parlance) to use for setting the metadata of the image.
+        voxel_size: Optional[tuple] = (1.0, 1.0, 1.0)
+            Voxel size to use for setting the metadata of the image.
             Omit to set to (1.0, 1.0, 1.0).
 
         to_isotropic: bool (Optional, False)
@@ -275,26 +277,23 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
         self.num_classes = num_classes
         self.patch_size = patch_size
         self.num_patches = num_patches
-        self.pixdim = np.array(pixdim)
-        self.scaled_pixdim = self.pixdim
+        self.voxel_size = np.array(voxel_size)
+        self.target_voxel_size = self.voxel_size.copy()
         self.to_isotropic = to_isotropic
         self.upscale_z = upscale_z
 
         if self.to_isotropic:
-            # @TODO Implement completely as soon as issue [7529](https://github.com/Project-MONAI/MONAI/issues/7529)
-            # @TODO is fixed or more information is collected.
-            print("WARNING: Resampling currently disabled.")
             # Should we upscale the image to keep the higher resolution, or downscale it
             # to preserve the lowest resolution?
             if self.upscale_z:
                 # x and y are left untouched; z is scaled up to
                 # match (rounded) anisotropic resolution
-                self.scaled_pixdim[0] = self.scaled_pixdim[1:2].mean()
+                self.target_voxel_size[0] = self.target_voxel_size[1:2].mean()
 
             else:
                 # z is left untouched; x and y are scaled down
                 # to match (rounded) anisotropic resolution
-                self.scaled_pixdim[1:] = self.scaled_pixdim[0]
+                self.target_voxel_size[1:] = self.target_voxel_size[0]
 
     def get_train_transforms(self):
         """Return a composition of Transforms needed to train (patch)."""
@@ -305,13 +304,19 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                     as_meta_tensor=True,
-                    pixdim=self.pixdim,
+                    voxel_size=self.voxel_size,
                 ),
-                # Spacingd(
-                #     keys=["image", "label"],
-                #     pixdim=self.scaled_pixdim,
-                #     mode=("bilinear", "nearest"),
+                # AddNormalizedDistanceTransformd(
+                #     image_key="image",
+                #     label_key="label",
+                #     reverse=True,
+                #     do_not_zero=True,
                 # ),
+                Spacingd(
+                    keys=["image", "label"],
+                    pixdim=self.target_voxel_size,
+                    mode=("bilinear", "nearest"),
+                ),
                 RandCropByPosNegLabeld(
                     keys=["image", "label"],
                     label_key="label",
@@ -342,13 +347,19 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                     as_meta_tensor=True,
-                    pixdim=self.pixdim,
+                    voxel_size=self.voxel_size,
                 ),
-                # Spacingd(
-                #     keys=["image", "label"],
-                #     pixdim=self.scaled_pixdim,
-                #     mode=("bilinear", "nearest"),
+                # AddNormalizedDistanceTransformd(
+                #     image_key="image",
+                #     label_key="label",
+                #     reverse=True,
+                #     do_not_zero=True,
                 # ),
+                Spacingd(
+                    keys=["image", "label"],
+                    pixdim=self.target_voxel_size,
+                    mode=("bilinear", "nearest"),
+                ),
                 RandCropByPosNegLabeld(
                     keys=["image", "label"],
                     label_key="label",
@@ -380,12 +391,16 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                     as_meta_tensor=True,
-                    pixdim=self.pixdim,
+                    voxel_size=self.voxel_size,
                 ),
-                # Spacing(
-                #     pixdim=self.scaled_pixdim,
-                #     mode="nearest",
+                # AddNormalizedDistanceTransform(
+                #     reverse=True,
+                #     do_not_zero=True,
                 # ),
+                Spacing(
+                    pixdim=self.target_voxel_size,
+                    mode="nearest",
+                ),
                 ZNormalize(),
             ]
         )
@@ -395,10 +410,7 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
         """Define post inference transforms to apply after prediction on patch."""
         if self.to_isotropic:
             post_inference_transforms = Compose(
-                [
-                    ToLabel(),
-                    # Spacing(pixdim=self.pixdim, mode='nearest')
-                ]
+                [ToLabel(), Spacing(pixdim=self.voxel_size, mode="nearest")]
             )
         else:
             post_inference_transforms = Compose(

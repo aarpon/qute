@@ -197,6 +197,9 @@ def labels_to_two_class_masks(
         border = lbl - eroded
         return lbl + border  # Count border pixels twice
 
+    # Make sure both the output folders exist
+    Path(out_folder).mkdir(exist_ok=True)
+
     # Footprint for erosion
     footprint = None
 

@@ -81,7 +81,7 @@ class CustomTIFFReader(Transform):
         ensure_channel_first: bool = True,
         dtype: torch.dtype = torch.float32,
         as_meta_tensor: bool = False,
-        pixdim: Optional[tuple] = None,
+        voxel_size: Optional[tuple] = None,
     ) -> None:
         """Constructor
 
@@ -96,16 +96,21 @@ class CustomTIFFReader(Transform):
 
         as_meta_tensor: bool (default = False)
             Set to True to return a MONAI MetaTensor, set to False for a PyTorch Tensor.
+            If both `as_meta_tensor` is True and `voxel_size` is specified, `ensure_channel_first`
+            must be True.
 
-        pixdim: Optional[tuple]
-            Set the voxel size (`pixdim`, in MONAI parlance) as metadata to the MetaTensor (only if `as_meta_tensor` is
+        voxel_size: Optional[tuple]
+            Set the voxel size [y, x, z] as metadata to the MetaTensor (only if `as_meta_tensor` is
             True; otherwise it is ignored).
+            If both `as_meta_tensor` is True and `voxel_size` is specified, `ensure_channel_first`
+            must be True.
+
         """
         super().__init__()
         self.ensure_channel_first = ensure_channel_first
         self.dtype = dtype
         self.as_meta_tensor = as_meta_tensor
-        self.pixdim = tuple(pixdim) if pixdim is not None else None
+        self.voxel_size = tuple(voxel_size) if voxel_size is not None else None
 
     def __call__(self, file_name: Union[Path, str]) -> torch.Tensor:
         """
@@ -124,20 +129,40 @@ class CustomTIFFReader(Transform):
             Tensor with requested type and shape.
         """
 
+        # Check the consistency of the input arguments
+        if self.as_meta_tensor and self.voxel_size is not None:
+            if not self.ensure_channel_first:
+                raise ValueError(
+                    f"If both `as_meta_tensor` is True and `voxel_size` is specified,"
+                    f"`ensure_channel_first` must be True."
+                )
+
         # File path
         image_path = str(Path(file_name).resolve())
 
         # Load and process image
         data = torch.Tensor(imread(image_path).astype(np.float32))
         if self.as_meta_tensor:
-            if self.pixdim is not None:
-                if data.ndim != len(self.pixdim):
+            if self.voxel_size is not None:
+                if data.ndim != len(self.voxel_size):
                     raise ValueError(
-                        "The size of `pixdim` does not natch the dimensionality of the image."
+                        "The size of `voxel_size` does not natch the dimensionality of the image."
                     )
             else:
-                self.pixdim = tuple((1.0 for _ in range(data.ndim)))
-            data = MetaTensor(data, meta={"pixdim": self.pixdim})
+                self.voxel_size = tuple((1.0 for _ in range(data.ndim)))
+
+            # To pass a voxel size to the MetaTensor, we need to define the
+            # corresponding affine transform:
+            affine = torch.tensor(
+                [
+                    [self.voxel_size[0], 0.0, 0.0, 0.0],
+                    [0.0, self.voxel_size[1], 0.0, 0.0],
+                    [0.0, 0.0, self.voxel_size[2], 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            )
+            data = MetaTensor(data, affine=affine)
+
         if self.ensure_channel_first:
             data = data.unsqueeze(0)
         if self.dtype is not None:
@@ -154,7 +179,7 @@ class CustomTIFFReaderd(MapTransform):
         ensure_channel_first: bool = True,
         dtype: torch.dtype = torch.float32,
         as_meta_tensor: bool = False,
-        pixdim: Optional[tuple] = None,
+        voxel_size: Optional[tuple] = None,
     ) -> None:
         """Constructor
 
@@ -172,17 +197,23 @@ class CustomTIFFReaderd(MapTransform):
 
         as_meta_tensor: bool (default = False)
             Set to True to return a MONAI MetaTensor, set to False for a PyTorch Tensor.
+            If both `as_meta_tensor` is True and `voxel_size` is specified, `ensure_channel_first`
+            must be True.
 
-        pixdim: Optional[tuple]
-            Set the voxel size (`pixdim`, in MONAI parlance) as metadata to the MetaTensor (only if `as_meta_tensor` is
+        voxel_size: Optional[tuple]
+            Set the voxel size [y, x, z] as metadata to the MetaTensor (only if `as_meta_tensor` is
             True; otherwise it is ignored).
+            If both `as_meta_tensor` is True and `voxel_size` is specified, `ensure_channel_first`
+            must be True.
         """
         super().__init__(keys=keys)
         self.keys = keys
-        self.ensure_channel_first = ensure_channel_first
-        self.dtype = dtype
-        self.as_meta_tensor = as_meta_tensor
-        self.pixdim = pixdim
+        self.tensor_reader = CustomTIFFReader(
+            ensure_channel_first=ensure_channel_first,
+            dtype=dtype,
+            as_meta_tensor=as_meta_tensor,
+            voxel_size=voxel_size,
+        )
 
     def __call__(self, data: dict) -> dict:
         """
@@ -203,22 +234,11 @@ class CustomTIFFReaderd(MapTransform):
             # Get arguments
             image_path = str(Path(d[key]).resolve())
 
-            # Load and process images
-            image = torch.Tensor(imread(image_path).astype(np.float32))
-            if self.as_meta_tensor:
-                if self.pixdim is not None:
-                    if image.ndim != len(self.pixdim):
-                        raise ValueError(
-                            "The size of `pixdim` does not natch the dimensionality of the image."
-                        )
-                else:
-                    self.pixdim = tuple((1.0 for _ in range(image.ndim)))
-                image = MetaTensor(image, meta={"pixdim": self.pixdim})
-            if self.ensure_channel_first:
-                image = image.unsqueeze(0)
-            if self.dtype is not None:
-                image = image.to(self.dtype)
-            d[key] = image  # (Meta)Tensor(image)
+            # Use the single tensor reader
+            out = self.tensor_reader(image_path)
+
+            # Assign the tensor to the corresponding key
+            d[key] = out  # (Meta)Tensor(image)
 
         return d
 
@@ -1247,6 +1267,12 @@ class DebugInformer(Transform):
                         f"'{key}': shape={data[key].shape}, dtype={data[key].dtype};",
                         end=" ",
                     )
+                    if hasattr(data[key], "meta") and "affine" in data[key].meta:
+                        a = data[key].meta["affine"]
+                        print(
+                            f"'{key}': voxel size=({a[0, 0]}, {a[1, 1]}, {a[2, 2]});",
+                            end=" ",
+                        )
                 elif t is dict:
                     print(f"'{key}': dict;", end=" ")
                 elif t is pathlib.PosixPath:

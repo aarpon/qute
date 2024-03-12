@@ -160,7 +160,6 @@ def test_add_borderd(extract_test_transforms_data):
     addb = AddBorderd(label_key="label", border_width=1)
     with pytest.raises(Exception) as e_info:
         data = addb(data)
-        lomm = e_info
 
 
 def test_custom_tiff_reader(extract_test_transforms_data):
@@ -182,43 +181,57 @@ def test_custom_tiff_reader(extract_test_transforms_data):
     image = reader(Path(__file__).parent / "data" / "labels.tif")
     assert image.shape == (1, 26, 300, 300), "Unexpected image shape."
     assert hasattr(image, "meta"), "Missing metadata."
-    assert image.meta["pixdim"] == (1.0, 1.0, 1.0), "Wrong voxel size."
+    assert torch.all(
+        image.meta["affine"].diag() == torch.tensor((1.0, 1.0, 1.0, 1.0))
+    ), "Wrong voxel size."
 
     # Load TIFF file with (ensure_channel_first=False, as_meta_tensor=True)
     reader = CustomTIFFReader(ensure_channel_first=False, as_meta_tensor=True)
     image = reader(Path(__file__).parent / "data" / "labels.tif")
     assert image.shape == (26, 300, 300), "Unexpected image shape."
     assert hasattr(image, "meta"), "Missing metadata."
-    assert image.meta["pixdim"] == (1.0, 1.0, 1.0), "Wrong voxel size."
+    assert torch.all(
+        image.meta["affine"].diag() == torch.tensor((1.0, 1.0, 1.0, 1.0))
+    ), "Wrong voxel size."
 
-    # Load TIFF file with (ensure_channel_first=True, as_meta_tensor=True, pixdim=(0.5, 0.1, 0.1))
+    # Load TIFF file with (ensure_channel_first=True, as_meta_tensor=True, voxel_size=(0.5, 0.1, 0.1))
     reader = CustomTIFFReader(
-        ensure_channel_first=True, as_meta_tensor=True, pixdim=(0.5, 0.1, 0.1)
+        ensure_channel_first=True, as_meta_tensor=True, voxel_size=(0.5, 0.1, 0.1)
     )
     image = reader(Path(__file__).parent / "data" / "labels.tif")
     assert image.shape == (1, 26, 300, 300), "Unexpected image shape."
     assert hasattr(image, "meta"), "Missing metadata."
-    assert image.meta["pixdim"] == (0.5, 0.1, 0.1), "Wrong voxel size."
+    assert torch.all(
+        torch.isclose(
+            image.meta["affine"].diag(),
+            torch.tensor((0.5, 0.1, 0.1, 1.0), dtype=image.meta["affine"].dtype),
+        )
+    ), "Wrong voxel size."
 
-    # Load TIFF file with (ensure_channel_first=True, as_meta_tensor=False, pixdim=(0.5, 0.1, 0.1))
+    # Load TIFF file with (ensure_channel_first=True, as_meta_tensor=False, voxel_size=(0.5, 0.1, 0.1))
     reader = CustomTIFFReader(
-        ensure_channel_first=True, as_meta_tensor=False, pixdim=(0.5, 0.1, 0.1)
+        ensure_channel_first=True, as_meta_tensor=False, voxel_size=(0.5, 0.1, 0.1)
     )
     image = reader(Path(__file__).parent / "data" / "labels.tif")
     assert image.shape == (1, 26, 300, 300), "Unexpected image shape."
     assert not hasattr(image, "meta"), "Metadata should not be present."
 
-    # Load TIFF file with (ensure_channel_first=True, as_meta_tensor=True, pixdim=(0.5, 0.1, 0.1), dtype=torch.int32)
+    # Load TIFF file with (ensure_channel_first=True, as_meta_tensor=True, voxel_size=(0.5, 0.1, 0.1), dtype=torch.int32)
     reader = CustomTIFFReader(
         ensure_channel_first=True,
         as_meta_tensor=True,
-        pixdim=(0.5, 0.1, 0.1),
+        voxel_size=(0.5, 0.1, 0.1),
         dtype=torch.int32,
     )
     image = reader(Path(__file__).parent / "data" / "labels.tif")
     assert image.shape == (1, 26, 300, 300), "Unexpected image shape."
     assert hasattr(image, "meta"), "Missing metadata."
-    assert image.meta["pixdim"] == (0.5, 0.1, 0.1), "Wrong voxel size."
+    assert torch.all(
+        torch.isclose(
+            image.meta["affine"].diag(),
+            torch.tensor((0.5, 0.1, 0.1, 1.0), dtype=image.meta["affine"].dtype),
+        )
+    ), "Wrong voxel size."
     assert image.dtype == torch.int32, "Unexpected datatype."
 
 
