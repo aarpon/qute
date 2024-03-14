@@ -324,7 +324,13 @@ class UNet(pl.LightningModule):
                 # Retrieve the image from the GPU (if needed)
                 preds = outputs.cpu().numpy()
 
+                # Process one batch at a time
                 for pred in preds:
+
+                    # Drop the channel singleton dimension
+                    if pred.shape[0] == 1:
+                        pred = pred.squeeze(0)
+
                     if transpose:
                         # Transpose to undo the effect of monai.transform.LoadImage(d)
                         pred = pred.T
@@ -443,6 +449,7 @@ class UNet(pl.LightningModule):
             for f in range(len(models)):
                 fold_subfolder = Path(target_folder) / f"fold_{f}"
                 Path(fold_subfolder).mkdir(parents=True, exist_ok=True)
+
         # Device
         device = get_device()
 
@@ -480,6 +487,11 @@ class UNet(pl.LightningModule):
 
                     stored_preds = []
                     for pred in preds:
+
+                        # Drop the channel singleton dimension
+                        if pred.shape[0] == 1:
+                            pred = pred.squeeze(0)
+
                         if transpose:
                             # Transpose to undo the effect of monai.transform.LoadImage(d)
                             pred = pred.T

@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 import torch
+from monai.transforms import Spacing
 
 from qute.transforms import (
     AddBorderd,
@@ -21,6 +22,8 @@ from qute.transforms import (
     AddNormalizedDistanceTransformd,
     CellposeLabelReader,
     CustomTIFFReader,
+    ToLabel,
+    ToLabelBatch,
 )
 
 
@@ -158,8 +161,8 @@ def test_add_borderd(extract_test_transforms_data):
     input_3d_2c[0, 4:7, 4:7, 4:7] = 1
     data["label"] = input_3d_2c
     addb = AddBorderd(label_key="label", border_width=1)
-    with pytest.raises(Exception) as e_info:
-        data = addb(data)
+    with pytest.raises(Exception):
+        _ = addb(data)
 
 
 def test_custom_tiff_reader(extract_test_transforms_data):
@@ -169,30 +172,42 @@ def test_custom_tiff_reader(extract_test_transforms_data):
     image = reader(Path(__file__).parent / "data" / "labels.tif")
     assert image.shape == (1, 26, 300, 300), "Unexpected image shape."
     assert not hasattr(image, "meta"), "Metadata should not be present."
+    assert not hasattr(image, "affine"), "'affine' property should not be present."
 
     # Load TIFF file with (ensure_channel_first=False)
     reader = CustomTIFFReader(ensure_channel_first=False)
     image = reader(Path(__file__).parent / "data" / "labels.tif")
     assert image.shape == (26, 300, 300), "Unexpected image shape."
     assert not hasattr(image, "meta"), "Metadata should not be present."
+    assert not hasattr(image, "affine"), "'affine' property should not be present."
 
     # Load TIFF file with (ensure_channel_first=True, as_meta_tensor=True)
     reader = CustomTIFFReader(ensure_channel_first=True, as_meta_tensor=True)
     image = reader(Path(__file__).parent / "data" / "labels.tif")
     assert image.shape == (1, 26, 300, 300), "Unexpected image shape."
     assert hasattr(image, "meta"), "Missing metadata."
+    assert hasattr(image, "affine"), "'affine' property missing."
+    assert torch.all(
+        image.affine == image.meta["affine"]
+    ), "Inconsistent affine matrices."
     assert torch.all(
         image.meta["affine"].diag() == torch.tensor((1.0, 1.0, 1.0, 1.0))
     ), "Wrong voxel size."
+    assert image.meta["affine"].shape == (4, 4), "Unexpected affine shape."
 
     # Load TIFF file with (ensure_channel_first=False, as_meta_tensor=True)
     reader = CustomTIFFReader(ensure_channel_first=False, as_meta_tensor=True)
     image = reader(Path(__file__).parent / "data" / "labels.tif")
     assert image.shape == (26, 300, 300), "Unexpected image shape."
     assert hasattr(image, "meta"), "Missing metadata."
+    assert hasattr(image, "affine"), "'affine' property missing."
+    assert torch.all(
+        image.affine == image.meta["affine"]
+    ), "Inconsistent affine matrices."
     assert torch.all(
         image.meta["affine"].diag() == torch.tensor((1.0, 1.0, 1.0, 1.0))
     ), "Wrong voxel size."
+    assert image.meta["affine"].shape == (4, 4), "Unexpected affine shape."
 
     # Load TIFF file with (ensure_channel_first=True, as_meta_tensor=True, voxel_size=(0.5, 0.1, 0.1))
     reader = CustomTIFFReader(
@@ -201,12 +216,17 @@ def test_custom_tiff_reader(extract_test_transforms_data):
     image = reader(Path(__file__).parent / "data" / "labels.tif")
     assert image.shape == (1, 26, 300, 300), "Unexpected image shape."
     assert hasattr(image, "meta"), "Missing metadata."
+    assert hasattr(image, "affine"), "'affine' property missing."
+    assert torch.all(
+        image.affine == image.meta["affine"]
+    ), "Inconsistent affine matrices."
     assert torch.all(
         torch.isclose(
             image.meta["affine"].diag(),
             torch.tensor((0.5, 0.1, 0.1, 1.0), dtype=image.meta["affine"].dtype),
         )
     ), "Wrong voxel size."
+    assert image.meta["affine"].shape == (4, 4), "Unexpected affine shape."
 
     # Load TIFF file with (ensure_channel_first=True, as_meta_tensor=False, voxel_size=(0.5, 0.1, 0.1))
     reader = CustomTIFFReader(
@@ -215,6 +235,7 @@ def test_custom_tiff_reader(extract_test_transforms_data):
     image = reader(Path(__file__).parent / "data" / "labels.tif")
     assert image.shape == (1, 26, 300, 300), "Unexpected image shape."
     assert not hasattr(image, "meta"), "Metadata should not be present."
+    assert not hasattr(image, "affine"), "'affine' property should not be present."
 
     # Load TIFF file with (ensure_channel_first=True, as_meta_tensor=True, voxel_size=(0.5, 0.1, 0.1), dtype=torch.int32)
     reader = CustomTIFFReader(
@@ -226,13 +247,41 @@ def test_custom_tiff_reader(extract_test_transforms_data):
     image = reader(Path(__file__).parent / "data" / "labels.tif")
     assert image.shape == (1, 26, 300, 300), "Unexpected image shape."
     assert hasattr(image, "meta"), "Missing metadata."
+    assert hasattr(image, "affine"), "'affine' property missing."
+    assert torch.all(
+        image.affine == image.meta["affine"]
+    ), "Inconsistent affine matrices."
     assert torch.all(
         torch.isclose(
             image.meta["affine"].diag(),
             torch.tensor((0.5, 0.1, 0.1, 1.0), dtype=image.meta["affine"].dtype),
         )
     ), "Wrong voxel size."
+    assert image.meta["affine"].shape == (4, 4), "Unexpected affine shape."
     assert image.dtype == torch.int32, "Unexpected datatype."
+
+    # Apply spacing
+    sp = Spacing(
+        pixdim=(1.0, 0.2, 0.2),
+        mode="nearest",
+    )
+    resampled_image = sp(image)
+    assert resampled_image.shape == (1, 14, 151, 151), "Unexpected image shape."
+    assert hasattr(resampled_image, "meta"), "Missing metadata."
+    assert hasattr(resampled_image, "affine"), "'affine' property missing."
+    assert torch.all(
+        resampled_image.affine == resampled_image.meta["affine"]
+    ), "Inconsistent affine matrices."
+    assert torch.all(
+        torch.isclose(
+            resampled_image.meta["affine"].diag(),
+            torch.tensor(
+                (1.0, 0.2, 0.2, 1.0), dtype=resampled_image.meta["affine"].dtype
+            ),
+        )
+    ), "Wrong voxel size."
+    assert resampled_image.meta["affine"].shape == (4, 4), "Unexpected affine shape."
+    assert resampled_image.dtype == torch.float32, "Unexpected datatype."
 
 
 def test_add_normalized_transform(extract_test_transforms_data):
@@ -291,3 +340,195 @@ def test_add_normalized_transform(extract_test_transforms_data):
     assert torch.all(
         data_out["image"][1, :, :, :] == label_out[1, :, :, :]
     ), "Unexpected result."
+
+
+def test_to_label(tmpdir):
+
+    # Create 2D label ground truth (classes 0, 1, 2)
+    gt_2d = torch.zeros((1, 60, 60), dtype=torch.int32)
+    gt_2d[0, :, 20:40] = 1
+    gt_2d[0, :, 40:60] = 2
+
+    # Create 3D label ground truth (classes 0, 1, 2)
+    gt_3d = torch.zeros((1, 10, 60, 60), dtype=torch.int32)
+    gt_3d[0, :, :, 20:40] = 1
+    gt_3d[0, :, :, 40:60] = 2
+
+    # Create 2D one-hot data (CHW) (data 1, 2, 3)
+    oh_2d = torch.zeros((3, 60, 60), dtype=torch.int32)
+    oh_2d[0, :, 0:20] = 1
+    oh_2d[1, :, 20:40] = 2
+    oh_2d[2, :, 40:60] = 3
+
+    # Create 3D one-hot data (CDHW) (data 1, 2, 3)
+    oh_3d = torch.zeros((3, 10, 60, 60), dtype=torch.int32)
+    oh_3d[0, :, :, 0:20] = 1
+    oh_3d[1, :, :, 20:40] = 2
+    oh_3d[2, :, :, 40:60] = 3
+
+    # Check the synthetic data
+    assert gt_2d.shape == (1, 60, 60), "Unexpected 2D ground truth shape."
+    assert gt_3d.shape == (1, 10, 60, 60), "Unexpected 3D ground truth shape."
+    assert oh_2d.shape == (3, 60, 60), "Unexpected 2D one-hot truth shape."
+    assert oh_3d.shape == (3, 10, 60, 60), "Unexpected 3D one-hot truth shape."
+    assert oh_2d.shape == (3, 60, 60), "Unexpected 2D one-hot truth shape."
+    assert oh_3d.shape == (3, 10, 60, 60), "Unexpected 3D one-hot truth shape."
+
+    #
+    # Test the 2D data
+    #
+
+    # Call ToLabel() and check the output
+    to_label = ToLabel()
+    out_oh_2d = to_label(oh_2d)
+
+    assert out_oh_2d.shape == (
+        1,
+        60,
+        60,
+    ), "Unexpected shape of result of ToLabel() for 2D data."
+    assert torch.equal(
+        gt_2d, out_oh_2d
+    ), "Result of ToLabel() for 2D data does not match ground truth."
+
+    #
+    # Test the 3D data
+    #
+
+    # Call ToLabel() on oh_3d and check the output
+    to_label = ToLabel()
+    out_oh_3d = to_label(oh_3d)
+
+    assert out_oh_3d.shape == (
+        1,
+        10,
+        60,
+        60,
+    ), "Unexpected shape of result of ToLabel() for 3D data."
+    assert torch.equal(
+        gt_3d, out_oh_3d
+    ), "Result of ToLabel() for 3D data does not match ground truth."
+
+    # Check that other shapes are not supported
+    to_label = ToLabel()
+
+    with pytest.raises(ValueError) as e_info:
+        # Single 2D image (H, W)
+        _ = to_label(torch.zeros((60, 60), dtype=torch.int32))
+
+    with pytest.raises(ValueError) as e_info:
+        # Batch of 3D images (B, C, D, H, W)
+        _ = to_label(torch.zeros((3, 3, 10, 60, 60), dtype=torch.int32))
+
+
+def test_to_label_batch(tmpdir):
+
+    # Create batched 2D label ground truth (classes 0, 1, 2)
+    gt_2d = torch.zeros((2, 1, 60, 60), dtype=torch.int32)
+    gt_2d[0, 0, :, 20:40] = 1
+    gt_2d[0, 0, :, 40:60] = 2
+    gt_2d[1, 0, :, 20:40] = 1
+    gt_2d[1, 0, :, 40:60] = 2
+
+    # Create batched 3D label ground truth (classes 0, 1, 2)
+    gt_3d = torch.zeros((2, 1, 10, 60, 60), dtype=torch.int32)
+    gt_3d[0, 0, :, :, 20:40] = 1
+    gt_3d[0, 0, :, :, 40:60] = 2
+    gt_3d[1, 0, :, :, 20:40] = 1
+    gt_3d[1, 0, :, :, 40:60] = 2
+
+    # Create batched 2D one-hot data (BCHW) (data 1, 2, 3)
+    oh_2d = torch.zeros((2, 3, 60, 60), dtype=torch.int32)
+    oh_2d[0, 0, :, 0:20] = 1  # B = 0
+    oh_2d[0, 1, :, 20:40] = 2
+    oh_2d[0, 2, :, 40:60] = 3
+    oh_2d[
+        1, 0, :, 0:20
+    ] = 4  # B = 1 (different values, to test that result in the same classifications)
+    oh_2d[1, 1, :, 20:40] = 5
+    oh_2d[1, 2, :, 40:60] = 6
+
+    # Create 3D one-hot data (CDHW) (data 1, 2, 3)
+    oh_3d = torch.zeros((2, 3, 10, 60, 60), dtype=torch.int32)
+    oh_3d[0, 0, :, :, 0:20] = 1  # B = 0
+    oh_3d[0, 1, :, :, 20:40] = 2
+    oh_3d[0, 2, :, :, 40:60] = 3
+    oh_3d[
+        1, 0, :, :, 0:20
+    ] = 4  # B = 1 (different values, to test that result in the same classifications)
+    oh_3d[1, 1, :, :, 20:40] = 5
+    oh_3d[1, 2, :, :, 40:60] = 6
+
+    # Check the synthetic data
+    assert gt_2d.shape == (2, 1, 60, 60), "Unexpected 2D batched ground truth shape."
+    assert gt_3d.shape == (
+        2,
+        1,
+        10,
+        60,
+        60,
+    ), "Unexpected 3D batched  ground truth shape."
+    assert oh_2d.shape == (2, 3, 60, 60), "Unexpected 2D batched one-hot truth shape."
+    assert oh_3d.shape == (
+        2,
+        3,
+        10,
+        60,
+        60,
+    ), "Unexpected batched 3D one-hot truth shape."
+    assert oh_2d.shape == (2, 3, 60, 60), "Unexpected 2D batched one-hot truth shape."
+    assert oh_3d.shape == (
+        2,
+        3,
+        10,
+        60,
+        60,
+    ), "Unexpected 3D batched one-hot truth shape."
+
+    #
+    # Test the batched 2D data
+    #
+
+    # Call ToLabel() and check the output
+    to_label_batch = ToLabelBatch()
+    out_oh_2d = to_label_batch(oh_2d)
+
+    assert out_oh_2d.shape == (
+        2,
+        1,
+        60,
+        60,
+    ), "Unexpected shape of result of ToLabel() for 2D data."
+    assert torch.equal(
+        gt_2d, out_oh_2d
+    ), "Result of ToLabel() for 2D data does not match ground truth."
+
+    #
+    # Test the 3D data
+    #
+
+    # Call ToLabel() on oh_3d and check the output
+    to_label_batch = ToLabelBatch()
+    out_oh_3d = to_label_batch(oh_3d)
+
+    assert out_oh_3d.shape == (
+        2,
+        1,
+        10,
+        60,
+        60,
+    ), "Unexpected shape of result of ToLabel() for 3D data."
+    assert torch.equal(
+        gt_3d, out_oh_3d
+    ), "Result of ToLabel() for 3D data does not match ground truth."
+
+    # Check that other shapes are not supported
+    to_label_batch = ToLabelBatch()
+
+    with pytest.raises(ValueError) as e_info:
+        # Single 2D image (H, W)
+        _ = to_label_batch(torch.zeros((60, 60), dtype=torch.int32))
+
+    with pytest.raises(ValueError) as e_info:
+        # 5 batches of 3D images (5, B, C, D, H, W)
+        _ = to_label_batch(torch.zeros((5, 3, 3, 10, 60, 60), dtype=torch.int32))

@@ -175,7 +175,7 @@ class CustomTIFFReaderd(MapTransform):
 
     def __init__(
         self,
-        keys: tuple[str] = ("image", "label"),
+        keys: tuple[str, ...] = ("image", "label"),
         ensure_channel_first: bool = True,
         dtype: torch.dtype = torch.float32,
         as_meta_tensor: bool = False,
@@ -230,7 +230,6 @@ class CustomTIFFReaderd(MapTransform):
         d = dict(data)
 
         for key in self.keys:
-
             # Get arguments
             image_path = str(Path(d[key]).resolve())
 
@@ -445,43 +444,66 @@ class Scaled(MapTransform):
 
 class ToLabel(Transform):
     """
-    Converts Tensor from one-hot representation to 2D label image.
+    Converts Tensor from one-hot representation to 2D/3D label image.
+    Supported and expected are either 2D data of shape (C, H, W) or 3D
+    data of shape (C, D, H, W).
+
+    The alternative possibility of 2D batch data (B, C, H, W) can't robustly
+    be distinguished from 3D (C, D, H, W) data and will result in unexpected
+    labels.
     """
 
-    def __init__(self, dtype=torch.int32, in_place: bool = True):
+    def __init__(self, dtype=torch.int32):
         super().__init__()
         self.dtype = dtype
-        self.in_place = in_place
 
     def __call__(self, data: torch.Tensor) -> torch.Tensor:
-        """Transform one-hot Tensor to 2D label image."""
-        if not self.in_place:
-            if isinstance(data, torch.Tensor) or isinstance(
-                data, monai.data.MetaTensor
-            ):
-                data = data.clone()
-            elif isinstance(data, np.ndarray):
-                data = data.copy()
-            else:
-                raise TypeError(
-                    "Unsupported data type. Data should be a PyTorch Tensor or a NumPy array."
-                )
-
-        if data.ndim == 5:
-            # 3D data: (B, C, Z, H, W)
-            data = data.argmax(axis=1).type(self.dtype)
-        elif data.ndim == 4:
-            # 2D data: (B, C, H, W)
-            data = data.argmax(axis=1).type(self.dtype)
-        elif data.ndim == 3:
-            # 2D data: (C, H, W)
-            data = data.argmax(axis=0).type(self.dtype)
-        else:
+        """Transform one-hot Tensor to 2D/3D label image."""
+        if data.ndim in [3, 4]:
+            # Either 2D data: (C, H, W) or 3D data: (C, D, H, W).
+            # The alternative possibility of 2D batch data (B, C, H, W) is not supported
+            # (but can't be distinguished) and will result in unexpected labels.
+            return data.argmax(axis=0, keepdim=True).type(self.dtype)
+        elif data.ndim == 5:
+            # Unsupported >=3D batch data: (B, C, Z, H, W)
             raise ValueError(
-                "The input tensor must be of size (B, C, Z, H, W), (B, C, H, W) or (C, H, W)."
+                "(B, C, Z, H, W) dimensions not supported! Please pass independent tensors from a batch."
+            )
+        else:
+            # Unclear dimensionality
+            raise ValueError(
+                "The input tensor must be of dimensions (C, D, H, W) or (C, H, W)."
             )
 
-        return data
+
+class ToLabelBatch(Transform):
+    """
+    Converts batches of Tensors from one-hot representation to 2D/3D label image.
+    Supported and expected are either batches of 2D data of shape (B, C, H, W) or
+    batches of 3D data of shape (B, C, D, H, W).
+
+    The alternative possibility of single 3D data (C, D, H, W) can't robustly
+    be distinguished from batched 2D (B, C, H, W) data and will result in unexpected
+    labels.
+    """
+
+    def __init__(self, dtype=torch.int32):
+        super().__init__()
+        self.dtype = dtype
+
+    def __call__(self, data: torch.Tensor) -> torch.Tensor:
+        """Transform batches of one-hot Tensors to batches of 2D/3D label images."""
+        if data.ndim in [4, 5]:
+            # Either 2D batch data: (B, C, H, W) or 3D batch data: (B, C, D, H, W).
+            # The alternative possibility of single 3D data (C, D, H, W) can't robustly
+            # be distinguished from batched 2D (B, C, H, W) data and will result in unexpected
+            # labels.
+            return data.argmax(axis=1, keepdim=True).type(self.dtype)
+        else:
+            # Unclear dimensionality
+            raise ValueError(
+                "The batched input tensor must be of dimensions (B, C, D, H, W) or (B, C, H, W)."
+            )
 
 
 class ToPyTorchLightningOutputd(MapTransform):
@@ -1192,6 +1214,142 @@ class AddNormalizedDistanceTransformd(MapTransform):
 
         # Return the updated data dictionary
         return d
+
+
+class DebugCheckAndFixAffineDimensions(Transform):
+    """Check that the affine transform is (4 x 4)."""
+
+    def __init__(self, expected_voxel_size, *args, **kwargs):
+        """Constructor.
+
+        Parameters
+        ----------
+
+        name: str
+            Name of the Informer. It is printed as a prefix to the output.
+        """
+        super().__init__()
+        self.name = ""
+        if "name" in kwargs:
+            self.name = kwargs["name"]
+        self.expected_voxel_size = expected_voxel_size
+
+    def __call__(self, data):
+        """Call the Transform."""
+        prefix = f"{self.name} :: " if self.name != "" else ""
+        if type(data) is list:
+            for item in data:
+                if type(item) == dict:
+                    for key in item.keys():
+                        sub_item = item[key]
+                        if type(sub_item) is MetaTensor and hasattr(sub_item, "affine"):
+
+                            if sub_item.affine.shape != (4, 4):
+                                print(
+                                    f"{prefix}Affine matrix needs correcting! Current shape is {sub_item.affine.shape}"
+                                )
+                                sub_item.affine = torch.tensor(
+                                    [
+                                        [self.expected_voxel_size[0], 0.0, 0.0, 0.0],
+                                        [0.0, self.expected_voxel_size[1], 0.0, 0.0],
+                                        [0.0, 0.0, self.expected_voxel_size[2], 0.0],
+                                        [0.0, 0.0, 0.0, 1.0],
+                                    ]
+                                )
+                            elif (
+                                sub_item.affine[0, 0] != self.expected_voxel_size[0]
+                                or sub_item.affine[1, 1] != self.expected_voxel_size[1]
+                                or sub_item.affine[2, 2] != self.expected_voxel_size[2]
+                                or sub_item.affine[0, 3] != 0.0
+                            ):
+                                print(
+                                    f"{prefix}Affine matrix needs correcting! Current matrix is {item.affine}"
+                                )
+                                sub_item.affine = torch.tensor(
+                                    [
+                                        [self.expected_voxel_size[0], 0.0, 0.0, 0.0],
+                                        [0.0, self.expected_voxel_size[1], 0.0, 0.0],
+                                        [0.0, 0.0, self.expected_voxel_size[2], 0.0],
+                                        [0.0, 0.0, 0.0, 1.0],
+                                    ]
+                                )
+                            else:
+                                # The affine matrix is fine, nothing to correct
+                                return data
+
+        if type(data) is dict:
+            for key in data.keys():
+                item = data[key]
+                if type(item) is MetaTensor and hasattr(item, "affine"):
+
+                    if item.affine.shape != (4, 4):
+                        print(
+                            f"{prefix}Affine matrix needs correcting! Current shape is {item.affine.shape}"
+                        )
+                        item.affine = torch.tensor(
+                            [
+                                [self.expected_voxel_size[0], 0.0, 0.0, 0.0],
+                                [0.0, self.expected_voxel_size[1], 0.0, 0.0],
+                                [0.0, 0.0, self.expected_voxel_size[2], 0.0],
+                                [0.0, 0.0, 0.0, 1.0],
+                            ]
+                        )
+                    elif (
+                        item.affine[0, 0] != self.expected_voxel_size[0]
+                        or item.affine[1, 1] != self.expected_voxel_size[1]
+                        or item.affine[2, 2] != self.expected_voxel_size[2]
+                        or item.affine[0, 3] != 0.0
+                    ):
+                        print(
+                            f"{prefix}Affine matrix needs correcting! Current matrix is {item.affine}"
+                        )
+                        item.affine = torch.tensor(
+                            [
+                                [self.expected_voxel_size[0], 0.0, 0.0, 0.0],
+                                [0.0, self.expected_voxel_size[1], 0.0, 0.0],
+                                [0.0, 0.0, self.expected_voxel_size[2], 0.0],
+                                [0.0, 0.0, 0.0, 1.0],
+                            ]
+                        )
+                    else:
+                        # The affine matrix is fine, nothing to correct
+                        pass
+
+        elif type(data) is MetaTensor and hasattr(data, "affine"):
+            if data.affine.shape != (4, 4):
+                print(
+                    f"{prefix}Affine matrix needs correcting! Current shape is {data.affine.shape}"
+                )
+                data.affine = torch.tensor(
+                    [
+                        [self.expected_voxel_size[0], 0.0, 0.0, 0.0],
+                        [0.0, self.expected_voxel_size[1], 0.0, 0.0],
+                        [0.0, 0.0, self.expected_voxel_size[2], 0.0],
+                        [0.0, 0.0, 0.0, 1.0],
+                    ]
+                )
+            elif (
+                data.affine[0, 0] != self.expected_voxel_size[0]
+                or data.affine[1, 1] != self.expected_voxel_size[1]
+                or data.affine[2, 2] != self.expected_voxel_size[2]
+                or data.affine[0, 3] != 0.0
+            ):
+                print(
+                    f"{prefix}Affine matrix needs correcting! Current matrix is {data.affine}"
+                )
+                data.affine = torch.tensor(
+                    [
+                        [self.expected_voxel_size[0], 0.0, 0.0, 0.0],
+                        [0.0, self.expected_voxel_size[1], 0.0, 0.0],
+                        [0.0, 0.0, self.expected_voxel_size[2], 0.0],
+                        [0.0, 0.0, 0.0, 1.0],
+                    ]
+                )
+            else:
+                # The affine matrix is fine, nothing to correct
+                pass
+
+        return data
 
 
 class DebugInformer(Transform):

@@ -333,6 +333,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
             shuffle=False,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
+            collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
             persistent_workers=True,
         )

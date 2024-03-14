@@ -9,7 +9,6 @@
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
 from abc import ABC, abstractmethod
-from typing import Optional
 
 import numpy as np
 import torch
@@ -28,15 +27,13 @@ from monai.transforms import (
 )
 
 from qute.transforms import (
-    AddNormalizedDistanceTransform,
-    AddNormalizedDistanceTransformd,
     CustomTIFFReader,
     CustomTIFFReaderd,
+    DebugCheckAndFixAffineDimensions,
     MinMaxNormalize,
     MinMaxNormalized,
     Scale,
-    Scaled,
-    ToLabel,
+    ToLabelBatch,
     ToPyTorchLightningOutputd,
     ZNormalize,
     ZNormalized,
@@ -139,12 +136,12 @@ class SegmentationCampaignTransforms(CampaignTransforms):
         train_transforms = Compose(
             [
                 CustomTIFFReaderd(
-                    keys=["image", "label"],
+                    keys=("image", "label"),
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
                 RandCropByPosNegLabeld(
-                    keys=["image", "label"],
+                    keys=("image", "label"),
                     label_key="label",
                     spatial_size=self.patch_size,
                     pos=1.0,
@@ -155,10 +152,10 @@ class SegmentationCampaignTransforms(CampaignTransforms):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                ZNormalized(keys=["image"]),
-                RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=(-2, -1)),
-                RandGaussianNoised(keys="image", prob=0.2),
-                RandGaussianSmoothd(keys="image", prob=0.2),
+                ZNormalized(keys=("image",)),
+                RandRotate90d(keys=("image", "label"), prob=0.5, spatial_axes=(-2, -1)),
+                RandGaussianNoised(keys=("image",), prob=0.2),
+                RandGaussianSmoothd(keys=("image",), prob=0.2),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
                 ToPyTorchLightningOutputd(),
             ]
@@ -170,12 +167,12 @@ class SegmentationCampaignTransforms(CampaignTransforms):
         val_transforms = Compose(
             [
                 CustomTIFFReaderd(
-                    keys=["image", "label"],
+                    keys=("image", "label"),
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
                 RandCropByPosNegLabeld(
-                    keys=["image", "label"],
+                    keys=("image", "label"),
                     label_key="label",
                     spatial_size=self.patch_size,
                     pos=1.0,
@@ -186,7 +183,7 @@ class SegmentationCampaignTransforms(CampaignTransforms):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                ZNormalized(keys=["image"]),
+                ZNormalized(keys=("image",)),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
                 ToPyTorchLightningOutputd(),
             ]
@@ -212,7 +209,7 @@ class SegmentationCampaignTransforms(CampaignTransforms):
 
     def get_post_inference_transforms(self):
         """Define post inference transforms to apply after prediction on patch."""
-        post_inference_transforms = Compose([ToLabel()])
+        post_inference_transforms = Compose([ToLabelBatch()])
         return post_inference_transforms
 
     def get_val_metrics_transforms(self):
@@ -300,7 +297,7 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
         train_transforms = Compose(
             [
                 CustomTIFFReaderd(
-                    keys=["image", "label"],
+                    keys=("image", "label"),
                     ensure_channel_first=True,
                     dtype=torch.float32,
                     as_meta_tensor=True,
@@ -313,12 +310,12 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                 #     do_not_zero=True,
                 # ),
                 Spacingd(
-                    keys=["image", "label"],
+                    keys=("image", "label"),
                     pixdim=self.target_voxel_size,
                     mode=("bilinear", "nearest"),
                 ),
                 RandCropByPosNegLabeld(
-                    keys=["image", "label"],
+                    keys=("image", "label"),
                     label_key="label",
                     spatial_size=self.patch_size,
                     pos=1.0,
@@ -329,9 +326,9 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                ZNormalized(keys=["image"]),
-                RandGaussianNoised(keys="image", prob=0.2),
-                RandGaussianSmoothd(keys="image", prob=0.2),
+                ZNormalized(keys=("image",)),
+                RandGaussianNoised(keys=("image",), prob=0.2),
+                RandGaussianSmoothd(keys=("image",), prob=0.2),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
                 ToPyTorchLightningOutputd(),
             ]
@@ -343,7 +340,7 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
         val_transforms = Compose(
             [
                 CustomTIFFReaderd(
-                    keys=["image", "label"],
+                    keys=("image", "label"),
                     ensure_channel_first=True,
                     dtype=torch.float32,
                     as_meta_tensor=True,
@@ -356,12 +353,12 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                 #     do_not_zero=True,
                 # ),
                 Spacingd(
-                    keys=["image", "label"],
+                    keys=("image", "label"),
                     pixdim=self.target_voxel_size,
                     mode=("bilinear", "nearest"),
                 ),
                 RandCropByPosNegLabeld(
-                    keys=["image", "label"],
+                    keys=("image", "label"),
                     label_key="label",
                     spatial_size=self.patch_size,
                     pos=1.0,
@@ -372,7 +369,7 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                ZNormalized(keys=["image"]),
+                ZNormalized(keys=("image",)),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
                 ToPyTorchLightningOutputd(),
             ]
@@ -410,12 +407,12 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
         """Define post inference transforms to apply after prediction on patch."""
         if self.to_isotropic:
             post_inference_transforms = Compose(
-                [ToLabel(), Spacing(pixdim=self.voxel_size, mode="nearest")]
+                [ToLabelBatch(), Spacing(pixdim=self.voxel_size, mode="nearest")]
             )
         else:
             post_inference_transforms = Compose(
                 [
-                    ToLabel(),
+                    ToLabelBatch(),
                 ]
             )
         return post_inference_transforms
@@ -459,17 +456,17 @@ class RestorationCampaignTransforms(CampaignTransforms):
         train_transforms = Compose(
             [
                 CustomTIFFReaderd(
-                    keys=["image", "label"],
+                    keys=("image", "label"),
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
                 RandSpatialCropd(
-                    keys=["image", "label"],
+                    keys=("image", "label"),
                     roi_size=self.patch_size,
                     random_size=False,
                 ),
                 MinMaxNormalized(
-                    keys=["image", "label"], min_intensity=0.0, max_intensity=15472.0
+                    keys=("image", "label"), min_intensity=0.0, max_intensity=15472.0
                 ),
                 ToPyTorchLightningOutputd(
                     image_dtype=torch.float32,
@@ -484,17 +481,17 @@ class RestorationCampaignTransforms(CampaignTransforms):
         val_transforms = Compose(
             [
                 CustomTIFFReaderd(
-                    keys=["image", "label"],
+                    keys=("image", "label"),
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
                 RandSpatialCropd(
-                    keys=["image", "label"],
+                    keys=("image", "label"),
                     roi_size=self.patch_size,
                     random_size=False,
                 ),
                 MinMaxNormalized(
-                    keys=["image", "label"], min_intensity=0.0, max_intensity=15472.0
+                    keys=("image", "label"), min_intensity=0.0, max_intensity=15472.0
                 ),
                 ToPyTorchLightningOutputd(
                     image_dtype=torch.float32,

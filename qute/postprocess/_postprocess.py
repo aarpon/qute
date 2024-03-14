@@ -61,6 +61,10 @@ def two_class_mask_to_label(
         # Read the image
         mask = imread(in_name)
 
+        # Make sure to drop the singleton channel dimension, if it is there
+        if mask.shape[0] == 1:
+            mask = mask.squeeze(0)
+
         # Allocate output
         out = np.zeros(mask.shape, dtype=mask.dtype)
 
@@ -105,4 +109,6 @@ def two_class_mask_to_label(
         # Write the 2-class mask image to the output folder
         out_name = out_folder / f"{in_name.name}"
         imwrite(out_name, out)
-        print(out_name)
+        print(f"Saved {out_name}.")
+
+    print("Post-processing completed.")
