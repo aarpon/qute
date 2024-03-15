@@ -22,14 +22,13 @@ from monai.transforms import (
     RandGaussianSmoothd,
     RandRotate90d,
     RandSpatialCropd,
-    Spacing,
-    Spacingd,
 )
 
 from qute.transforms import (
+    CustomResampler,
+    CustomResamplerd,
     CustomTIFFReader,
     CustomTIFFReaderd,
-    DebugCheckAndFixAffineDimensions,
     MinMaxNormalize,
     MinMaxNormalized,
     Scale,
@@ -74,26 +73,6 @@ class CampaignTransforms(ABC):
         pass
 
     @abstractmethod
-    def get_val_metrics_transforms(self):
-        """Define default transforms for validation metric calculation on a patch.
-
-        These transforms are applied to the validation dataset after the images have
-        gone through the forward pass, to prepare the output -- if needed -- for the
-        validation metrics to be applied.
-        """
-        pass
-
-    @abstractmethod
-    def get_test_metrics_transforms(self):
-        """Define default transforms for testing metric calculation on a patch.
-
-        These transforms are applied to the test dataset after the images have
-        gone through the forward pass, to prepare the output -- if needed -- for the
-        test metrics to be applied.
-        """
-        pass
-
-    @abstractmethod
     def get_inference_transforms(self):
         """Define inference transforms to predict on patch.
 
@@ -110,6 +89,36 @@ class CampaignTransforms(ABC):
         These transforms are applied to the images that will go through full inference.
         Please notice that the patch size will be the same as for training, a sliding
         windows approach will be used to predict the whole image.
+        """
+        pass
+
+    @abstractmethod
+    def get_post_full_inference_transforms(self):
+        """Define post inference transforms to apply after reconstructed prediction on whole image.
+
+        These transforms are applied to the images that have gone through full inference.
+        They will apply to the whole image as reconstructed by the sliding windows and will apply
+        whatever transform is necessary to create the final output to be saved to disk.
+        """
+        pass
+
+    @abstractmethod
+    def get_val_metrics_transforms(self):
+        """Define default transforms for validation metric calculation on a patch.
+
+        These transforms are applied to the validation dataset after the images have
+        gone through the forward pass, to prepare the output -- if needed -- for the
+        validation metrics to be applied.
+        """
+        pass
+
+    @abstractmethod
+    def get_test_metrics_transforms(self):
+        """Define default transforms for testing metric calculation on a patch.
+
+        These transforms are applied to the test dataset after the images have
+        gone through the forward pass, to prepare the output -- if needed -- for the
+        test metrics to be applied.
         """
         pass
 
@@ -212,6 +221,10 @@ class SegmentationCampaignTransforms(CampaignTransforms):
         post_inference_transforms = Compose([ToLabelBatch()])
         return post_inference_transforms
 
+    def get_post_full_inference_transforms(self):
+        """Define post full-inference transforms to apply after reconstructed prediction on whole image."""
+        return self.get_post_inference_transforms()
+
     def get_val_metrics_transforms(self):
         """Define default transforms for validation metric calculation (patch)."""
         val_metrics_transforms = Compose(
@@ -303,16 +316,11 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     as_meta_tensor=True,
                     voxel_size=self.voxel_size,
                 ),
-                # AddNormalizedDistanceTransformd(
-                #     image_key="image",
-                #     label_key="label",
-                #     reverse=True,
-                #     do_not_zero=True,
-                # ),
-                Spacingd(
+                CustomResamplerd(
                     keys=("image", "label"),
-                    pixdim=self.target_voxel_size,
-                    mode=("bilinear", "nearest"),
+                    target_voxel_size=self.target_voxel_size,
+                    input_voxel_size=self.voxel_size,
+                    mode=("trilinear", "nearest"),
                 ),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
@@ -346,16 +354,11 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     as_meta_tensor=True,
                     voxel_size=self.voxel_size,
                 ),
-                # AddNormalizedDistanceTransformd(
-                #     image_key="image",
-                #     label_key="label",
-                #     reverse=True,
-                #     do_not_zero=True,
-                # ),
-                Spacingd(
+                CustomResamplerd(
                     keys=("image", "label"),
-                    pixdim=self.target_voxel_size,
-                    mode=("bilinear", "nearest"),
+                    target_voxel_size=self.target_voxel_size,
+                    input_voxel_size=self.voxel_size,
+                    mode=("trilinear", "nearest"),
                 ),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
@@ -390,13 +393,10 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     as_meta_tensor=True,
                     voxel_size=self.voxel_size,
                 ),
-                # AddNormalizedDistanceTransform(
-                #     reverse=True,
-                #     do_not_zero=True,
-                # ),
-                Spacing(
-                    pixdim=self.target_voxel_size,
-                    mode="nearest",
+                CustomResampler(
+                    target_voxel_size=self.target_voxel_size,
+                    input_voxel_size=self.voxel_size,
+                    mode="trilinear",
                 ),
                 ZNormalize(),
             ]
@@ -405,17 +405,34 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
 
     def get_post_inference_transforms(self):
         """Define post inference transforms to apply after prediction on patch."""
+        post_inference_transforms = Compose(
+            [
+                ToLabelBatch(),
+            ]
+        )
+        return post_inference_transforms
+
+    def get_post_full_inference_transforms(self):
+        """Define post full-inference transforms to apply after prediction on patch."""
         if self.to_isotropic:
-            post_inference_transforms = Compose(
-                [ToLabelBatch(), Spacing(pixdim=self.voxel_size, mode="nearest")]
+            post_full_inference_transforms = Compose(
+                [
+                    ToLabelBatch(),
+                    CustomResampler(
+                        target_voxel_size=self.voxel_size,
+                        input_voxel_size=self.target_voxel_size,
+                        mode="nearest",
+                        with_batch_dim=True,
+                    ),
+                ]
             )
         else:
-            post_inference_transforms = Compose(
+            post_full_inference_transforms = Compose(
                 [
                     ToLabelBatch(),
                 ]
             )
-        return post_inference_transforms
+        return post_full_inference_transforms
 
     def get_val_metrics_transforms(self):
         """Define default transforms for validation metric calculation (patch)."""
@@ -531,6 +548,10 @@ class RestorationCampaignTransforms(CampaignTransforms):
             ]
         )
         return post_inference_transforms
+
+    def get_post_full_inference_transforms(self):
+        """Define post full-inference transforms to apply after reconstructed prediction on whole image."""
+        return self.get_post_full_inference_transforms()
 
     def get_val_metrics_transforms(self):
         """Define default transforms for validation metric calculation (patch)."""

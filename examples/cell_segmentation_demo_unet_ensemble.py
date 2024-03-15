@@ -171,7 +171,7 @@ if __name__ == "__main__":
         models,
         data_loader=data_module.inference_dataloader(data_module.data_dir / "images/"),
         target_folder=RESULTS_DIR / "ensemble_predictions",
-        inference_post_transforms=campaign_transforms.get_post_inference_transforms(),
+        post_full_inference_transforms=campaign_transforms.get_post_full_inference_transforms(),
         roi_size=PATCH_SIZE,
         batch_size=INFERENCE_BATCH_SIZE,
         transpose=False,

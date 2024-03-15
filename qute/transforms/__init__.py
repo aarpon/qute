@@ -18,6 +18,8 @@ from ._transforms import (
     CellposeLabelReader,
     ClippedZNormalize,
     ClippedZNormalized,
+    CustomResampler,
+    CustomResamplerd,
     CustomTIFFReader,
     CustomTIFFReaderd,
     DebugCheckAndFixAffineDimensions,

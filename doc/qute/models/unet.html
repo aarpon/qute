@@ -26,18 +26,20 @@
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">#  ********************************************************************************
-#   Copyright © 2022 - 2003, ETH Zurich, D-BSSE, Aaron Ponti
-#   All rights reserved. This program and the accompanying materials
-#   are made available under the terms of the Apache License Version 2.0
-#   which accompanies this distribution, and is available at
-#   https://www.apache.org/licenses/LICENSE-2.0.txt
+<pre><code class="python"># ******************************************************************************
+# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# All rights reserved. This program and the accompanying materials
+# are made available under the terms of the Apache License Version 2.0
+# which accompanies this distribution, and is available at
+# https://www.apache.org/licenses/LICENSE-2.0.txt
 #
-#   Contributors:
-#       Aaron Ponti - initial API and implementation
+# Contributors:
+#   Aaron Ponti - initial API and implementation
 #
+# Notes:
 #   This file adapted from: https://github.com/hiepph/unet-lightning
-#  ******************************************************************************/
+# ******************************************************************************
+
 
 from pathlib import Path
 from typing import Optional, Tuple, Union
@@ -47,7 +49,7 @@ import pytorch_lightning as pl
 import torch
 from monai.data import DataLoader
 from monai.inferers import sliding_window_inference
-from monai.losses import DiceCELoss, FocalLoss
+from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
 from monai.networks.nets import UNet as MonaiUNet
 from monai.transforms import Transform
@@ -56,6 +58,7 @@ from tifffile import TiffWriter
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import PolynomialLR
 
+from qute.campaigns import CampaignTransforms
 from qute.device import get_device
 
 
@@ -68,18 +71,17 @@ class UNet(pl.LightningModule):
 
     def __init__(
         self,
+        campaign_transforms: CampaignTransforms,
         spatial_dims: int = 2,
         in_channels: int = 1,
         out_channels: int = 3,
+        class_names: Optional[list] = None,
         channels=(16, 32, 64),
         strides: Optional[tuple] = None,
         criterion=DiceCELoss(include_background=True, to_onehot_y=False, softmax=True),
         metrics=DiceMetric(
             include_background=True, reduction=&#34;mean&#34;, get_not_nans=False
         ),
-        val_metrics_transforms=None,
-        test_metrics_transforms=None,
-        predict_post_transforms=None,
         learning_rate: float = 1e-2,
         optimizer_class=AdamW,
         lr_scheduler_class=PolynomialLR,
@@ -93,6 +95,10 @@ class UNet(pl.LightningModule):
         Parameters
         ----------
 
+        campaign_transforms: CampaignTransforms
+            Define all transforms necessary for training, validation, testing and (full) prediction.
+            @see `qute.transforms.CampaignTransforms` for documentation.
+
         spatial_dims: int = 2
             Whether 2D or 3D data.
 
@@ -101,6 +107,10 @@ class UNet(pl.LightningModule):
 
         out_channels: int = 3
             Number of output channels (or labels, or classes)
+
+        class_names: Optional[list] = None
+            Names of the output classes (for logging purposes). If omitted, they will default
+            to [&#34;class_1&#34;, &#34;class_2&#34;, ...]
 
         channels: tuple = (16, 32, 64)
             Number of neuron per layer.
@@ -117,15 +127,6 @@ class UNet(pl.LightningModule):
 
             The default metrics applies to a three-label target where the background (index = 0) class
             is omitted from calculation.
-
-        val_metrics_transforms: None
-            Post transform for the output of the forward pass in the validation step for metric calculation.
-
-        test_metrics_transforms: None
-            Post transform for the output of the forward pass in the test step for metric calculation.
-
-        predict_post_transforms: None
-            Post transform for the output of the forward pass in the prediction step (only).
 
         learning_rate: float = 1e-2
             Learning rate for optimization.
@@ -148,15 +149,16 @@ class UNet(pl.LightningModule):
 
         super().__init__()
 
+        self.campaign_transforms = campaign_transforms
         self.criterion = criterion
         self.metrics = metrics
         self.learning_rate = learning_rate
         self.optimizer_class = optimizer_class
         self.scheduler_class = lr_scheduler_class
         self.scheduler_parameters = lr_scheduler_parameters
-        self.val_metrics_transforms = val_metrics_transforms
-        self.test_metrics_transforms = test_metrics_transforms
-        self.predict_post_transforms = predict_post_transforms
+        if class_names is None:
+            class_names = [f&#34;class_{i}&#34; for i in range(out_channels)]
+        self.class_names = class_names
         if strides is None:
             strides = (2,) * (len(channels) - 1)
         self.net = MonaiUNet(
@@ -170,7 +172,7 @@ class UNet(pl.LightningModule):
         )
 
         # Log the hyperparameters
-        self.save_hyperparameters(ignore=[&#34;criterion&#34;, &#34;metrics&#34;])
+        self.save_hyperparameters(ignore=[&#34;criterion&#34;])
 
     def configure_optimizers(self):
         &#34;&#34;&#34;Configure and return the optimizer and scheduler.&#34;&#34;&#34;
@@ -205,13 +207,28 @@ class UNet(pl.LightningModule):
             prog_bar=True,
         )
         if self.metrics is not None:
-            if self.val_metrics_transforms is not None:
-                val_metrics = self.metrics(self.val_metrics_transforms(y_hat), y).mean()
+            if self.campaign_transforms.get_val_metrics_transforms() is not None:
+                val_metrics = self.metrics(
+                    self.campaign_transforms.get_val_metrics_transforms()(y_hat), y
+                )
             else:
-                val_metrics = self.metrics(y_hat, y).mean()
-            self.log(
-                &#34;val_metrics&#34;, torch.tensor([val_metrics]), on_step=False, on_epoch=True
-            )
+                val_metrics = self.metrics(y_hat, y)
+
+            # Compute and log the mean metrics score per class
+            mean_val_per_class = val_metrics.nanmean(dim=0)
+
+            # Make sure to log the correct class name in case the background is not
+            # considered in the calculation
+            start = len(self.class_names) - val_metrics.shape[1]
+
+            for i, val_score in enumerate(mean_val_per_class):
+                self.log(
+                    f&#34;val_metrics_{self.class_names[start + i]}&#34;,
+                    torch.tensor([val_score]),
+                    on_step=False,
+                    on_epoch=True,
+                )
+
         return val_loss
 
     def test_step(self, batch, batch_idx):
@@ -221,26 +238,37 @@ class UNet(pl.LightningModule):
         test_loss = self.criterion(y_hat, y)
         self.log(&#34;test_loss&#34;, test_loss)
         if self.metrics is not None:
-            if self.test_metrics_transforms is not None:
+            if self.campaign_transforms.get_test_metrics_transforms() is not None:
                 test_metrics = self.metrics(
-                    self.test_metrics_transforms(y_hat), y
-                ).mean()
+                    self.campaign_transforms.get_test_metrics_transforms()(y_hat), y
+                )
             else:
-                test_metrics = self.metrics(y_hat, y).mean()
-            self.log(
-                &#34;test_metrics&#34;,
-                torch.tensor([test_metrics]),
-                on_step=False,
-                on_epoch=True,
-            )
+                test_metrics = self.metrics(y_hat, y)
+
+            # Compute and log the mean metrics score per class
+            mean_test_per_class = test_metrics.nanmean(dim=0)
+
+            # Make sure to log the correct class name in case the background is not
+            # considered in the calculation
+            start = len(self.class_names) - test_metrics.shape[1]
+            for i, test_score in enumerate(mean_test_per_class):
+                self.log(
+                    f&#34;test_metrics_{self.class_names[start + i]}&#34;,
+                    torch.tensor([test_score]),
+                    on_step=False,
+                    on_epoch=True,
+                )
+
         return test_loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         &#34;&#34;&#34;The predict step creates a label image from the output one-hot tensor.&#34;&#34;&#34;
         x, _ = batch
         y_hat = self.net(x)
-        if self.predict_post_transforms is not None:
-            label = self.predict_post_transforms(y_hat).argmax(axis=1)
+        if self.campaign_transforms.get_post_inference_transforms() is not None:
+            label = self.campaign_transforms.get_post_inference_transforms()(
+                y_hat
+            ).argmax(axis=1)
         else:
             label = y_hat.argmax(axis=1)
         return label
@@ -249,11 +277,12 @@ class UNet(pl.LightningModule):
         self,
         data_loader: DataLoader,
         target_folder: Union[Path, str],
-        inference_post_transforms: Transform,
-        roi_size: Tuple[int, int],
+        roi_size: Tuple[int, ...],
         batch_size: int,
         overlap: float = 0.25,
         transpose: bool = True,
+        output_dtype: Optional[np.dtype] = None,
+        use_source_names: bool = False,
     ):
         &#34;&#34;&#34;Run inference on full images using given model.
 
@@ -266,9 +295,6 @@ class UNet(pl.LightningModule):
         target_folder: Union[Path|str]
             Path to the folder where to store the predicted images.
 
-        inference_post_transforms: Transform
-            Composition of transforms to be applied to the result of the forward pass of the network.
-
         roi_size: Tuple[int, int]
             Size of the patch for the sliding window prediction. It must match the patch size during training.
 
@@ -280,6 +306,13 @@ class UNet(pl.LightningModule):
 
         transpose: bool
             Whether the transpose the image before saving, to compensate for the default behavior of monai.transforms.LoadImage().
+
+        output_dtype: Optional[np.dtype]
+            Optional NumPy dtype for the output image. Omit to save the output of inference without casting.
+
+        use_source_names: bool (Optional, default is False)
+            Set to True to name the predictions as the input filenames; otherwise, they will be called `pred_0000.tif`,
+            &#39;pred_0001.tif`, ...
 
         Returns
         -------
@@ -300,7 +333,7 @@ class UNet(pl.LightningModule):
         # Switch to evaluation mode
         self.net.eval()
 
-        # Process them
+        # Process all images
         c = 0
         with torch.no_grad():
             for images in data_loader:
@@ -317,15 +350,32 @@ class UNet(pl.LightningModule):
                 )
 
                 # Apply post-transforms?
-                outputs = inference_post_transforms(outputs)
+                outputs = self.campaign_transforms.get_post_full_inference_transforms()(
+                    outputs
+                )
 
                 # Retrieve the image from the GPU (if needed)
-                preds = outputs.cpu().numpy().squeeze()
+                preds = outputs.cpu().numpy()
 
+                # Process one batch at a time
                 for pred in preds:
+
+                    # Drop the channel singleton dimension
+                    if pred.shape[0] == 1:
+                        pred = pred.squeeze(0)
+
                     if transpose:
                         # Transpose to undo the effect of monai.transform.LoadImage(d)
                         pred = pred.T
+
+                    # Type-cast if needed
+                    if output_dtype is not None:
+                        # Make sure not to wrap around
+                        if np.issubdtype(output_dtype, np.integer):
+                            info = np.iinfo(output_dtype)
+                            pred[pred &lt; info.min] = info.min
+                            pred[pred &gt; info.max] = info.max
+                        pred = pred.astype(output_dtype)
 
                     # Save prediction image as tiff file
                     output_name = Path(target_folder) / f&#34;pred_{c:04}.tif&#34;
@@ -344,15 +394,17 @@ class UNet(pl.LightningModule):
     @staticmethod
     def full_inference_ensemble(
         models: list,
-        weights: list,
         data_loader: DataLoader,
         target_folder: Union[Path, str],
         inference_post_transforms: Transform,
-        roi_size: Tuple[int, int],
+        roi_size: Tuple[int, ...],
         batch_size: int,
+        voting_mechanism: str = &#34;mode&#34;,
+        weights: Optional[list] = None,
         overlap: float = 0.25,
         transpose: bool = True,
         save_individual_preds: bool = False,
+        output_dtype: Optional[np.dtype] = None,
     ):
         &#34;&#34;&#34;Run inference on full images using given model.
 
@@ -361,9 +413,6 @@ class UNet(pl.LightningModule):
 
         models: list
             List of trained UNet models to use for ensemble prediction.
-
-        weights: list
-            List of weights for each of the contributions.
 
         data_loader: DataLoader
             DataLoader for the image files names to be predicted on.
@@ -380,6 +429,16 @@ class UNet(pl.LightningModule):
         batch_size: int
             Number of parallel batches to run.
 
+        voting_mechanism: str = &#34;mode&#34;
+            Voting mechanism to assign the final class among the predictions from the ensemble of models.
+            One of &#34;mode&#34; (default&#34; and &#34;mean&#34;).
+            &#34;mode&#34;: pick the most common class among the predictions for each pixel.
+            &#34;mean&#34;: (rounded) weighted mean of the predicted classed per pixel. The `weights` argument defines
+                    the relative contribution of the models.
+
+        weights: Optional[list]
+            List of weights for each of the contributions. Only used if `voting_mechanism` is &#34;mean&#34;.
+
         overlap: float
             Fraction of overlap between rois.
 
@@ -389,6 +448,9 @@ class UNet(pl.LightningModule):
         save_individual_preds: bool
             Whether to save the individual predictions of each model.
 
+        output_dtype: Optional[np.dtype]
+            Optional NumPy dtype for the output image. Omit to save the output of inference without casting.
+
         Returns
         -------
 
@@ -396,24 +458,31 @@ class UNet(pl.LightningModule):
             True if the inference was successful, False otherwise.
         &#34;&#34;&#34;
 
-        if len(models) != len(weights):
-            raise ValueError(&#34;The number of weights must match the number of models.&#34;)
+        if voting_mechanism not in [&#34;mode&#34;, &#34;mean&#34;]:
+            raise ValueError(&#34;`voting mechanism` must be one of &#39;mode&#39; or &#39;mean&#39;.&#34;)
+
+        if voting_mechanism == &#34;mean&#34;:
+            if len(models) != len(weights):
+                raise ValueError(
+                    &#34;The number of weights must match the number of models.&#34;
+                )
+
+            # Turn the weights into a NumPy array of float 32 bit
+            weights = np.array(weights, dtype=np.float32)
+            weights = weights / weights.sum()
 
         if not isinstance(models[0], UNet) or not hasattr(models[0], &#34;net&#34;):
             raise ValueError(&#34;The models must be of type `qute.models.unet.UNet`.&#34;)
 
-        # Turn the weights into a NumPy array of float 32 bit
-        weights = np.array(weights, dtype=np.float32)
-        weights = weights / weights.sum()
-
         # Make sure the target folder exists
         Path(target_folder).mkdir(parents=True, exist_ok=True)
 
-        # If needed, create the sub-folders for the invidual predictions
+        # If needed, create the sub-folders for the individual predictions
         if save_individual_preds:
             for f in range(len(models)):
-                fold_subolder = Path(target_folder) / f&#34;fold_{f}&#34;
-                Path(fold_subolder).mkdir(parents=True, exist_ok=True)
+                fold_subfolder = Path(target_folder) / f&#34;fold_{f}&#34;
+                Path(fold_subfolder).mkdir(parents=True, exist_ok=True)
+
         # Device
         device = get_device()
 
@@ -422,7 +491,7 @@ class UNet(pl.LightningModule):
             model.net.eval()
 
         c = 0
-        with torch.no_grad():
+        with (torch.no_grad()):
             for images in data_loader:
 
                 predictions = [[] for _ in range(len(models))]
@@ -447,10 +516,15 @@ class UNet(pl.LightningModule):
                     outputs = inference_post_transforms(outputs)
 
                     # Retrieve the image from the GPU (if needed)
-                    preds = outputs.cpu().numpy().squeeze()
+                    preds = outputs.cpu().numpy()
 
                     stored_preds = []
                     for pred in preds:
+
+                        # Drop the channel singleton dimension
+                        if pred.shape[0] == 1:
+                            pred = pred.squeeze(0)
+
                         if transpose:
                             # Transpose to undo the effect of monai.transform.LoadImage(d)
                             pred = pred.T
@@ -460,16 +534,53 @@ class UNet(pl.LightningModule):
                     predictions[n] = stored_preds
 
                 # Iterate over all images in the batch
-                for i in range(len(predictions[0])):
+                pred_dim = len(models)
+                batch_dim = len(predictions[0])
 
-                    # Iterate over all predictions from the models
-                    for j in range(len(predictions)):
+                for b in range(batch_dim):
 
-                        if j == 0:
-                            ensemble_pred = weights[j] * predictions[j][i]
-                        else:
-                            ensemble_pred += weights[j] * predictions[j][i]
-                    ensemble_pred = np.round(ensemble_pred).astype(np.int32)
+                    # Apply selected voting mechanism
+                    if voting_mechanism == &#34;mean&#34;:
+                        # Apply weighted mean (and rounding) of the predictions per pixel
+
+                        # Iterate over all predictions from the models
+                        for p in range(pred_dim):
+                            if p == 0:
+                                ensemble_pred = weights[p] * predictions[p][b]
+                            else:
+                                ensemble_pred += weights[p] * predictions[p][b]
+                        ensemble_pred = np.round(ensemble_pred).astype(np.int32)
+
+                    elif voting_mechanism == &#34;mode&#34;:
+                        # Select the mode of the predictions per pixel
+
+                        # Store predictions in a stack
+                        target = np.zeros(
+                            (
+                                pred_dim,
+                                predictions[0][0].shape[0],
+                                predictions[0][0].shape[1],
+                            )
+                        )
+
+                        # Iterate over all predictions from the models
+                        for p in range(pred_dim):
+                            target[p, :, :] = predictions[p][b]
+                        values, _ = torch.mode(torch.tensor(target), dim=0)
+                        ensemble_pred = values.numpy().astype(np.int32)
+                    else:
+                        raise ValueError(
+                            &#34;`voting mechanism` must be one of &#39;mode&#39; or &#39;mean&#39;.&#34;
+                        )
+
+                    # Type-cast if needed
+                    if output_dtype is not None:
+                        # Make sure not to wrap around
+                        if np.issubdtype(output_dtype, np.integer):
+                            info = np.iinfo(output_dtype)
+                            ensemble_pred[ensemble_pred &lt; info.min] = info.min
+                            ensemble_pred[ensemble_pred &gt; info.max] = info.max
+                        ensemble_pred = ensemble_pred.astype(output_dtype)
 
                     # Save ensemble prediction image as tiff file
                     output_name = Path(target_folder) / f&#34;ensemble_pred_{c:04}.tif&#34;
@@ -482,13 +593,27 @@ class UNet(pl.LightningModule):
                     # Save individual predictions?
                     if save_individual_preds:
                         # Iterate over all predictions from the models
-                        for j in range(len(predictions)):
+                        for p in range(len(predictions)):
                             # Save prediction image as tiff file
                             output_name = (
-                                Path(target_folder) / f&#34;fold_{j}&#34; / f&#34;pred_{c:04}.tif&#34;
+                                Path(target_folder) / f&#34;fold_{p}&#34; / f&#34;pred_{c:04}.tif&#34;
                             )
+
+                            # Get current prediction
+                            current_pred = predictions[p][b]
+
+                            # Type-cast if needed
+                            if output_dtype is not None:
+                                # Make sure not to wrap around
+                                if np.issubdtype(output_dtype, np.integer):
+                                    info = np.iinfo(output_dtype)
+                                    current_pred[current_pred &lt; info.min] = info.min
+                                    current_pred[current_pred &gt; info.max] = info.max
+                                current_pred = current_pred.astype(output_dtype)
+
+                            # Save
                             with TiffWriter(output_name) as tif:
-                                tif.write(predictions[j][i])
+                                tif.write(current_pred)
 
                     # Update global file counter c
                     c += 1
@@ -510,11 +635,11 @@ class UNet(pl.LightningModule):
 <dl>
 <dt id="qute.models.unet.UNet"><code class="flex name class">
 <span>class <span class="ident">UNet</span></span>
-<span>(</span><span>spatial_dims: int = 2, in_channels: int = 1, out_channels: int = 3, channels=(16, 32, 64), strides: Optional[tuple] = None, criterion=DiceCELoss(
+<span>(</span><span>campaign_transforms: qute.campaigns._campaigns.CampaignTransforms, spatial_dims: int = 2, in_channels: int = 1, out_channels: int = 3, class_names: Optional[list] = None, channels=(16, 32, 64), strides: Optional[tuple] = None, criterion=DiceCELoss(
 (dice): DiceLoss()
 (cross_entropy): CrossEntropyLoss()
 (binary_cross_entropy): BCEWithLogitsLoss()
-), metrics=&lt;monai.metrics.meandice.DiceMetric object&gt;, val_metrics_transforms=None, test_metrics_transforms=None, predict_post_transforms=None, learning_rate: float = 0.01, optimizer_class=torch.optim.adamw.AdamW, lr_scheduler_class=torch.optim.lr_scheduler.PolynomialLR, lr_scheduler_parameters: dict = {'total_iters': 100, 'power': 0.95}, num_res_units: int = 0, dropout: float = 0.0)</span>
+), metrics=&lt;monai.metrics.meandice.DiceMetric object&gt;, learning_rate: float = 0.01, optimizer_class=torch.optim.adamw.AdamW, lr_scheduler_class=torch.optim.lr_scheduler.PolynomialLR, lr_scheduler_parameters: dict = {'total_iters': 100, 'power': 0.95}, num_res_units: int = 0, dropout: float = 0.0)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Wrap MONAI's UNet architecture into a PyTorch Lightning module.</p>
@@ -523,12 +648,18 @@ a single-channel input image is transformed into a three-class label image.</p>
 <p>Constructor.</p>
 <h2 id="parameters">Parameters</h2>
 <dl>
+<dt><strong><code>campaign_transforms</code></strong> :&ensp;<code>CampaignTransforms</code></dt>
+<dd>Define all transforms necessary for training, validation, testing and (full) prediction.
+@see <code>qute.transforms.CampaignTransforms</code> for documentation.</dd>
 <dt><strong><code>spatial_dims</code></strong> :&ensp;<code>int = 2</code></dt>
 <dd>Whether 2D or 3D data.</dd>
 <dt><strong><code>in_channels</code></strong> :&ensp;<code>int = 1</code></dt>
 <dd>Number of input channels.</dd>
 <dt><strong><code>out_channels</code></strong> :&ensp;<code>int = 3</code></dt>
 <dd>Number of output channels (or labels, or classes)</dd>
+<dt><strong><code>class_names</code></strong> :&ensp;<code>Optional[list] = None</code></dt>
+<dd>Names of the output classes (for logging purposes). If omitted, they will default
+to ["class_1", "class_2", &hellip;]</dd>
 <dt><strong><code>channels</code></strong> :&ensp;<code>tuple = (16, 32, 64)</code></dt>
 <dd>Number of neuron per layer.</dd>
 <dt><strong><code>strides</code></strong> :&ensp;<code>Optional[tuple] = (2, 2)</code></dt>
@@ -542,12 +673,6 @@ The default loss function applies to a multi-label target where the background c
 <p>The default metrics applies to a three-label target where the background (index = 0) class
 is omitted from calculation.</p>
 </dd>
-<dt><strong><code>val_metrics_transforms</code></strong> :&ensp;<code>None</code></dt>
-<dd>Post transform for the output of the forward pass in the validation step for metric calculation.</dd>
-<dt><strong><code>test_metrics_transforms</code></strong> :&ensp;<code>None</code></dt>
-<dd>Post transform for the output of the forward pass in the test step for metric calculation.</dd>
-<dt><strong><code>predict_post_transforms</code></strong> :&ensp;<code>None</code></dt>
-<dd>Post transform for the output of the forward pass in the prediction step (only).</dd>
 <dt><strong><code>learning_rate</code></strong> :&ensp;<code>float = 1e-2</code></dt>
 <dd>Learning rate for optimization.</dd>
 </dl>
@@ -576,18 +701,17 @@ Dictionary of scheduler parameters.</p>
 
     def __init__(
         self,
+        campaign_transforms: CampaignTransforms,
         spatial_dims: int = 2,
         in_channels: int = 1,
         out_channels: int = 3,
+        class_names: Optional[list] = None,
         channels=(16, 32, 64),
         strides: Optional[tuple] = None,
         criterion=DiceCELoss(include_background=True, to_onehot_y=False, softmax=True),
         metrics=DiceMetric(
             include_background=True, reduction=&#34;mean&#34;, get_not_nans=False
         ),
-        val_metrics_transforms=None,
-        test_metrics_transforms=None,
-        predict_post_transforms=None,
         learning_rate: float = 1e-2,
         optimizer_class=AdamW,
         lr_scheduler_class=PolynomialLR,
@@ -601,6 +725,10 @@ Dictionary of scheduler parameters.</p>
         Parameters
         ----------
 
+        campaign_transforms: CampaignTransforms
+            Define all transforms necessary for training, validation, testing and (full) prediction.
+            @see `qute.transforms.CampaignTransforms` for documentation.
+
         spatial_dims: int = 2
             Whether 2D or 3D data.
 
@@ -609,6 +737,10 @@ Dictionary of scheduler parameters.</p>
 
         out_channels: int = 3
             Number of output channels (or labels, or classes)
+
+        class_names: Optional[list] = None
+            Names of the output classes (for logging purposes). If omitted, they will default
+            to [&#34;class_1&#34;, &#34;class_2&#34;, ...]
 
         channels: tuple = (16, 32, 64)
             Number of neuron per layer.
@@ -625,15 +757,6 @@ Dictionary of scheduler parameters.</p>
 
             The default metrics applies to a three-label target where the background (index = 0) class
             is omitted from calculation.
-
-        val_metrics_transforms: None
-            Post transform for the output of the forward pass in the validation step for metric calculation.
-
-        test_metrics_transforms: None
-            Post transform for the output of the forward pass in the test step for metric calculation.
-
-        predict_post_transforms: None
-            Post transform for the output of the forward pass in the prediction step (only).
 
         learning_rate: float = 1e-2
             Learning rate for optimization.
@@ -656,15 +779,16 @@ Dictionary of scheduler parameters.</p>
 
         super().__init__()
 
+        self.campaign_transforms = campaign_transforms
         self.criterion = criterion
         self.metrics = metrics
         self.learning_rate = learning_rate
         self.optimizer_class = optimizer_class
         self.scheduler_class = lr_scheduler_class
         self.scheduler_parameters = lr_scheduler_parameters
-        self.val_metrics_transforms = val_metrics_transforms
-        self.test_metrics_transforms = test_metrics_transforms
-        self.predict_post_transforms = predict_post_transforms
+        if class_names is None:
+            class_names = [f&#34;class_{i}&#34; for i in range(out_channels)]
+        self.class_names = class_names
         if strides is None:
             strides = (2,) * (len(channels) - 1)
         self.net = MonaiUNet(
@@ -678,7 +802,7 @@ Dictionary of scheduler parameters.</p>
         )
 
         # Log the hyperparameters
-        self.save_hyperparameters(ignore=[&#34;criterion&#34;, &#34;metrics&#34;])
+        self.save_hyperparameters(ignore=[&#34;criterion&#34;])
 
     def configure_optimizers(self):
         &#34;&#34;&#34;Configure and return the optimizer and scheduler.&#34;&#34;&#34;
@@ -713,13 +837,28 @@ Dictionary of scheduler parameters.</p>
             prog_bar=True,
         )
         if self.metrics is not None:
-            if self.val_metrics_transforms is not None:
-                val_metrics = self.metrics(self.val_metrics_transforms(y_hat), y).mean()
+            if self.campaign_transforms.get_val_metrics_transforms() is not None:
+                val_metrics = self.metrics(
+                    self.campaign_transforms.get_val_metrics_transforms()(y_hat), y
+                )
             else:
-                val_metrics = self.metrics(y_hat, y).mean()
-            self.log(
-                &#34;val_metrics&#34;, torch.tensor([val_metrics]), on_step=False, on_epoch=True
-            )
+                val_metrics = self.metrics(y_hat, y)
+
+            # Compute and log the mean metrics score per class
+            mean_val_per_class = val_metrics.nanmean(dim=0)
+
+            # Make sure to log the correct class name in case the background is not
+            # considered in the calculation
+            start = len(self.class_names) - val_metrics.shape[1]
+
+            for i, val_score in enumerate(mean_val_per_class):
+                self.log(
+                    f&#34;val_metrics_{self.class_names[start + i]}&#34;,
+                    torch.tensor([val_score]),
+                    on_step=False,
+                    on_epoch=True,
+                )
+
         return val_loss
 
     def test_step(self, batch, batch_idx):
@@ -729,26 +868,37 @@ Dictionary of scheduler parameters.</p>
         test_loss = self.criterion(y_hat, y)
         self.log(&#34;test_loss&#34;, test_loss)
         if self.metrics is not None:
-            if self.test_metrics_transforms is not None:
+            if self.campaign_transforms.get_test_metrics_transforms() is not None:
                 test_metrics = self.metrics(
-                    self.test_metrics_transforms(y_hat), y
-                ).mean()
+                    self.campaign_transforms.get_test_metrics_transforms()(y_hat), y
+                )
             else:
-                test_metrics = self.metrics(y_hat, y).mean()
-            self.log(
-                &#34;test_metrics&#34;,
-                torch.tensor([test_metrics]),
-                on_step=False,
-                on_epoch=True,
-            )
+                test_metrics = self.metrics(y_hat, y)
+
+            # Compute and log the mean metrics score per class
+            mean_test_per_class = test_metrics.nanmean(dim=0)
+
+            # Make sure to log the correct class name in case the background is not
+            # considered in the calculation
+            start = len(self.class_names) - test_metrics.shape[1]
+            for i, test_score in enumerate(mean_test_per_class):
+                self.log(
+                    f&#34;test_metrics_{self.class_names[start + i]}&#34;,
+                    torch.tensor([test_score]),
+                    on_step=False,
+                    on_epoch=True,
+                )
+
         return test_loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         &#34;&#34;&#34;The predict step creates a label image from the output one-hot tensor.&#34;&#34;&#34;
         x, _ = batch
         y_hat = self.net(x)
-        if self.predict_post_transforms is not None:
-            label = self.predict_post_transforms(y_hat).argmax(axis=1)
+        if self.campaign_transforms.get_post_inference_transforms() is not None:
+            label = self.campaign_transforms.get_post_inference_transforms()(
+                y_hat
+            ).argmax(axis=1)
         else:
             label = y_hat.argmax(axis=1)
         return label
@@ -757,11 +907,12 @@ Dictionary of scheduler parameters.</p>
         self,
         data_loader: DataLoader,
         target_folder: Union[Path, str],
-        inference_post_transforms: Transform,
-        roi_size: Tuple[int, int],
+        roi_size: Tuple[int, ...],
         batch_size: int,
         overlap: float = 0.25,
         transpose: bool = True,
+        output_dtype: Optional[np.dtype] = None,
+        use_source_names: bool = False,
     ):
         &#34;&#34;&#34;Run inference on full images using given model.
 
@@ -774,9 +925,6 @@ Dictionary of scheduler parameters.</p>
         target_folder: Union[Path|str]
             Path to the folder where to store the predicted images.
 
-        inference_post_transforms: Transform
-            Composition of transforms to be applied to the result of the forward pass of the network.
-
         roi_size: Tuple[int, int]
             Size of the patch for the sliding window prediction. It must match the patch size during training.
 
@@ -788,6 +936,13 @@ Dictionary of scheduler parameters.</p>
 
         transpose: bool
             Whether the transpose the image before saving, to compensate for the default behavior of monai.transforms.LoadImage().
+
+        output_dtype: Optional[np.dtype]
+            Optional NumPy dtype for the output image. Omit to save the output of inference without casting.
+
+        use_source_names: bool (Optional, default is False)
+            Set to True to name the predictions as the input filenames; otherwise, they will be called `pred_0000.tif`,
+            &#39;pred_0001.tif`, ...
 
         Returns
         -------
@@ -808,7 +963,7 @@ Dictionary of scheduler parameters.</p>
         # Switch to evaluation mode
         self.net.eval()
 
-        # Process them
+        # Process all images
         c = 0
         with torch.no_grad():
             for images in data_loader:
@@ -825,15 +980,32 @@ Dictionary of scheduler parameters.</p>
                 )
 
                 # Apply post-transforms?
-                outputs = inference_post_transforms(outputs)
+                outputs = self.campaign_transforms.get_post_full_inference_transforms()(
+                    outputs
+                )
 
                 # Retrieve the image from the GPU (if needed)
-                preds = outputs.cpu().numpy().squeeze()
+                preds = outputs.cpu().numpy()
 
+                # Process one batch at a time
                 for pred in preds:
+
+                    # Drop the channel singleton dimension
+                    if pred.shape[0] == 1:
+                        pred = pred.squeeze(0)
+
                     if transpose:
                         # Transpose to undo the effect of monai.transform.LoadImage(d)
                         pred = pred.T
+
+                    # Type-cast if needed
+                    if output_dtype is not None:
+                        # Make sure not to wrap around
+                        if np.issubdtype(output_dtype, np.integer):
+                            info = np.iinfo(output_dtype)
+                            pred[pred &lt; info.min] = info.min
+                            pred[pred &gt; info.max] = info.max
+                        pred = pred.astype(output_dtype)
 
                     # Save prediction image as tiff file
                     output_name = Path(target_folder) / f&#34;pred_{c:04}.tif&#34;
@@ -852,15 +1024,17 @@ Dictionary of scheduler parameters.</p>
     @staticmethod
     def full_inference_ensemble(
         models: list,
-        weights: list,
         data_loader: DataLoader,
         target_folder: Union[Path, str],
         inference_post_transforms: Transform,
-        roi_size: Tuple[int, int],
+        roi_size: Tuple[int, ...],
         batch_size: int,
+        voting_mechanism: str = &#34;mode&#34;,
+        weights: Optional[list] = None,
         overlap: float = 0.25,
         transpose: bool = True,
         save_individual_preds: bool = False,
+        output_dtype: Optional[np.dtype] = None,
     ):
         &#34;&#34;&#34;Run inference on full images using given model.
 
@@ -869,9 +1043,6 @@ Dictionary of scheduler parameters.</p>
 
         models: list
             List of trained UNet models to use for ensemble prediction.
-
-        weights: list
-            List of weights for each of the contributions.
 
         data_loader: DataLoader
             DataLoader for the image files names to be predicted on.
@@ -888,6 +1059,16 @@ Dictionary of scheduler parameters.</p>
         batch_size: int
             Number of parallel batches to run.
 
+        voting_mechanism: str = &#34;mode&#34;
+            Voting mechanism to assign the final class among the predictions from the ensemble of models.
+            One of &#34;mode&#34; (default&#34; and &#34;mean&#34;).
+            &#34;mode&#34;: pick the most common class among the predictions for each pixel.
+            &#34;mean&#34;: (rounded) weighted mean of the predicted classed per pixel. The `weights` argument defines
+                    the relative contribution of the models.
+
+        weights: Optional[list]
+            List of weights for each of the contributions. Only used if `voting_mechanism` is &#34;mean&#34;.
+
         overlap: float
             Fraction of overlap between rois.
 
@@ -897,6 +1078,9 @@ Dictionary of scheduler parameters.</p>
         save_individual_preds: bool
             Whether to save the individual predictions of each model.
 
+        output_dtype: Optional[np.dtype]
+            Optional NumPy dtype for the output image. Omit to save the output of inference without casting.
+
         Returns
         -------
 
@@ -904,24 +1088,31 @@ Dictionary of scheduler parameters.</p>
             True if the inference was successful, False otherwise.
         &#34;&#34;&#34;
 
-        if len(models) != len(weights):
-            raise ValueError(&#34;The number of weights must match the number of models.&#34;)
+        if voting_mechanism not in [&#34;mode&#34;, &#34;mean&#34;]:
+            raise ValueError(&#34;`voting mechanism` must be one of &#39;mode&#39; or &#39;mean&#39;.&#34;)
+
+        if voting_mechanism == &#34;mean&#34;:
+            if len(models) != len(weights):
+                raise ValueError(
+                    &#34;The number of weights must match the number of models.&#34;
+                )
+
+            # Turn the weights into a NumPy array of float 32 bit
+            weights = np.array(weights, dtype=np.float32)
+            weights = weights / weights.sum()
 
         if not isinstance(models[0], UNet) or not hasattr(models[0], &#34;net&#34;):
             raise ValueError(&#34;The models must be of type `qute.models.unet.UNet`.&#34;)
 
-        # Turn the weights into a NumPy array of float 32 bit
-        weights = np.array(weights, dtype=np.float32)
-        weights = weights / weights.sum()
-
         # Make sure the target folder exists
         Path(target_folder).mkdir(parents=True, exist_ok=True)
 
-        # If needed, create the sub-folders for the invidual predictions
+        # If needed, create the sub-folders for the individual predictions
         if save_individual_preds:
             for f in range(len(models)):
-                fold_subolder = Path(target_folder) / f&#34;fold_{f}&#34;
-                Path(fold_subolder).mkdir(parents=True, exist_ok=True)
+                fold_subfolder = Path(target_folder) / f&#34;fold_{f}&#34;
+                Path(fold_subfolder).mkdir(parents=True, exist_ok=True)
+
         # Device
         device = get_device()
 
@@ -930,7 +1121,7 @@ Dictionary of scheduler parameters.</p>
             model.net.eval()
 
         c = 0
-        with torch.no_grad():
+        with (torch.no_grad()):
             for images in data_loader:
 
                 predictions = [[] for _ in range(len(models))]
@@ -955,10 +1146,15 @@ Dictionary of scheduler parameters.</p>
                     outputs = inference_post_transforms(outputs)
 
                     # Retrieve the image from the GPU (if needed)
-                    preds = outputs.cpu().numpy().squeeze()
+                    preds = outputs.cpu().numpy()
 
                     stored_preds = []
                     for pred in preds:
+
+                        # Drop the channel singleton dimension
+                        if pred.shape[0] == 1:
+                            pred = pred.squeeze(0)
+
                         if transpose:
                             # Transpose to undo the effect of monai.transform.LoadImage(d)
                             pred = pred.T
@@ -968,16 +1164,53 @@ Dictionary of scheduler parameters.</p>
                     predictions[n] = stored_preds
 
                 # Iterate over all images in the batch
-                for i in range(len(predictions[0])):
+                pred_dim = len(models)
+                batch_dim = len(predictions[0])
 
-                    # Iterate over all predictions from the models
-                    for j in range(len(predictions)):
+                for b in range(batch_dim):
 
-                        if j == 0:
-                            ensemble_pred = weights[j] * predictions[j][i]
-                        else:
-                            ensemble_pred += weights[j] * predictions[j][i]
-                    ensemble_pred = np.round(ensemble_pred).astype(np.int32)
+                    # Apply selected voting mechanism
+                    if voting_mechanism == &#34;mean&#34;:
+                        # Apply weighted mean (and rounding) of the predictions per pixel
+
+                        # Iterate over all predictions from the models
+                        for p in range(pred_dim):
+                            if p == 0:
+                                ensemble_pred = weights[p] * predictions[p][b]
+                            else:
+                                ensemble_pred += weights[p] * predictions[p][b]
+                        ensemble_pred = np.round(ensemble_pred).astype(np.int32)
+
+                    elif voting_mechanism == &#34;mode&#34;:
+                        # Select the mode of the predictions per pixel
+
+                        # Store predictions in a stack
+                        target = np.zeros(
+                            (
+                                pred_dim,
+                                predictions[0][0].shape[0],
+                                predictions[0][0].shape[1],
+                            )
+                        )
+
+                        # Iterate over all predictions from the models
+                        for p in range(pred_dim):
+                            target[p, :, :] = predictions[p][b]
+                        values, _ = torch.mode(torch.tensor(target), dim=0)
+                        ensemble_pred = values.numpy().astype(np.int32)
+                    else:
+                        raise ValueError(
+                            &#34;`voting mechanism` must be one of &#39;mode&#39; or &#39;mean&#39;.&#34;
+                        )
+
+                    # Type-cast if needed
+                    if output_dtype is not None:
+                        # Make sure not to wrap around
+                        if np.issubdtype(output_dtype, np.integer):
+                            info = np.iinfo(output_dtype)
+                            ensemble_pred[ensemble_pred &lt; info.min] = info.min
+                            ensemble_pred[ensemble_pred &gt; info.max] = info.max
+                        ensemble_pred = ensemble_pred.astype(output_dtype)
 
                     # Save ensemble prediction image as tiff file
                     output_name = Path(target_folder) / f&#34;ensemble_pred_{c:04}.tif&#34;
@@ -990,13 +1223,27 @@ Dictionary of scheduler parameters.</p>
                     # Save individual predictions?
                     if save_individual_preds:
                         # Iterate over all predictions from the models
-                        for j in range(len(predictions)):
+                        for p in range(len(predictions)):
                             # Save prediction image as tiff file
                             output_name = (
-                                Path(target_folder) / f&#34;fold_{j}&#34; / f&#34;pred_{c:04}.tif&#34;
+                                Path(target_folder) / f&#34;fold_{p}&#34; / f&#34;pred_{c:04}.tif&#34;
                             )
+
+                            # Get current prediction
+                            current_pred = predictions[p][b]
+
+                            # Type-cast if needed
+                            if output_dtype is not None:
+                                # Make sure not to wrap around
+                                if np.issubdtype(output_dtype, np.integer):
+                                    info = np.iinfo(output_dtype)
+                                    current_pred[current_pred &lt; info.min] = info.min
+                                    current_pred[current_pred &gt; info.max] = info.max
+                                current_pred = current_pred.astype(output_dtype)
+
+                            # Save
                             with TiffWriter(output_name) as tif:
-                                tif.write(predictions[j][i])
+                                tif.write(current_pred)
 
                     # Update global file counter c
                     c += 1
@@ -1019,7 +1266,7 @@ Dictionary of scheduler parameters.</p>
 <h3>Static methods</h3>
 <dl>
 <dt id="qute.models.unet.UNet.full_inference_ensemble"><code class="name flex">
-<span>def <span class="ident">full_inference_ensemble</span></span>(<span>models: list, weights: list, data_loader: monai.data.dataloader.DataLoader, target_folder: Union[pathlib.Path, str], inference_post_transforms: monai.transforms.transform.Transform, roi_size: Tuple[int, int], batch_size: int, overlap: float = 0.25, transpose: bool = True, save_individual_preds: bool = False)</span>
+<span>def <span class="ident">full_inference_ensemble</span></span>(<span>models: list, data_loader: monai.data.dataloader.DataLoader, target_folder: Union[pathlib.Path, str], inference_post_transforms: monai.transforms.transform.Transform, roi_size: Tuple[int, ...], batch_size: int, voting_mechanism: str = 'mode', weights: Optional[list] = None, overlap: float = 0.25, transpose: bool = True, save_individual_preds: bool = False, output_dtype: Optional[numpy.dtype] = None)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Run inference on full images using given model.</p>
@@ -1027,8 +1274,6 @@ Dictionary of scheduler parameters.</p>
 <dl>
 <dt><strong><code>models</code></strong> :&ensp;<code>list</code></dt>
 <dd>List of trained UNet models to use for ensemble prediction.</dd>
-<dt><strong><code>weights</code></strong> :&ensp;<code>list</code></dt>
-<dd>List of weights for each of the contributions.</dd>
 <dt><strong><code>data_loader</code></strong> :&ensp;<code>DataLoader</code></dt>
 <dd>DataLoader for the image files names to be predicted on.</dd>
 <dt><strong><code>target_folder</code></strong> :&ensp;<code>Union[Path|str]</code></dt>
@@ -1039,12 +1284,22 @@ Dictionary of scheduler parameters.</p>
 <dd>Size of the patch for the sliding window prediction. It must match the patch size during training.</dd>
 <dt><strong><code>batch_size</code></strong> :&ensp;<code>int</code></dt>
 <dd>Number of parallel batches to run.</dd>
+<dt><strong><code>voting_mechanism</code></strong> :&ensp;<code>str = "mode"</code></dt>
+<dd>Voting mechanism to assign the final class among the predictions from the ensemble of models.
+One of "mode" (default" and "mean").
+"mode": pick the most common class among the predictions for each pixel.
+"mean": (rounded) weighted mean of the predicted classed per pixel. The <code>weights</code> argument defines
+the relative contribution of the models.</dd>
+<dt><strong><code>weights</code></strong> :&ensp;<code>Optional[list]</code></dt>
+<dd>List of weights for each of the contributions. Only used if <code>voting_mechanism</code> is "mean".</dd>
 <dt><strong><code>overlap</code></strong> :&ensp;<code>float</code></dt>
 <dd>Fraction of overlap between rois.</dd>
 <dt><strong><code>transpose</code></strong> :&ensp;<code>bool</code></dt>
 <dd>Whether the transpose the image before saving, to compensate for the default behavior of monai.transforms.LoadImage().</dd>
 <dt><strong><code>save_individual_preds</code></strong> :&ensp;<code>bool</code></dt>
 <dd>Whether to save the individual predictions of each model.</dd>
+<dt><strong><code>output_dtype</code></strong> :&ensp;<code>Optional[np.dtype]</code></dt>
+<dd>Optional NumPy dtype for the output image. Omit to save the output of inference without casting.</dd>
 </dl>
 <h2 id="returns">Returns</h2>
 <dl>
@@ -1058,15 +1313,17 @@ Dictionary of scheduler parameters.</p>
 <pre><code class="python">@staticmethod
 def full_inference_ensemble(
     models: list,
-    weights: list,
     data_loader: DataLoader,
     target_folder: Union[Path, str],
     inference_post_transforms: Transform,
-    roi_size: Tuple[int, int],
+    roi_size: Tuple[int, ...],
     batch_size: int,
+    voting_mechanism: str = &#34;mode&#34;,
+    weights: Optional[list] = None,
     overlap: float = 0.25,
     transpose: bool = True,
     save_individual_preds: bool = False,
+    output_dtype: Optional[np.dtype] = None,
 ):
     &#34;&#34;&#34;Run inference on full images using given model.
 
@@ -1075,9 +1332,6 @@ def full_inference_ensemble(
 
     models: list
         List of trained UNet models to use for ensemble prediction.
-
-    weights: list
-        List of weights for each of the contributions.
 
     data_loader: DataLoader
         DataLoader for the image files names to be predicted on.
@@ -1094,6 +1348,16 @@ def full_inference_ensemble(
     batch_size: int
         Number of parallel batches to run.
 
+    voting_mechanism: str = &#34;mode&#34;
+        Voting mechanism to assign the final class among the predictions from the ensemble of models.
+        One of &#34;mode&#34; (default&#34; and &#34;mean&#34;).
+        &#34;mode&#34;: pick the most common class among the predictions for each pixel.
+        &#34;mean&#34;: (rounded) weighted mean of the predicted classed per pixel. The `weights` argument defines
+                the relative contribution of the models.
+
+    weights: Optional[list]
+        List of weights for each of the contributions. Only used if `voting_mechanism` is &#34;mean&#34;.
+
     overlap: float
         Fraction of overlap between rois.
 
@@ -1103,6 +1367,9 @@ def full_inference_ensemble(
     save_individual_preds: bool
         Whether to save the individual predictions of each model.
 
+    output_dtype: Optional[np.dtype]
+        Optional NumPy dtype for the output image. Omit to save the output of inference without casting.
+
     Returns
     -------
 
@@ -1110,24 +1377,31 @@ def full_inference_ensemble(
         True if the inference was successful, False otherwise.
     &#34;&#34;&#34;
 
-    if len(models) != len(weights):
-        raise ValueError(&#34;The number of weights must match the number of models.&#34;)
+    if voting_mechanism not in [&#34;mode&#34;, &#34;mean&#34;]:
+        raise ValueError(&#34;`voting mechanism` must be one of &#39;mode&#39; or &#39;mean&#39;.&#34;)
+
+    if voting_mechanism == &#34;mean&#34;:
+        if len(models) != len(weights):
+            raise ValueError(
+                &#34;The number of weights must match the number of models.&#34;
+            )
+
+        # Turn the weights into a NumPy array of float 32 bit
+        weights = np.array(weights, dtype=np.float32)
+        weights = weights / weights.sum()
 
     if not isinstance(models[0], UNet) or not hasattr(models[0], &#34;net&#34;):
         raise ValueError(&#34;The models must be of type `qute.models.unet.UNet`.&#34;)
 
-    # Turn the weights into a NumPy array of float 32 bit
-    weights = np.array(weights, dtype=np.float32)
-    weights = weights / weights.sum()
-
     # Make sure the target folder exists
     Path(target_folder).mkdir(parents=True, exist_ok=True)
 
-    # If needed, create the sub-folders for the invidual predictions
+    # If needed, create the sub-folders for the individual predictions
     if save_individual_preds:
         for f in range(len(models)):
-            fold_subolder = Path(target_folder) / f&#34;fold_{f}&#34;
-            Path(fold_subolder).mkdir(parents=True, exist_ok=True)
+            fold_subfolder = Path(target_folder) / f&#34;fold_{f}&#34;
+            Path(fold_subfolder).mkdir(parents=True, exist_ok=True)
+
     # Device
     device = get_device()
 
@@ -1136,7 +1410,7 @@ def full_inference_ensemble(
         model.net.eval()
 
     c = 0
-    with torch.no_grad():
+    with (torch.no_grad()):
         for images in data_loader:
 
             predictions = [[] for _ in range(len(models))]
@@ -1161,10 +1435,15 @@ def full_inference_ensemble(
                 outputs = inference_post_transforms(outputs)
 
                 # Retrieve the image from the GPU (if needed)
-                preds = outputs.cpu().numpy().squeeze()
+                preds = outputs.cpu().numpy()
 
                 stored_preds = []
                 for pred in preds:
+
+                    # Drop the channel singleton dimension
+                    if pred.shape[0] == 1:
+                        pred = pred.squeeze(0)
+
                     if transpose:
                         # Transpose to undo the effect of monai.transform.LoadImage(d)
                         pred = pred.T
@@ -1174,16 +1453,53 @@ def full_inference_ensemble(
                 predictions[n] = stored_preds
 
             # Iterate over all images in the batch
-            for i in range(len(predictions[0])):
+            pred_dim = len(models)
+            batch_dim = len(predictions[0])
 
-                # Iterate over all predictions from the models
-                for j in range(len(predictions)):
+            for b in range(batch_dim):
 
-                    if j == 0:
-                        ensemble_pred = weights[j] * predictions[j][i]
-                    else:
-                        ensemble_pred += weights[j] * predictions[j][i]
-                ensemble_pred = np.round(ensemble_pred).astype(np.int32)
+                # Apply selected voting mechanism
+                if voting_mechanism == &#34;mean&#34;:
+                    # Apply weighted mean (and rounding) of the predictions per pixel
+
+                    # Iterate over all predictions from the models
+                    for p in range(pred_dim):
+                        if p == 0:
+                            ensemble_pred = weights[p] * predictions[p][b]
+                        else:
+                            ensemble_pred += weights[p] * predictions[p][b]
+                    ensemble_pred = np.round(ensemble_pred).astype(np.int32)
+
+                elif voting_mechanism == &#34;mode&#34;:
+                    # Select the mode of the predictions per pixel
+
+                    # Store predictions in a stack
+                    target = np.zeros(
+                        (
+                            pred_dim,
+                            predictions[0][0].shape[0],
+                            predictions[0][0].shape[1],
+                        )
+                    )
+
+                    # Iterate over all predictions from the models
+                    for p in range(pred_dim):
+                        target[p, :, :] = predictions[p][b]
+                    values, _ = torch.mode(torch.tensor(target), dim=0)
+                    ensemble_pred = values.numpy().astype(np.int32)
+                else:
+                    raise ValueError(
+                        &#34;`voting mechanism` must be one of &#39;mode&#39; or &#39;mean&#39;.&#34;
+                    )
+
+                # Type-cast if needed
+                if output_dtype is not None:
+                    # Make sure not to wrap around
+                    if np.issubdtype(output_dtype, np.integer):
+                        info = np.iinfo(output_dtype)
+                        ensemble_pred[ensemble_pred &lt; info.min] = info.min
+                        ensemble_pred[ensemble_pred &gt; info.max] = info.max
+                    ensemble_pred = ensemble_pred.astype(output_dtype)
 
                 # Save ensemble prediction image as tiff file
                 output_name = Path(target_folder) / f&#34;ensemble_pred_{c:04}.tif&#34;
@@ -1196,13 +1512,27 @@ def full_inference_ensemble(
                 # Save individual predictions?
                 if save_individual_preds:
                     # Iterate over all predictions from the models
-                    for j in range(len(predictions)):
+                    for p in range(len(predictions)):
                         # Save prediction image as tiff file
                         output_name = (
-                            Path(target_folder) / f&#34;fold_{j}&#34; / f&#34;pred_{c:04}.tif&#34;
+                            Path(target_folder) / f&#34;fold_{p}&#34; / f&#34;pred_{c:04}.tif&#34;
                         )
+
+                        # Get current prediction
+                        current_pred = predictions[p][b]
+
+                        # Type-cast if needed
+                        if output_dtype is not None:
+                            # Make sure not to wrap around
+                            if np.issubdtype(output_dtype, np.integer):
+                                info = np.iinfo(output_dtype)
+                                current_pred[current_pred &lt; info.min] = info.min
+                                current_pred[current_pred &gt; info.max] = info.max
+                            current_pred = current_pred.astype(output_dtype)
+
+                        # Save
                         with TiffWriter(output_name) as tif:
-                            tif.write(predictions[j][i])
+                            tif.write(current_pred)
 
                 # Update global file counter c
                 c += 1
@@ -1239,7 +1569,7 @@ def full_inference_ensemble(
 </details>
 </dd>
 <dt id="qute.models.unet.UNet.full_inference"><code class="name flex">
-<span>def <span class="ident">full_inference</span></span>(<span>self, data_loader: monai.data.dataloader.DataLoader, target_folder: Union[pathlib.Path, str], inference_post_transforms: monai.transforms.transform.Transform, roi_size: Tuple[int, int], batch_size: int, overlap: float = 0.25, transpose: bool = True)</span>
+<span>def <span class="ident">full_inference</span></span>(<span>self, data_loader: monai.data.dataloader.DataLoader, target_folder: Union[pathlib.Path, str], roi_size: Tuple[int, ...], batch_size: int, overlap: float = 0.25, transpose: bool = True, output_dtype: Optional[numpy.dtype] = None, use_source_names: bool = False)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Run inference on full images using given model.</p>
@@ -1249,8 +1579,6 @@ def full_inference_ensemble(
 <dd>DataLoader for the image files names to be predicted on.</dd>
 <dt><strong><code>target_folder</code></strong> :&ensp;<code>Union[Path|str]</code></dt>
 <dd>Path to the folder where to store the predicted images.</dd>
-<dt><strong><code>inference_post_transforms</code></strong> :&ensp;<code>Transform</code></dt>
-<dd>Composition of transforms to be applied to the result of the forward pass of the network.</dd>
 <dt><strong><code>roi_size</code></strong> :&ensp;<code>Tuple[int, int]</code></dt>
 <dd>Size of the patch for the sliding window prediction. It must match the patch size during training.</dd>
 <dt><strong><code>batch_size</code></strong> :&ensp;<code>int</code></dt>
@@ -1259,6 +1587,11 @@ def full_inference_ensemble(
 <dd>Fraction of overlap between rois.</dd>
 <dt><strong><code>transpose</code></strong> :&ensp;<code>bool</code></dt>
 <dd>Whether the transpose the image before saving, to compensate for the default behavior of monai.transforms.LoadImage().</dd>
+<dt><strong><code>output_dtype</code></strong> :&ensp;<code>Optional[np.dtype]</code></dt>
+<dd>Optional NumPy dtype for the output image. Omit to save the output of inference without casting.</dd>
+<dt><strong><code>use_source_names</code></strong> :&ensp;<code>bool (Optional</code>, default <code>is False)</code></dt>
+<dd>Set to True to name the predictions as the input filenames; otherwise, they will be called <code>pred_0000.tif</code>,
+'pred_0001.tif`, &hellip;</dd>
 </dl>
 <h2 id="returns">Returns</h2>
 <dl>
@@ -1273,11 +1606,12 @@ def full_inference_ensemble(
     self,
     data_loader: DataLoader,
     target_folder: Union[Path, str],
-    inference_post_transforms: Transform,
-    roi_size: Tuple[int, int],
+    roi_size: Tuple[int, ...],
     batch_size: int,
     overlap: float = 0.25,
     transpose: bool = True,
+    output_dtype: Optional[np.dtype] = None,
+    use_source_names: bool = False,
 ):
     &#34;&#34;&#34;Run inference on full images using given model.
 
@@ -1290,9 +1624,6 @@ def full_inference_ensemble(
     target_folder: Union[Path|str]
         Path to the folder where to store the predicted images.
 
-    inference_post_transforms: Transform
-        Composition of transforms to be applied to the result of the forward pass of the network.
-
     roi_size: Tuple[int, int]
         Size of the patch for the sliding window prediction. It must match the patch size during training.
 
@@ -1304,6 +1635,13 @@ def full_inference_ensemble(
 
     transpose: bool
         Whether the transpose the image before saving, to compensate for the default behavior of monai.transforms.LoadImage().
+
+    output_dtype: Optional[np.dtype]
+        Optional NumPy dtype for the output image. Omit to save the output of inference without casting.
+
+    use_source_names: bool (Optional, default is False)
+        Set to True to name the predictions as the input filenames; otherwise, they will be called `pred_0000.tif`,
+        &#39;pred_0001.tif`, ...
 
     Returns
     -------
@@ -1324,7 +1662,7 @@ def full_inference_ensemble(
     # Switch to evaluation mode
     self.net.eval()
 
-    # Process them
+    # Process all images
     c = 0
     with torch.no_grad():
         for images in data_loader:
@@ -1341,15 +1679,32 @@ def full_inference_ensemble(
             )
 
             # Apply post-transforms?
-            outputs = inference_post_transforms(outputs)
+            outputs = self.campaign_transforms.get_post_full_inference_transforms()(
+                outputs
+            )
 
             # Retrieve the image from the GPU (if needed)
-            preds = outputs.cpu().numpy().squeeze()
+            preds = outputs.cpu().numpy()
 
+            # Process one batch at a time
             for pred in preds:
+
+                # Drop the channel singleton dimension
+                if pred.shape[0] == 1:
+                    pred = pred.squeeze(0)
+
                 if transpose:
                     # Transpose to undo the effect of monai.transform.LoadImage(d)
                     pred = pred.T
+
+                # Type-cast if needed
+                if output_dtype is not None:
+                    # Make sure not to wrap around
+                    if np.issubdtype(output_dtype, np.integer):
+                        info = np.iinfo(output_dtype)
+                        pred[pred &lt; info.min] = info.min
+                        pred[pred &gt; info.max] = info.max
+                    pred = pred.astype(output_dtype)
 
                 # Save prediction image as tiff file
                 output_name = Path(target_folder) / f&#34;pred_{c:04}.tif&#34;
@@ -1379,8 +1734,10 @@ def full_inference_ensemble(
     &#34;&#34;&#34;The predict step creates a label image from the output one-hot tensor.&#34;&#34;&#34;
     x, _ = batch
     y_hat = self.net(x)
-    if self.predict_post_transforms is not None:
-        label = self.predict_post_transforms(y_hat).argmax(axis=1)
+    if self.campaign_transforms.get_post_inference_transforms() is not None:
+        label = self.campaign_transforms.get_post_inference_transforms()(
+            y_hat
+        ).argmax(axis=1)
     else:
         label = y_hat.argmax(axis=1)
     return label</code></pre>
@@ -1402,18 +1759,27 @@ def full_inference_ensemble(
     test_loss = self.criterion(y_hat, y)
     self.log(&#34;test_loss&#34;, test_loss)
     if self.metrics is not None:
-        if self.test_metrics_transforms is not None:
+        if self.campaign_transforms.get_test_metrics_transforms() is not None:
             test_metrics = self.metrics(
-                self.test_metrics_transforms(y_hat), y
-            ).mean()
+                self.campaign_transforms.get_test_metrics_transforms()(y_hat), y
+            )
         else:
-            test_metrics = self.metrics(y_hat, y).mean()
-        self.log(
-            &#34;test_metrics&#34;,
-            torch.tensor([test_metrics]),
-            on_step=False,
-            on_epoch=True,
-        )
+            test_metrics = self.metrics(y_hat, y)
+
+        # Compute and log the mean metrics score per class
+        mean_test_per_class = test_metrics.nanmean(dim=0)
+
+        # Make sure to log the correct class name in case the background is not
+        # considered in the calculation
+        start = len(self.class_names) - test_metrics.shape[1]
+        for i, test_score in enumerate(mean_test_per_class):
+            self.log(
+                f&#34;test_metrics_{self.class_names[start + i]}&#34;,
+                torch.tensor([test_score]),
+                on_step=False,
+                on_epoch=True,
+            )
+
     return test_loss</code></pre>
 </details>
 </dd>
@@ -1457,13 +1823,28 @@ def full_inference_ensemble(
         prog_bar=True,
     )
     if self.metrics is not None:
-        if self.val_metrics_transforms is not None:
-            val_metrics = self.metrics(self.val_metrics_transforms(y_hat), y).mean()
+        if self.campaign_transforms.get_val_metrics_transforms() is not None:
+            val_metrics = self.metrics(
+                self.campaign_transforms.get_val_metrics_transforms()(y_hat), y
+            )
         else:
-            val_metrics = self.metrics(y_hat, y).mean()
-        self.log(
-            &#34;val_metrics&#34;, torch.tensor([val_metrics]), on_step=False, on_epoch=True
-        )
+            val_metrics = self.metrics(y_hat, y)
+
+        # Compute and log the mean metrics score per class
+        mean_val_per_class = val_metrics.nanmean(dim=0)
+
+        # Make sure to log the correct class name in case the background is not
+        # considered in the calculation
+        start = len(self.class_names) - val_metrics.shape[1]
+
+        for i, val_score in enumerate(mean_val_per_class):
+            self.log(
+                f&#34;val_metrics_{self.class_names[start + i]}&#34;,
+                torch.tensor([val_score]),
+                on_step=False,
+                on_epoch=True,
+            )
+
     return val_loss</code></pre>
 </details>
 </dd>

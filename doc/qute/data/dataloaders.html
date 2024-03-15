@@ -26,46 +26,30 @@
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">import os
+<pre><code class="python"># ******************************************************************************
+# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# All rights reserved. This program and the accompanying materials
+# are made available under the terms of the Apache License Version 2.0
+# which accompanies this distribution, and is available at
+# https://www.apache.org/licenses/LICENSE-2.0.txt
+#
+# Contributors:
+#   Aaron Ponti - initial API and implementation
+# ******************************************************************************
+
+import os
 import time
 from pathlib import Path
 from typing import Optional, Union
 
 import numpy as np
 import pytorch_lightning as pl
-import torch
 from monai.data import ArrayDataset, DataLoader, Dataset, list_data_collate
-from monai.transforms import (
-    Activations,
-    AsDiscrete,
-    AsDiscreted,
-    Compose,
-    LoadImage,
-    LoadImaged,
-    RandCropByPosNegLabeld,
-    RandGaussianNoised,
-    RandGaussianSmoothd,
-    RandRotate90d,
-    Transform,
-)
 from natsort import natsorted
 from numpy.random import default_rng
 from sklearn.model_selection import KFold
 
-from qute.transforms import (
-    AddFFT2,
-    AddFFT2d,
-    AddNormalizedDistanceTransform,
-    AddNormalizedDistanceTransformd,
-    ClippedZNormalize,
-    ClippedZNormalized,
-    MinMaxNormalize,
-    MinMaxNormalized,
-    ToLabel,
-    ToPyTorchLightningOutputd,
-    ZNormalize,
-    ZNormalized,
-)
+from qute.campaigns import CampaignTransforms
 
 
 class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
@@ -73,6 +57,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
 
     def __init__(
         self,
+        campaign_transforms: CampaignTransforms,
         data_dir: Union[Path, str] = Path(),
         num_classes: int = 3,
         num_folds: int = 1,
@@ -83,13 +68,6 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
         num_patches: int = 1,
-        train_transforms_dict: Optional[Transform] = None,
-        val_transforms_dict: Optional[Transform] = None,
-        test_transforms_dict: Optional[Transform] = None,
-        inference_transforms_dict: Optional[Transform] = None,
-        post_inference_transforms_dict: Optional[Transform] = None,
-        val_metrics_transforms_dict: Optional[Transform] = None,
-        test_metrics_transforms_dict: Optional[Transform] = None,
         images_sub_folder: str = &#34;images&#34;,
         labels_sub_folder: str = &#34;labels&#34;,
         seed: int = 42,
@@ -102,6 +80,10 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
 
         Parameters
         ----------
+
+        campaign_transforms: CampaignTransforms
+            Define all transforms necessary for training, validation, testing and (full) prediction.
+            @see `qute.transforms.CampaignTransforms` for documentation.
 
         data_dir: Path | str = Path()
             Data directory, containing two sub-folders &#34;images&#34; and &#34;labels&#34;. The subfolder names can be overwritten.
@@ -140,34 +122,6 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         num_patches: int = 1
             Number of patches per image to be extracted (and collated in the batch).
 
-        train_transforms_dict: Optional[list] = None
-            Dictionary transforms to be applied to the training images and labels.
-            If omitted some default transforms will be applied.
-
-        val_transforms_dict: Optional[list] = None
-            Dictionary transforms to be applied to the validation images and labels.
-            If omitted some default transforms will be applied.
-
-        test_transforms_dict: Optional[list] = None
-            Dictionary transforms to be applied to the test images and labels.
-            If omitted some default transforms will be applied.
-
-        inference_transforms_dict: Optional[Transform] = None
-            Dictionary transforms to be applied to the images for inference.
-            If omitted some default transforms will be applied.
-
-        post_inference_transforms_dict: Optional[Transform] = None
-            Dictionary transforms to be applied to the inference output to create the final image.
-            If omitted some default transforms will be applied.
-
-        val_metrics_transforms_dict: Optional[Transform] = None
-            Dictionary transforms to be applied to the validation output to compatible to the selected metrics.
-            If omitted some default transforms will be applied.
-
-        test_metrics_transforms_dict: Optional[Transform] = None
-            Dictionary transforms to be applied to the test output to compatible to the selected metrics.
-            If omitted, it will default to the val_metrics_transforms_dict.
-
         images_sub_folder: str = &#34;images&#34;
             Name of the images sub-folder. It can be used to override the default &#34;images&#34;.
 
@@ -188,6 +142,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         &#34;&#34;&#34;
 
         super().__init__()
+        self.campaign_transforms = campaign_transforms
         self.data_dir = Path(data_dir).resolve()
         self.batch_size = batch_size
         self.inference_batch_size = inference_batch_size
@@ -203,57 +158,6 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         # Set the sub-folder names
         self.images_sub_folder = images_sub_folder
         self.labels_sub_folder = labels_sub_folder
-
-        # Set the training transforms if passed
-        self.train_transforms_dict = None
-        if train_transforms_dict is not None:
-            self.train_transforms_dict = train_transforms_dict
-        else:
-            self.train_transforms_dict = self.__default_train_transforms_dict()
-
-        # Set the validation transforms if passed
-        self.val_transforms_dict = None
-        if val_transforms_dict is not None:
-            self.val_transforms_dict = val_transforms_dict
-        else:
-            self.val_transforms_dict = self.__default_val_transforms_dict()
-
-        # Set the test transforms if passed
-        self.test_transforms_dict = None
-        if test_transforms_dict is not None:
-            self.test_transforms_dict = test_transforms_dict
-        else:
-            self.test_transforms_dict = self.__default_test_transforms_dict()
-
-        # Set the inference transforms if passed
-        self.inference_transforms_dict = None
-        if inference_transforms_dict is not None:
-            self.inference_transforms_dict = inference_transforms_dict
-        else:
-            self.inference_transforms_dict = self.__default_inference_transforms()
-
-        # Set the post inference transforms if passed
-        self.post_inference_transforms_dict = None
-        if post_inference_transforms_dict is not None:
-            self.post_inference_transforms_dict = post_inference_transforms_dict
-        else:
-            self.post_inference_transforms_dict = (
-                self.__default_post_inference_transforms()
-            )
-
-        # Set the validation metrics transform
-        self.val_metrics_transforms_dict = None
-        if val_metrics_transforms_dict is not None:
-            self.val_metrics_transforms_dict = val_metrics_transforms_dict
-        else:
-            self.val_metrics_transforms_dict = self.__default_val_metrics_transforms()
-
-        # Set the test metrics transform
-        self.test_metrics_transforms_dict = None
-        if test_metrics_transforms_dict is not None:
-            self.test_metrics_transforms_dict = test_metrics_transforms_dict
-        else:
-            self.test_metrics_transforms_dict = self.__default_test_metrics_transforms()
 
         # Set the seed
         if seed is None:
@@ -385,7 +289,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
             )
         ]
         self.train_dataset = Dataset(
-            data=train_files, transform=self.train_transforms_dict
+            data=train_files, transform=self.campaign_transforms.get_train_transforms()
         )
 
         # Create the validation dataset
@@ -395,7 +299,9 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
                 self._all_images[self._val_indices], self._all_labels[self._val_indices]
             )
         ]
-        self.val_dataset = Dataset(data=val_files, transform=self.val_transforms_dict)
+        self.val_dataset = Dataset(
+            data=val_files, transform=self.campaign_transforms.get_valid_transforms()
+        )
 
         # Create the testing dataset
         test_files = [
@@ -406,7 +312,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
             )
         ]
         self.test_dataset = Dataset(
-            data=test_files, transform=self.test_transforms_dict
+            data=test_files, transform=self.campaign_transforms.get_test_transforms()
         )
 
         # Inform
@@ -433,6 +339,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
             num_workers=self.num_workers,
             collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
+            persistent_workers=True,
         )
 
     def val_dataloader(self):
@@ -444,6 +351,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
             num_workers=self.num_workers,
             collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
+            persistent_workers=True,
         )
 
     def test_dataloader(self):
@@ -453,7 +361,9 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
             shuffle=False,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
+            collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
+            persistent_workers=True,
         )
 
     def inference_dataloader(
@@ -467,7 +377,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         # Create a DataSet
         inference_dataset = ArrayDataset(
             image_names,
-            img_transform=self.inference_transforms_dict,
+            img_transform=self.campaign_transforms.get_inference_transforms(),
             seg=None,
             seg_transform=None,
             labels=None,
@@ -481,171 +391,8 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
             num_workers=self.num_inference_workers,
             collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
-        )
-
-    def get_train_transforms_dict(self):
-        &#34;&#34;&#34;Return train set transforms.&#34;&#34;&#34;
-        return self.train_transforms_dict
-
-    def get_val_transforms_dict(self):
-        &#34;&#34;&#34;Return validation set transforms.&#34;&#34;&#34;
-        return self.val_transforms_dict
-
-    def get_test_transforms_dict(self):
-        &#34;&#34;&#34;Return test set transforms.&#34;&#34;&#34;
-        return self.test_transforms_dict
-
-    def get_val_metrics_transforms(self):
-        &#34;&#34;&#34;Return transforms for validation for metric calculation.&#34;&#34;&#34;
-        return self.val_metrics_transforms_dict
-
-    def get_test_metrics_transforms(self):
-        &#34;&#34;&#34;Return transforms for testing for metric calculation.&#34;&#34;&#34;
-        return self.test_metrics_transforms_dict
-
-    def get_inference_transforms(self):
-        &#34;&#34;&#34;Return inference set transforms.&#34;&#34;&#34;
-        return self.inference_transforms_dict
-
-    def get_post_inference_transforms(self):
-        &#34;&#34;&#34;Return post transforms for full inference.&#34;&#34;&#34;
-        return self.post_inference_transforms_dict
-
-    def __default_train_transforms_dict(self):
-        &#34;&#34;&#34;Define default training set transforms.&#34;&#34;&#34;
-        train_transforms = Compose(
-            [
-                LoadImaged(
-                    keys=[&#34;image&#34;, &#34;label&#34;],
-                    reader=&#34;PILReader&#34;,
-                    image_only=True,
-                    ensure_channel_first=True,
-                    dtype=torch.float32,
-                ),
-                RandCropByPosNegLabeld(
-                    keys=[&#34;image&#34;, &#34;label&#34;],
-                    label_key=&#34;label&#34;,
-                    spatial_size=self.patch_size,
-                    pos=1.0,
-                    neg=1.0,
-                    num_samples=self.num_patches,
-                    image_key=&#34;image&#34;,
-                    image_threshold=0.0,
-                    allow_smaller=False,
-                    lazy=False,
-                ),
-                ZNormalized(image_key=&#34;image&#34;),
-                # AddNormalizedDistanceTransformd(
-                #     image_key=&#34;image&#34;,
-                #     label_key=&#34;label&#34;,
-                #     pixel_class=1,
-                #     reverse=True
-                # ),
-                # AddFFT2d(
-                #     image_key=&#34;image&#34;,
-                #     mean_real=243.20000000000144,
-                #     std_real=538086.5132100589,
-                #     mean_imag=-1.2471390320969179e-14,
-                #     std_imag=369479.19867306296
-                # ),
-                RandRotate90d(keys=[&#34;image&#34;, &#34;label&#34;], prob=0.5, spatial_axes=(0, 1)),
-                RandGaussianNoised(keys=&#34;image&#34;, prob=0.2),
-                RandGaussianSmoothd(keys=&#34;image&#34;, prob=0.2),
-                AsDiscreted(keys=[&#34;label&#34;], to_onehot=self.num_classes),
-                ToPyTorchLightningOutputd(),
-            ]
-        )
-        return train_transforms
-
-    def __default_val_transforms_dict(self):
-        &#34;&#34;&#34;Define default validation set transforms.&#34;&#34;&#34;
-        val_transforms = Compose(
-            [
-                LoadImaged(
-                    keys=[&#34;image&#34;, &#34;label&#34;],
-                    reader=&#34;PILReader&#34;,
-                    image_only=True,
-                    ensure_channel_first=True,
-                    dtype=torch.float32,
-                ),
-                RandCropByPosNegLabeld(
-                    keys=[&#34;image&#34;, &#34;label&#34;],
-                    label_key=&#34;label&#34;,
-                    spatial_size=self.patch_size,
-                    pos=1.0,
-                    neg=1.0,
-                    num_samples=self.num_patches,
-                    image_key=&#34;image&#34;,
-                    image_threshold=0.0,
-                    allow_smaller=False,
-                    lazy=False,
-                ),
-                ZNormalized(image_key=&#34;image&#34;),
-                # AddNormalizedDistanceTransformd(
-                #     image_key=&#34;image&#34;,
-                #     label_key=&#34;label&#34;,
-                #     pixel_class=1,
-                #     reverse=True
-                # ),
-                # AddFFT2d(
-                #     image_key=&#34;image&#34;,
-                #     mean_real=243.20000000000144,
-                #     std_real=538086.5132100589,
-                #     mean_imag=-1.2471390320969179e-14,
-                #     std_imag=369479.19867306296
-                # ),
-                AsDiscreted(keys=[&#34;label&#34;], to_onehot=self.num_classes),
-                ToPyTorchLightningOutputd(),
-            ]
-        )
-        return val_transforms
-
-    def __default_test_transforms_dict(self):
-        &#34;&#34;&#34;Define default test set transforms.&#34;&#34;&#34;
-
-        # For testing, we apply the same transforms as by validation
-        return self.__default_val_transforms_dict()
-
-    def __default_val_metrics_transforms(self):
-        &#34;&#34;&#34;Define default transforms for validation for metric calculation.&#34;&#34;&#34;
-        post_transforms = Compose(
-            [Activations(sigmoid=True), AsDiscrete(threshold=0.5)]
-        )
-        return post_transforms
-
-    def __default_test_metrics_transforms(self):
-        &#34;&#34;&#34;Define default transforms for testing for metric calculation.&#34;&#34;&#34;
-        return self.__default_val_metrics_transforms()
-
-    def __default_inference_transforms(self):
-        &#34;&#34;&#34;Define default inference set transforms.&#34;&#34;&#34;
-        inference_transforms = Compose(
-            [
-                LoadImage(
-                    reader=&#34;PILReader&#34;,
-                    image_only=True,
-                    ensure_channel_first=True,
-                    dtype=torch.float32,
-                ),
-                ZNormalize(),
-                # AddNormalizedDistanceTransform(
-                #     pixel_class=1,
-                #     reverse=True
-                # ),
-                # AddFFT2(
-                #     mean_real=243.20000000000144,
-                #     std_real=538086.5132100589,
-                #     mean_imag=-1.2471390320969179e-14,
-                #     std_imag=369479.19867306296
-                # ),
-            ]
-        )
-        return inference_transforms
-
-    def __default_post_inference_transforms(self):
-        &#34;&#34;&#34;Define default post transforms for full inference.&#34;&#34;&#34;
-        post_transforms = Compose([ToLabel()])
-        return post_transforms</code></pre>
+            persistent_workers=True,
+        )</code></pre>
 </details>
 </section>
 <section>
@@ -659,13 +406,16 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
 <dl>
 <dt id="qute.data.dataloaders.SegmentationDataModuleLocalFolder"><code class="flex name class">
 <span>class <span class="ident">SegmentationDataModuleLocalFolder</span></span>
-<span>(</span><span>data_dir: Union[pathlib.Path, str] = PosixPath('.'), num_classes: int = 3, num_folds: int = 1, train_fraction: float = 0.7, val_fraction: float = 0.2, test_fraction: float = 0.1, batch_size: int = 8, inference_batch_size: int = 2, patch_size: tuple = (512, 512), num_patches: int = 1, train_transforms_dict: Optional[monai.transforms.transform.Transform] = None, val_transforms_dict: Optional[monai.transforms.transform.Transform] = None, test_transforms_dict: Optional[monai.transforms.transform.Transform] = None, inference_transforms_dict: Optional[monai.transforms.transform.Transform] = None, post_inference_transforms_dict: Optional[monai.transforms.transform.Transform] = None, val_metrics_transforms_dict: Optional[monai.transforms.transform.Transform] = None, test_metrics_transforms_dict: Optional[monai.transforms.transform.Transform] = None, images_sub_folder: str = 'images', labels_sub_folder: str = 'labels', seed: int = 42, num_workers: Optional[int] = 7, num_inference_workers: Optional[int] = 7, pin_memory: bool = True)</span>
+<span>(</span><span>campaign_transforms: qute.campaigns._campaigns.CampaignTransforms, data_dir: Union[pathlib.Path, str] = PosixPath('.'), num_classes: int = 3, num_folds: int = 1, train_fraction: float = 0.7, val_fraction: float = 0.2, test_fraction: float = 0.1, batch_size: int = 8, inference_batch_size: int = 2, patch_size: tuple = (512, 512), num_patches: int = 1, images_sub_folder: str = 'images', labels_sub_folder: str = 'labels', seed: int = 42, num_workers: Optional[int] = 7, num_inference_workers: Optional[int] = 7, pin_memory: bool = True)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>DataLoader for local folder containing 'images' and 'labels' sub-folders for a segmentation task.</p>
 <p>Constructor.</p>
 <h2 id="parameters">Parameters</h2>
 <dl>
+<dt><strong><code>campaign_transforms</code></strong> :&ensp;<code>CampaignTransforms</code></dt>
+<dd>Define all transforms necessary for training, validation, testing and (full) prediction.
+@see <code>qute.transforms.CampaignTransforms</code> for documentation.</dd>
 <dt><strong><code>data_dir</code></strong> :&ensp;<code>Path | str = Path()</code></dt>
 <dd>Data directory, containing two sub-folders "images" and "labels". The subfolder names can be overwritten.</dd>
 <dt><strong><code>num_classes</code></strong> :&ensp;<code>int = 3</code></dt>
@@ -693,27 +443,6 @@ This is always used, independent of whether num_folds is 1 or larger.</dd>
 <dd>Size of the patch to be extracted (at random positions) from images and labels.</dd>
 <dt><strong><code>num_patches</code></strong> :&ensp;<code>int = 1</code></dt>
 <dd>Number of patches per image to be extracted (and collated in the batch).</dd>
-<dt><strong><code>train_transforms_dict</code></strong> :&ensp;<code>Optional[list] = None</code></dt>
-<dd>Dictionary transforms to be applied to the training images and labels.
-If omitted some default transforms will be applied.</dd>
-<dt><strong><code>val_transforms_dict</code></strong> :&ensp;<code>Optional[list] = None</code></dt>
-<dd>Dictionary transforms to be applied to the validation images and labels.
-If omitted some default transforms will be applied.</dd>
-<dt><strong><code>test_transforms_dict</code></strong> :&ensp;<code>Optional[list] = None</code></dt>
-<dd>Dictionary transforms to be applied to the test images and labels.
-If omitted some default transforms will be applied.</dd>
-<dt><strong><code>inference_transforms_dict</code></strong> :&ensp;<code>Optional[Transform] = None</code></dt>
-<dd>Dictionary transforms to be applied to the images for inference.
-If omitted some default transforms will be applied.</dd>
-<dt><strong><code>post_inference_transforms_dict</code></strong> :&ensp;<code>Optional[Transform] = None</code></dt>
-<dd>Dictionary transforms to be applied to the inference output to create the final image.
-If omitted some default transforms will be applied.</dd>
-<dt><strong><code>val_metrics_transforms_dict</code></strong> :&ensp;<code>Optional[Transform] = None</code></dt>
-<dd>Dictionary transforms to be applied to the validation output to compatible to the selected metrics.
-If omitted some default transforms will be applied.</dd>
-<dt><strong><code>test_metrics_transforms_dict</code></strong> :&ensp;<code>Optional[Transform] = None</code></dt>
-<dd>Dictionary transforms to be applied to the test output to compatible to the selected metrics.
-If omitted, it will default to the val_metrics_transforms_dict.</dd>
 <dt><strong><code>images_sub_folder</code></strong> :&ensp;<code>str = "images"</code></dt>
 <dd>Name of the images sub-folder. It can be used to override the default "images".</dd>
 <dt><strong><code>labels_sub_folder</code></strong> :&ensp;<code>str = "labels"</code></dt>
@@ -736,6 +465,7 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
 
     def __init__(
         self,
+        campaign_transforms: CampaignTransforms,
         data_dir: Union[Path, str] = Path(),
         num_classes: int = 3,
         num_folds: int = 1,
@@ -746,13 +476,6 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
         inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
         num_patches: int = 1,
-        train_transforms_dict: Optional[Transform] = None,
-        val_transforms_dict: Optional[Transform] = None,
-        test_transforms_dict: Optional[Transform] = None,
-        inference_transforms_dict: Optional[Transform] = None,
-        post_inference_transforms_dict: Optional[Transform] = None,
-        val_metrics_transforms_dict: Optional[Transform] = None,
-        test_metrics_transforms_dict: Optional[Transform] = None,
         images_sub_folder: str = &#34;images&#34;,
         labels_sub_folder: str = &#34;labels&#34;,
         seed: int = 42,
@@ -765,6 +488,10 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
 
         Parameters
         ----------
+
+        campaign_transforms: CampaignTransforms
+            Define all transforms necessary for training, validation, testing and (full) prediction.
+            @see `qute.transforms.CampaignTransforms` for documentation.
 
         data_dir: Path | str = Path()
             Data directory, containing two sub-folders &#34;images&#34; and &#34;labels&#34;. The subfolder names can be overwritten.
@@ -803,34 +530,6 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
         num_patches: int = 1
             Number of patches per image to be extracted (and collated in the batch).
 
-        train_transforms_dict: Optional[list] = None
-            Dictionary transforms to be applied to the training images and labels.
-            If omitted some default transforms will be applied.
-
-        val_transforms_dict: Optional[list] = None
-            Dictionary transforms to be applied to the validation images and labels.
-            If omitted some default transforms will be applied.
-
-        test_transforms_dict: Optional[list] = None
-            Dictionary transforms to be applied to the test images and labels.
-            If omitted some default transforms will be applied.
-
-        inference_transforms_dict: Optional[Transform] = None
-            Dictionary transforms to be applied to the images for inference.
-            If omitted some default transforms will be applied.
-
-        post_inference_transforms_dict: Optional[Transform] = None
-            Dictionary transforms to be applied to the inference output to create the final image.
-            If omitted some default transforms will be applied.
-
-        val_metrics_transforms_dict: Optional[Transform] = None
-            Dictionary transforms to be applied to the validation output to compatible to the selected metrics.
-            If omitted some default transforms will be applied.
-
-        test_metrics_transforms_dict: Optional[Transform] = None
-            Dictionary transforms to be applied to the test output to compatible to the selected metrics.
-            If omitted, it will default to the val_metrics_transforms_dict.
-
         images_sub_folder: str = &#34;images&#34;
             Name of the images sub-folder. It can be used to override the default &#34;images&#34;.
 
@@ -851,6 +550,7 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
         &#34;&#34;&#34;
 
         super().__init__()
+        self.campaign_transforms = campaign_transforms
         self.data_dir = Path(data_dir).resolve()
         self.batch_size = batch_size
         self.inference_batch_size = inference_batch_size
@@ -866,57 +566,6 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
         # Set the sub-folder names
         self.images_sub_folder = images_sub_folder
         self.labels_sub_folder = labels_sub_folder
-
-        # Set the training transforms if passed
-        self.train_transforms_dict = None
-        if train_transforms_dict is not None:
-            self.train_transforms_dict = train_transforms_dict
-        else:
-            self.train_transforms_dict = self.__default_train_transforms_dict()
-
-        # Set the validation transforms if passed
-        self.val_transforms_dict = None
-        if val_transforms_dict is not None:
-            self.val_transforms_dict = val_transforms_dict
-        else:
-            self.val_transforms_dict = self.__default_val_transforms_dict()
-
-        # Set the test transforms if passed
-        self.test_transforms_dict = None
-        if test_transforms_dict is not None:
-            self.test_transforms_dict = test_transforms_dict
-        else:
-            self.test_transforms_dict = self.__default_test_transforms_dict()
-
-        # Set the inference transforms if passed
-        self.inference_transforms_dict = None
-        if inference_transforms_dict is not None:
-            self.inference_transforms_dict = inference_transforms_dict
-        else:
-            self.inference_transforms_dict = self.__default_inference_transforms()
-
-        # Set the post inference transforms if passed
-        self.post_inference_transforms_dict = None
-        if post_inference_transforms_dict is not None:
-            self.post_inference_transforms_dict = post_inference_transforms_dict
-        else:
-            self.post_inference_transforms_dict = (
-                self.__default_post_inference_transforms()
-            )
-
-        # Set the validation metrics transform
-        self.val_metrics_transforms_dict = None
-        if val_metrics_transforms_dict is not None:
-            self.val_metrics_transforms_dict = val_metrics_transforms_dict
-        else:
-            self.val_metrics_transforms_dict = self.__default_val_metrics_transforms()
-
-        # Set the test metrics transform
-        self.test_metrics_transforms_dict = None
-        if test_metrics_transforms_dict is not None:
-            self.test_metrics_transforms_dict = test_metrics_transforms_dict
-        else:
-            self.test_metrics_transforms_dict = self.__default_test_metrics_transforms()
 
         # Set the seed
         if seed is None:
@@ -1048,7 +697,7 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
             )
         ]
         self.train_dataset = Dataset(
-            data=train_files, transform=self.train_transforms_dict
+            data=train_files, transform=self.campaign_transforms.get_train_transforms()
         )
 
         # Create the validation dataset
@@ -1058,7 +707,9 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
                 self._all_images[self._val_indices], self._all_labels[self._val_indices]
             )
         ]
-        self.val_dataset = Dataset(data=val_files, transform=self.val_transforms_dict)
+        self.val_dataset = Dataset(
+            data=val_files, transform=self.campaign_transforms.get_valid_transforms()
+        )
 
         # Create the testing dataset
         test_files = [
@@ -1069,7 +720,7 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
             )
         ]
         self.test_dataset = Dataset(
-            data=test_files, transform=self.test_transforms_dict
+            data=test_files, transform=self.campaign_transforms.get_test_transforms()
         )
 
         # Inform
@@ -1096,6 +747,7 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
             num_workers=self.num_workers,
             collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
+            persistent_workers=True,
         )
 
     def val_dataloader(self):
@@ -1107,6 +759,7 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
             num_workers=self.num_workers,
             collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
+            persistent_workers=True,
         )
 
     def test_dataloader(self):
@@ -1116,7 +769,9 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
             shuffle=False,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
+            collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
+            persistent_workers=True,
         )
 
     def inference_dataloader(
@@ -1130,7 +785,7 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
         # Create a DataSet
         inference_dataset = ArrayDataset(
             image_names,
-            img_transform=self.inference_transforms_dict,
+            img_transform=self.campaign_transforms.get_inference_transforms(),
             seg=None,
             seg_transform=None,
             labels=None,
@@ -1144,171 +799,8 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
             num_workers=self.num_inference_workers,
             collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
-        )
-
-    def get_train_transforms_dict(self):
-        &#34;&#34;&#34;Return train set transforms.&#34;&#34;&#34;
-        return self.train_transforms_dict
-
-    def get_val_transforms_dict(self):
-        &#34;&#34;&#34;Return validation set transforms.&#34;&#34;&#34;
-        return self.val_transforms_dict
-
-    def get_test_transforms_dict(self):
-        &#34;&#34;&#34;Return test set transforms.&#34;&#34;&#34;
-        return self.test_transforms_dict
-
-    def get_val_metrics_transforms(self):
-        &#34;&#34;&#34;Return transforms for validation for metric calculation.&#34;&#34;&#34;
-        return self.val_metrics_transforms_dict
-
-    def get_test_metrics_transforms(self):
-        &#34;&#34;&#34;Return transforms for testing for metric calculation.&#34;&#34;&#34;
-        return self.test_metrics_transforms_dict
-
-    def get_inference_transforms(self):
-        &#34;&#34;&#34;Return inference set transforms.&#34;&#34;&#34;
-        return self.inference_transforms_dict
-
-    def get_post_inference_transforms(self):
-        &#34;&#34;&#34;Return post transforms for full inference.&#34;&#34;&#34;
-        return self.post_inference_transforms_dict
-
-    def __default_train_transforms_dict(self):
-        &#34;&#34;&#34;Define default training set transforms.&#34;&#34;&#34;
-        train_transforms = Compose(
-            [
-                LoadImaged(
-                    keys=[&#34;image&#34;, &#34;label&#34;],
-                    reader=&#34;PILReader&#34;,
-                    image_only=True,
-                    ensure_channel_first=True,
-                    dtype=torch.float32,
-                ),
-                RandCropByPosNegLabeld(
-                    keys=[&#34;image&#34;, &#34;label&#34;],
-                    label_key=&#34;label&#34;,
-                    spatial_size=self.patch_size,
-                    pos=1.0,
-                    neg=1.0,
-                    num_samples=self.num_patches,
-                    image_key=&#34;image&#34;,
-                    image_threshold=0.0,
-                    allow_smaller=False,
-                    lazy=False,
-                ),
-                ZNormalized(image_key=&#34;image&#34;),
-                # AddNormalizedDistanceTransformd(
-                #     image_key=&#34;image&#34;,
-                #     label_key=&#34;label&#34;,
-                #     pixel_class=1,
-                #     reverse=True
-                # ),
-                # AddFFT2d(
-                #     image_key=&#34;image&#34;,
-                #     mean_real=243.20000000000144,
-                #     std_real=538086.5132100589,
-                #     mean_imag=-1.2471390320969179e-14,
-                #     std_imag=369479.19867306296
-                # ),
-                RandRotate90d(keys=[&#34;image&#34;, &#34;label&#34;], prob=0.5, spatial_axes=(0, 1)),
-                RandGaussianNoised(keys=&#34;image&#34;, prob=0.2),
-                RandGaussianSmoothd(keys=&#34;image&#34;, prob=0.2),
-                AsDiscreted(keys=[&#34;label&#34;], to_onehot=self.num_classes),
-                ToPyTorchLightningOutputd(),
-            ]
-        )
-        return train_transforms
-
-    def __default_val_transforms_dict(self):
-        &#34;&#34;&#34;Define default validation set transforms.&#34;&#34;&#34;
-        val_transforms = Compose(
-            [
-                LoadImaged(
-                    keys=[&#34;image&#34;, &#34;label&#34;],
-                    reader=&#34;PILReader&#34;,
-                    image_only=True,
-                    ensure_channel_first=True,
-                    dtype=torch.float32,
-                ),
-                RandCropByPosNegLabeld(
-                    keys=[&#34;image&#34;, &#34;label&#34;],
-                    label_key=&#34;label&#34;,
-                    spatial_size=self.patch_size,
-                    pos=1.0,
-                    neg=1.0,
-                    num_samples=self.num_patches,
-                    image_key=&#34;image&#34;,
-                    image_threshold=0.0,
-                    allow_smaller=False,
-                    lazy=False,
-                ),
-                ZNormalized(image_key=&#34;image&#34;),
-                # AddNormalizedDistanceTransformd(
-                #     image_key=&#34;image&#34;,
-                #     label_key=&#34;label&#34;,
-                #     pixel_class=1,
-                #     reverse=True
-                # ),
-                # AddFFT2d(
-                #     image_key=&#34;image&#34;,
-                #     mean_real=243.20000000000144,
-                #     std_real=538086.5132100589,
-                #     mean_imag=-1.2471390320969179e-14,
-                #     std_imag=369479.19867306296
-                # ),
-                AsDiscreted(keys=[&#34;label&#34;], to_onehot=self.num_classes),
-                ToPyTorchLightningOutputd(),
-            ]
-        )
-        return val_transforms
-
-    def __default_test_transforms_dict(self):
-        &#34;&#34;&#34;Define default test set transforms.&#34;&#34;&#34;
-
-        # For testing, we apply the same transforms as by validation
-        return self.__default_val_transforms_dict()
-
-    def __default_val_metrics_transforms(self):
-        &#34;&#34;&#34;Define default transforms for validation for metric calculation.&#34;&#34;&#34;
-        post_transforms = Compose(
-            [Activations(sigmoid=True), AsDiscrete(threshold=0.5)]
-        )
-        return post_transforms
-
-    def __default_test_metrics_transforms(self):
-        &#34;&#34;&#34;Define default transforms for testing for metric calculation.&#34;&#34;&#34;
-        return self.__default_val_metrics_transforms()
-
-    def __default_inference_transforms(self):
-        &#34;&#34;&#34;Define default inference set transforms.&#34;&#34;&#34;
-        inference_transforms = Compose(
-            [
-                LoadImage(
-                    reader=&#34;PILReader&#34;,
-                    image_only=True,
-                    ensure_channel_first=True,
-                    dtype=torch.float32,
-                ),
-                ZNormalize(),
-                # AddNormalizedDistanceTransform(
-                #     pixel_class=1,
-                #     reverse=True
-                # ),
-                # AddFFT2(
-                #     mean_real=243.20000000000144,
-                #     std_real=538086.5132100589,
-                #     mean_imag=-1.2471390320969179e-14,
-                #     std_imag=369479.19867306296
-                # ),
-            ]
-        )
-        return inference_transforms
-
-    def __default_post_inference_transforms(self):
-        &#34;&#34;&#34;Define default post transforms for full inference.&#34;&#34;&#34;
-        post_transforms = Compose([ToLabel()])
-        return post_transforms</code></pre>
+            persistent_workers=True,
+        )</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
@@ -1318,108 +810,11 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
 </ul>
 <h3>Subclasses</h3>
 <ul class="hlist">
+<li><a title="qute.data.demos.CellRestorationDemo" href="demos.html#qute.data.demos.CellRestorationDemo">CellRestorationDemo</a></li>
 <li><a title="qute.data.demos.CellSegmentationDemo" href="demos.html#qute.data.demos.CellSegmentationDemo">CellSegmentationDemo</a></li>
 </ul>
 <h3>Methods</h3>
 <dl>
-<dt id="qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_inference_transforms"><code class="name flex">
-<span>def <span class="ident">get_inference_transforms</span></span>(<span>self)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Return inference set transforms.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def get_inference_transforms(self):
-    &#34;&#34;&#34;Return inference set transforms.&#34;&#34;&#34;
-    return self.inference_transforms_dict</code></pre>
-</details>
-</dd>
-<dt id="qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_post_inference_transforms"><code class="name flex">
-<span>def <span class="ident">get_post_inference_transforms</span></span>(<span>self)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Return post transforms for full inference.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def get_post_inference_transforms(self):
-    &#34;&#34;&#34;Return post transforms for full inference.&#34;&#34;&#34;
-    return self.post_inference_transforms_dict</code></pre>
-</details>
-</dd>
-<dt id="qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_test_metrics_transforms"><code class="name flex">
-<span>def <span class="ident">get_test_metrics_transforms</span></span>(<span>self)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Return transforms for testing for metric calculation.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def get_test_metrics_transforms(self):
-    &#34;&#34;&#34;Return transforms for testing for metric calculation.&#34;&#34;&#34;
-    return self.test_metrics_transforms_dict</code></pre>
-</details>
-</dd>
-<dt id="qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_test_transforms_dict"><code class="name flex">
-<span>def <span class="ident">get_test_transforms_dict</span></span>(<span>self)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Return test set transforms.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def get_test_transforms_dict(self):
-    &#34;&#34;&#34;Return test set transforms.&#34;&#34;&#34;
-    return self.test_transforms_dict</code></pre>
-</details>
-</dd>
-<dt id="qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_train_transforms_dict"><code class="name flex">
-<span>def <span class="ident">get_train_transforms_dict</span></span>(<span>self)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Return train set transforms.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def get_train_transforms_dict(self):
-    &#34;&#34;&#34;Return train set transforms.&#34;&#34;&#34;
-    return self.train_transforms_dict</code></pre>
-</details>
-</dd>
-<dt id="qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_val_metrics_transforms"><code class="name flex">
-<span>def <span class="ident">get_val_metrics_transforms</span></span>(<span>self)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Return transforms for validation for metric calculation.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def get_val_metrics_transforms(self):
-    &#34;&#34;&#34;Return transforms for validation for metric calculation.&#34;&#34;&#34;
-    return self.val_metrics_transforms_dict</code></pre>
-</details>
-</dd>
-<dt id="qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_val_transforms_dict"><code class="name flex">
-<span>def <span class="ident">get_val_transforms_dict</span></span>(<span>self)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Return validation set transforms.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def get_val_transforms_dict(self):
-    &#34;&#34;&#34;Return validation set transforms.&#34;&#34;&#34;
-    return self.val_transforms_dict</code></pre>
-</details>
-</dd>
 <dt id="qute.data.dataloaders.SegmentationDataModuleLocalFolder.inference_dataloader"><code class="name flex">
 <span>def <span class="ident">inference_dataloader</span></span>(<span>self, input_folder: Union[pathlib.Path, str], fmt_filter: str = '*.tif')</span>
 </code></dt>
@@ -1440,7 +835,7 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
     # Create a DataSet
     inference_dataset = ArrayDataset(
         image_names,
-        img_transform=self.inference_transforms_dict,
+        img_transform=self.campaign_transforms.get_inference_transforms(),
         seg=None,
         seg_transform=None,
         labels=None,
@@ -1454,6 +849,7 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
         num_workers=self.num_inference_workers,
         collate_fn=list_data_collate,
         pin_memory=self.pin_memory,
+        persistent_workers=True,
     )</code></pre>
 </details>
 </dd>
@@ -1583,7 +979,9 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
         shuffle=False,
         batch_size=self.batch_size,
         num_workers=self.num_workers,
+        collate_fn=list_data_collate,
         pin_memory=self.pin_memory,
+        persistent_workers=True,
     )</code></pre>
 </details>
 </dd>
@@ -1605,6 +1003,7 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
         num_workers=self.num_workers,
         collate_fn=list_data_collate,
         pin_memory=self.pin_memory,
+        persistent_workers=True,
     )</code></pre>
 </details>
 </dd>
@@ -1626,6 +1025,7 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
         num_workers=self.num_workers,
         collate_fn=list_data_collate,
         pin_memory=self.pin_memory,
+        persistent_workers=True,
     )</code></pre>
 </details>
 </dd>
@@ -1650,13 +1050,6 @@ If omitted, it will default to the val_metrics_transforms_dict.</dd>
 <li>
 <h4><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder" href="#qute.data.dataloaders.SegmentationDataModuleLocalFolder">SegmentationDataModuleLocalFolder</a></code></h4>
 <ul class="">
-<li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_inference_transforms" href="#qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_inference_transforms">get_inference_transforms</a></code></li>
-<li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_post_inference_transforms" href="#qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_post_inference_transforms">get_post_inference_transforms</a></code></li>
-<li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_test_metrics_transforms" href="#qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_test_metrics_transforms">get_test_metrics_transforms</a></code></li>
-<li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_test_transforms_dict" href="#qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_test_transforms_dict">get_test_transforms_dict</a></code></li>
-<li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_train_transforms_dict" href="#qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_train_transforms_dict">get_train_transforms_dict</a></code></li>
-<li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_val_metrics_transforms" href="#qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_val_metrics_transforms">get_val_metrics_transforms</a></code></li>
-<li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_val_transforms_dict" href="#qute.data.dataloaders.SegmentationDataModuleLocalFolder.get_val_transforms_dict">get_val_transforms_dict</a></code></li>
 <li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.inference_dataloader" href="#qute.data.dataloaders.SegmentationDataModuleLocalFolder.inference_dataloader">inference_dataloader</a></code></li>
 <li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.set_fold" href="#qute.data.dataloaders.SegmentationDataModuleLocalFolder.set_fold">set_fold</a></code></li>
 <li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.setup" href="#qute.data.dataloaders.SegmentationDataModuleLocalFolder.setup">setup</a></code></li>

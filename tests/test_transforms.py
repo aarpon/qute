@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 import torch
+from monai.data import MetaTensor
 from monai.transforms import Spacing
 
 from qute.transforms import (
@@ -282,6 +283,37 @@ def test_custom_tiff_reader(extract_test_transforms_data):
     ), "Wrong voxel size."
     assert resampled_image.meta["affine"].shape == (4, 4), "Unexpected affine shape."
     assert resampled_image.dtype == torch.float32, "Unexpected datatype."
+
+    #
+    # Test back-and-forth transformation on a larger dataset
+    #
+
+    # Set initial and target voxel sizes
+    voxel_size = [1.0, 0.241, 0.241]
+    target_voxel_size = [0.241, 0.241, 0.241]
+
+    # Initialize source tensor
+    in_affine = torch.zeros((4, 4))
+    in_affine[0, 0] = voxel_size[0]
+    in_affine[1, 1] = voxel_size[1]
+    in_affine[2, 2] = voxel_size[2]
+    in_affine[3, 3] = 1.0
+    source = MetaTensor(
+        torch.zeros((1, 20, 300, 300), dtype=torch.int32), affine=in_affine
+    )
+
+    # Forward transform
+    sp = Spacing(pixdim=target_voxel_size, mode="nearest")
+    target = sp(source)
+
+    assert target.shape == (1, 80, 300, 300), "Unexpected target shape."
+
+    # Inverse transform
+    inv_sp = Spacing(pixdim=voxel_size, mode="nearest")
+    inv_source = inv_sp(target)
+
+    assert inv_source.shape == source.shape, "Unexpected inverted source shape."
+    assert inv_source.shape == (1, 20, 300, 300), "Unexpected inverted source shape."
 
 
 def test_add_normalized_transform(extract_test_transforms_data):

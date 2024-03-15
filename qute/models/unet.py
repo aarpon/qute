@@ -300,7 +300,7 @@ class UNet(pl.LightningModule):
         # Switch to evaluation mode
         self.net.eval()
 
-        # Process them
+        # Process all images
         c = 0
         with torch.no_grad():
             for images in data_loader:
@@ -317,7 +317,7 @@ class UNet(pl.LightningModule):
                 )
 
                 # Apply post-transforms?
-                outputs = self.campaign_transforms.get_post_inference_transforms()(
+                outputs = self.campaign_transforms.get_post_full_inference_transforms()(
                     outputs
                 )
 
@@ -363,7 +363,7 @@ class UNet(pl.LightningModule):
         models: list,
         data_loader: DataLoader,
         target_folder: Union[Path, str],
-        inference_post_transforms: Transform,
+        post_full_inference_transforms: Transform,
         roi_size: Tuple[int, ...],
         batch_size: int,
         voting_mechanism: str = "mode",
@@ -387,8 +387,8 @@ class UNet(pl.LightningModule):
         target_folder: Union[Path|str]
             Path to the folder where to store the predicted images.
 
-        inference_post_transforms: Transform
-            Composition of transforms to be applied to the result of the forward pass of the network.
+        post_full_inference_transforms: Transform
+            Composition of transforms to be applied to the result of the sliding window inference (whole image).
 
         roi_size: Tuple[int, int]
             Size of the patch for the sliding window prediction. It must match the patch size during training.
@@ -480,7 +480,7 @@ class UNet(pl.LightningModule):
                     )
 
                     # Apply post-transforms?
-                    outputs = inference_post_transforms(outputs)
+                    outputs = post_full_inference_transforms(outputs)
 
                     # Retrieve the image from the GPU (if needed)
                     preds = outputs.cpu().numpy()

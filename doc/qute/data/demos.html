@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.10.0" />
+<title>qute.data.demos API documentation</title>
+<meta name="description" content="" />
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
+<link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
+<style>:root{--highlight-color:#fe9}.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}#sidebar > *:last-child{margin-bottom:2cm}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}h1:target,h2:target,h3:target,h4:target,h5:target,h6:target{background:var(--highlight-color);padding:.2em 0}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{margin-top:.6em;font-weight:bold}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}dt:target .name{background:var(--highlight-color)}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary,.git-link-div{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase}.source summary > *{white-space:nowrap;cursor:pointer}.git-link{color:inherit;margin-left:1em}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}td{padding:0 .5em}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%;height:100vh;overflow:auto;position:sticky;top:0}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/highlight.min.js" integrity="sha256-Uv3H6lx7dJmRfRvH8TH6kJD1TSK1aFcwgx+mdg3epi8=" crossorigin></script>
+<script>window.addEventListener('DOMContentLoaded', () => hljs.initHighlighting())</script>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>qute.data.demos</code></h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python"># ******************************************************************************
+# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# All rights reserved. This program and the accompanying materials
+# are made available under the terms of the Apache License Version 2.0
+# which accompanies this distribution, and is available at
+# https://www.apache.org/licenses/LICENSE-2.0.txt
+#
+# Contributors:
+#   Aaron Ponti - initial API and implementation
+# ******************************************************************************
+
+import os
+from pathlib import Path
+from typing import Optional, Union
+
+import userpaths
+
+from qute.campaigns import CampaignTransforms
+from qute.data.dataloaders import SegmentationDataModuleLocalFolder
+from qute.data.io import (
+    get_cell_restoration_demo_dataset,
+    get_cell_segmentation_demo_dataset,
+)
+
+
+class CellSegmentationDemo(SegmentationDataModuleLocalFolder):
+    &#34;&#34;&#34;DataLoader for the Cell Segmentation Demo.&#34;&#34;&#34;
+
+    def __init__(
+        self,
+        campaign_transforms: CampaignTransforms,
+        download_dir: Union[Path, str, None] = None,
+        three_classes: bool = True,
+        num_folds: int = 1,
+        train_fraction: float = 0.7,
+        val_fraction: float = 0.2,
+        test_fraction: float = 0.1,
+        batch_size: int = 8,
+        inference_batch_size: int = 2,
+        patch_size: tuple = (512, 512),
+        num_patches: int = 1,
+        images_sub_folder: str = &#34;images&#34;,
+        labels_sub_folder: str = &#34;labels&#34;,
+        seed: int = 42,
+        num_workers: Optional[int] = os.cpu_count() - 1,
+        num_inference_workers: Optional[int] = os.cpu_count() - 1,
+        pin_memory: bool = True,
+    ):
+        &#34;&#34;&#34;
+        Constructor.
+
+        Parameters
+        ----------
+
+        campaign_transforms: CampaignTransforms
+            Define all transforms necessary for training, validation, testing and (full) prediction.
+            @see `qute.transforms.CampaignTransforms` for documentation.
+
+        download_dir: Path | str = Path()
+            Directory where the cell segmentation datasets will be downloaded and extracted.
+
+        three_classes: bool = True
+            Whether to download and extract the demo dataset with 3 labels (classes), or the one with two.
+
+        num_folds: int = 1
+            Set to a number larger than one to set up k-fold cross-validation. All images
+            that do not belong to the test set fraction as defined by `test_fraction` will
+            be rotated for k-fold cross-validations. In this regime, the training set will
+            contain n * (k-1)/k images, while the validation set will contain n / k images
+            (with k = num_folds, and n = number of images in the training + validation set).
+
+        train_fraction: float = 0.7
+            Fraction of images and corresponding labels that go into the training set.
+
+        val_fraction: float = 0.2
+            Fraction of images and corresponding labels that go into the validation set.
+
+        test_fraction: float = 0.1
+            Fraction of images and corresponding labels that go into the test set.
+
+        batch_size: int = 8
+            Size of one batch of image pairs.
+
+        inference_batch_size: int = 2
+            Size of one batch of image pairs for full inference.
+
+        patch_size: tuple = (512, 512)
+            Size of the patch to be extracted (at random positions) from images and labels.
+
+        num_patches: int = 1
+            Number of patches per image to be extracted (and collated in the batch).
+
+        images_sub_folder: str = &#34;images&#34;
+            Name of the images sub-folder. It can be used to override the default &#34;images&#34;.
+
+        labels_sub_folder: str = &#34;labels&#34;
+            Name of the labels sub-folder. It can be used to override the default &#34;labels&#34;.
+
+        seed: int = 42
+            Seed for all random number generators.
+
+        num_workers: int
+            Number of workers to be used in the training, validation and test data loaders.
+
+        num_inference_workers: int
+            Number of workers to be used in the inference data loader.
+
+        pin_memory: bool = True
+            Whether to pin the GPU memory.
+        &#34;&#34;&#34;
+
+        # Check that download_dir is set
+        if download_dir is None:
+            download_dir = Path(userpaths.get_my_documents()) / &#34;qute&#34; / &#34;data&#34;
+
+        # Download directory is parent of the actual data_dir that we pass to the parent class
+        self.download_dir = Path(download_dir).resolve()
+
+        # Make the number of classes explicit
+        self.three_classes = three_classes
+        if self.three_classes:
+            self.num_classes = 3
+        else:
+            self.num_classes = 2
+        data_dir = self.download_dir / f&#34;demo_segmentation_{self.num_classes}_classes&#34;
+
+        # Call base constructor
+        super().__init__(
+            campaign_transforms=campaign_transforms,
+            data_dir=data_dir,
+            num_classes=self.num_classes,
+            num_folds=num_folds,
+            train_fraction=train_fraction,
+            val_fraction=val_fraction,
+            test_fraction=test_fraction,
+            batch_size=batch_size,
+            inference_batch_size=inference_batch_size,
+            patch_size=patch_size,
+            num_patches=num_patches,
+            images_sub_folder=images_sub_folder,
+            labels_sub_folder=labels_sub_folder,
+            seed=seed,
+            num_workers=num_workers,
+            num_inference_workers=num_inference_workers,
+            pin_memory=pin_memory,
+        )
+
+    def prepare_data(self):
+        &#34;&#34;&#34;Prepare the data on main thread.&#34;&#34;&#34;
+
+        # Download and extract the demo dataset if needed.
+        get_cell_segmentation_demo_dataset(
+            self.download_dir, three_classes=self.three_classes
+        )
+
+    def setup(self, stage):
+        &#34;&#34;&#34;Set up data on each GPU.&#34;&#34;&#34;
+        # Call parent setup()
+        return super().setup(stage)
+
+
+class CellRestorationDemo(SegmentationDataModuleLocalFolder):
+    &#34;&#34;&#34;DataLoader for the Cell Restoration Demo.&#34;&#34;&#34;
+
+    def __init__(
+        self,
+        campaign_transforms: CampaignTransforms,
+        download_dir: Union[Path, str, None] = None,
+        num_folds: int = 1,
+        train_fraction: float = 0.7,
+        val_fraction: float = 0.2,
+        test_fraction: float = 0.1,
+        batch_size: int = 8,
+        inference_batch_size: int = 2,
+        patch_size: tuple = (512, 512),
+        num_patches: int = 1,
+        images_sub_folder: str = &#34;images&#34;,
+        labels_sub_folder: str = &#34;targets&#34;,
+        seed: int = 42,
+        num_workers: Optional[int] = os.cpu_count() - 1,
+        num_inference_workers: Optional[int] = os.cpu_count() - 1,
+        pin_memory: bool = True,
+    ):
+        &#34;&#34;&#34;
+        Constructor.
+
+        Parameters
+        ----------
+
+        campaign_transforms: CampaignTransforms
+            Define all transforms necessary for training, validation, testing and (full) prediction.
+            @see `qute.transforms.CampaignTransforms` for documentation.
+
+        download_dir: Path | str = Path()
+            Directory where the cell segmentation datasets will be downloaded and extracted.
+
+        num_folds: int = 1
+            Set to a number larger than one to set up k-fold cross-validation. All images
+            that do not belong to the test set fraction as defined by `test_fraction` will
+            be rotated for k-fold cross-validations. In this regime, the training set will
+            contain n * (k-1)/k images, while the validation set will contain n / k images
+            (with k = num_folds, and n = number of images in the training + validation set).
+
+        train_fraction: float = 0.7
+            Fraction of images and corresponding labels that go into the training set.
+
+        val_fraction: float = 0.2
+            Fraction of images and corresponding labels that go into the validation set.
+
+        test_fraction: float = 0.1
+            Fraction of images and corresponding labels that go into the test set.
+
+        batch_size: int = 8
+            Size of one batch of image pairs.
+
+        inference_batch_size: int = 2
+            Size of one batch of image pairs for full inference.
+
+        patch_size: tuple = (512, 512)
+            Size of the patch to be extracted (at random positions) from images and labels.
+
+        num_patches: int = 1
+            Number of patches per image to be extracted (and collated in the batch).
+
+        images_sub_folder: str = &#34;images&#34;
+            Name of the images sub-folder. It can be used to override the default &#34;images&#34;.
+
+        labels_sub_folder: str = &#34;labels&#34;
+            Name of the labels sub-folder. It can be used to override the default &#34;labels&#34;.
+
+        seed: int = 42
+            Seed for all random number generators.
+
+        num_workers: int
+            Number of workers to be used in the training, validation and test data loaders.
+
+        num_inference_workers: int
+            Number of workers to be used in the inference data loader.
+
+        pin_memory: bool = True
+            Whether to pin the GPU memory.
+        &#34;&#34;&#34;
+
+        # Check that download_dir is set
+        if download_dir is None:
+            download_dir = Path(userpaths.get_my_documents()) / &#34;qute&#34; / &#34;data&#34;
+
+        # Download directory is parent of the actual data_dir that we pass to the parent class
+        self.download_dir = Path(download_dir).resolve()
+
+        # Data directory
+        data_dir = self.download_dir / f&#34;demo_restoration&#34;
+
+        # Call base constructor
+        super().__init__(
+            campaign_transforms=campaign_transforms,
+            data_dir=data_dir,
+            num_folds=num_folds,
+            train_fraction=train_fraction,
+            val_fraction=val_fraction,
+            test_fraction=test_fraction,
+            batch_size=batch_size,
+            inference_batch_size=inference_batch_size,
+            patch_size=patch_size,
+            num_patches=num_patches,
+            images_sub_folder=images_sub_folder,
+            labels_sub_folder=labels_sub_folder,
+            seed=seed,
+            num_workers=num_workers,
+            num_inference_workers=num_inference_workers,
+            pin_memory=pin_memory,
+        )
+
+    def prepare_data(self):
+        &#34;&#34;&#34;Prepare the data on main thread.&#34;&#34;&#34;
+
+        # Download and extract the demo dataset if needed.
+        get_cell_restoration_demo_dataset(self.download_dir)
+
+    def setup(self, stage):
+        &#34;&#34;&#34;Set up data on each GPU.&#34;&#34;&#34;
+        # Call parent setup()
+        return super().setup(stage)</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-classes">Classes</h2>
+<dl>
+<dt id="qute.data.demos.CellRestorationDemo"><code class="flex name class">
+<span>class <span class="ident">CellRestorationDemo</span></span>
+<span>(</span><span>campaign_transforms: qute.campaigns._campaigns.CampaignTransforms, download_dir: Union[pathlib.Path, str, ForwardRef(None)] = None, num_folds: int = 1, train_fraction: float = 0.7, val_fraction: float = 0.2, test_fraction: float = 0.1, batch_size: int = 8, inference_batch_size: int = 2, patch_size: tuple = (512, 512), num_patches: int = 1, images_sub_folder: str = 'images', labels_sub_folder: str = 'targets', seed: int = 42, num_workers: Optional[int] = 7, num_inference_workers: Optional[int] = 7, pin_memory: bool = True)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>DataLoader for the Cell Restoration Demo.</p>
+<p>Constructor.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>campaign_transforms</code></strong> :&ensp;<code>CampaignTransforms</code></dt>
+<dd>Define all transforms necessary for training, validation, testing and (full) prediction.
+@see <code>qute.transforms.CampaignTransforms</code> for documentation.</dd>
+<dt><strong><code>download_dir</code></strong> :&ensp;<code>Path | str = Path()</code></dt>
+<dd>Directory where the cell segmentation datasets will be downloaded and extracted.</dd>
+<dt><strong><code>num_folds</code></strong> :&ensp;<code>int = 1</code></dt>
+<dd>Set to a number larger than one to set up k-fold cross-validation. All images
+that do not belong to the test set fraction as defined by <code>test_fraction</code> will
+be rotated for k-fold cross-validations. In this regime, the training set will
+contain n * (k-1)/k images, while the validation set will contain n / k images
+(with k = num_folds, and n = number of images in the training + validation set).</dd>
+<dt><strong><code>train_fraction</code></strong> :&ensp;<code>float = 0.7</code></dt>
+<dd>Fraction of images and corresponding labels that go into the training set.</dd>
+<dt><strong><code>val_fraction</code></strong> :&ensp;<code>float = 0.2</code></dt>
+<dd>Fraction of images and corresponding labels that go into the validation set.</dd>
+<dt><strong><code>test_fraction</code></strong> :&ensp;<code>float = 0.1</code></dt>
+<dd>Fraction of images and corresponding labels that go into the test set.</dd>
+<dt><strong><code>batch_size</code></strong> :&ensp;<code>int = 8</code></dt>
+<dd>Size of one batch of image pairs.</dd>
+<dt><strong><code>inference_batch_size</code></strong> :&ensp;<code>int = 2</code></dt>
+<dd>Size of one batch of image pairs for full inference.</dd>
+<dt><strong><code>patch_size</code></strong> :&ensp;<code>tuple = (512, 512)</code></dt>
+<dd>Size of the patch to be extracted (at random positions) from images and labels.</dd>
+<dt><strong><code>num_patches</code></strong> :&ensp;<code>int = 1</code></dt>
+<dd>Number of patches per image to be extracted (and collated in the batch).</dd>
+<dt><strong><code>images_sub_folder</code></strong> :&ensp;<code>str = "images"</code></dt>
+<dd>Name of the images sub-folder. It can be used to override the default "images".</dd>
+<dt><strong><code>labels_sub_folder</code></strong> :&ensp;<code>str = "labels"</code></dt>
+<dd>Name of the labels sub-folder. It can be used to override the default "labels".</dd>
+<dt><strong><code>seed</code></strong> :&ensp;<code>int = 42</code></dt>
+<dd>Seed for all random number generators.</dd>
+<dt><strong><code>num_workers</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of workers to be used in the training, validation and test data loaders.</dd>
+<dt><strong><code>num_inference_workers</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of workers to be used in the inference data loader.</dd>
+<dt><strong><code>pin_memory</code></strong> :&ensp;<code>bool = True</code></dt>
+<dd>Whether to pin the GPU memory.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class CellRestorationDemo(SegmentationDataModuleLocalFolder):
+    &#34;&#34;&#34;DataLoader for the Cell Restoration Demo.&#34;&#34;&#34;
+
+    def __init__(
+        self,
+        campaign_transforms: CampaignTransforms,
+        download_dir: Union[Path, str, None] = None,
+        num_folds: int = 1,
+        train_fraction: float = 0.7,
+        val_fraction: float = 0.2,
+        test_fraction: float = 0.1,
+        batch_size: int = 8,
+        inference_batch_size: int = 2,
+        patch_size: tuple = (512, 512),
+        num_patches: int = 1,
+        images_sub_folder: str = &#34;images&#34;,
+        labels_sub_folder: str = &#34;targets&#34;,
+        seed: int = 42,
+        num_workers: Optional[int] = os.cpu_count() - 1,
+        num_inference_workers: Optional[int] = os.cpu_count() - 1,
+        pin_memory: bool = True,
+    ):
+        &#34;&#34;&#34;
+        Constructor.
+
+        Parameters
+        ----------
+
+        campaign_transforms: CampaignTransforms
+            Define all transforms necessary for training, validation, testing and (full) prediction.
+            @see `qute.transforms.CampaignTransforms` for documentation.
+
+        download_dir: Path | str = Path()
+            Directory where the cell segmentation datasets will be downloaded and extracted.
+
+        num_folds: int = 1
+            Set to a number larger than one to set up k-fold cross-validation. All images
+            that do not belong to the test set fraction as defined by `test_fraction` will
+            be rotated for k-fold cross-validations. In this regime, the training set will
+            contain n * (k-1)/k images, while the validation set will contain n / k images
+            (with k = num_folds, and n = number of images in the training + validation set).
+
+        train_fraction: float = 0.7
+            Fraction of images and corresponding labels that go into the training set.
+
+        val_fraction: float = 0.2
+            Fraction of images and corresponding labels that go into the validation set.
+
+        test_fraction: float = 0.1
+            Fraction of images and corresponding labels that go into the test set.
+
+        batch_size: int = 8
+            Size of one batch of image pairs.
+
+        inference_batch_size: int = 2
+            Size of one batch of image pairs for full inference.
+
+        patch_size: tuple = (512, 512)
+            Size of the patch to be extracted (at random positions) from images and labels.
+
+        num_patches: int = 1
+            Number of patches per image to be extracted (and collated in the batch).
+
+        images_sub_folder: str = &#34;images&#34;
+            Name of the images sub-folder. It can be used to override the default &#34;images&#34;.
+
+        labels_sub_folder: str = &#34;labels&#34;
+            Name of the labels sub-folder. It can be used to override the default &#34;labels&#34;.
+
+        seed: int = 42
+            Seed for all random number generators.
+
+        num_workers: int
+            Number of workers to be used in the training, validation and test data loaders.
+
+        num_inference_workers: int
+            Number of workers to be used in the inference data loader.
+
+        pin_memory: bool = True
+            Whether to pin the GPU memory.
+        &#34;&#34;&#34;
+
+        # Check that download_dir is set
+        if download_dir is None:
+            download_dir = Path(userpaths.get_my_documents()) / &#34;qute&#34; / &#34;data&#34;
+
+        # Download directory is parent of the actual data_dir that we pass to the parent class
+        self.download_dir = Path(download_dir).resolve()
+
+        # Data directory
+        data_dir = self.download_dir / f&#34;demo_restoration&#34;
+
+        # Call base constructor
+        super().__init__(
+            campaign_transforms=campaign_transforms,
+            data_dir=data_dir,
+            num_folds=num_folds,
+            train_fraction=train_fraction,
+            val_fraction=val_fraction,
+            test_fraction=test_fraction,
+            batch_size=batch_size,
+            inference_batch_size=inference_batch_size,
+            patch_size=patch_size,
+            num_patches=num_patches,
+            images_sub_folder=images_sub_folder,
+            labels_sub_folder=labels_sub_folder,
+            seed=seed,
+            num_workers=num_workers,
+            num_inference_workers=num_inference_workers,
+            pin_memory=pin_memory,
+        )
+
+    def prepare_data(self):
+        &#34;&#34;&#34;Prepare the data on main thread.&#34;&#34;&#34;
+
+        # Download and extract the demo dataset if needed.
+        get_cell_restoration_demo_dataset(self.download_dir)
+
+    def setup(self, stage):
+        &#34;&#34;&#34;Set up data on each GPU.&#34;&#34;&#34;
+        # Call parent setup()
+        return super().setup(stage)</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder" href="dataloaders.html#qute.data.dataloaders.SegmentationDataModuleLocalFolder">SegmentationDataModuleLocalFolder</a></li>
+<li>pytorch_lightning.core.datamodule.LightningDataModule</li>
+<li>pytorch_lightning.core.hooks.DataHooks</li>
+<li>pytorch_lightning.core.mixins.hparams_mixin.HyperparametersMixin</li>
+</ul>
+<h3>Methods</h3>
+<dl>
+<dt id="qute.data.demos.CellRestorationDemo.prepare_data"><code class="name flex">
+<span>def <span class="ident">prepare_data</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Prepare the data on main thread.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def prepare_data(self):
+    &#34;&#34;&#34;Prepare the data on main thread.&#34;&#34;&#34;
+
+    # Download and extract the demo dataset if needed.
+    get_cell_restoration_demo_dataset(self.download_dir)</code></pre>
+</details>
+</dd>
+<dt id="qute.data.demos.CellRestorationDemo.setup"><code class="name flex">
+<span>def <span class="ident">setup</span></span>(<span>self, stage)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Set up data on each GPU.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def setup(self, stage):
+    &#34;&#34;&#34;Set up data on each GPU.&#34;&#34;&#34;
+    # Call parent setup()
+    return super().setup(stage)</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder" href="dataloaders.html#qute.data.dataloaders.SegmentationDataModuleLocalFolder">SegmentationDataModuleLocalFolder</a></b></code>:
+<ul class="hlist">
+<li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.inference_dataloader" href="dataloaders.html#qute.data.dataloaders.SegmentationDataModuleLocalFolder.inference_dataloader">inference_dataloader</a></code></li>
+<li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.set_fold" href="dataloaders.html#qute.data.dataloaders.SegmentationDataModuleLocalFolder.set_fold">set_fold</a></code></li>
+<li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.test_dataloader" href="dataloaders.html#qute.data.dataloaders.SegmentationDataModuleLocalFolder.test_dataloader">test_dataloader</a></code></li>
+<li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.train_dataloader" href="dataloaders.html#qute.data.dataloaders.SegmentationDataModuleLocalFolder.train_dataloader">train_dataloader</a></code></li>
+<li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.val_dataloader" href="dataloaders.html#qute.data.dataloaders.SegmentationDataModuleLocalFolder.val_dataloader">val_dataloader</a></code></li>
+</ul>
+</li>
+</ul>
+</dd>
+<dt id="qute.data.demos.CellSegmentationDemo"><code class="flex name class">
+<span>class <span class="ident">CellSegmentationDemo</span></span>
+<span>(</span><span>campaign_transforms: qute.campaigns._campaigns.CampaignTransforms, download_dir: Union[pathlib.Path, str, ForwardRef(None)] = None, three_classes: bool = True, num_folds: int = 1, train_fraction: float = 0.7, val_fraction: float = 0.2, test_fraction: float = 0.1, batch_size: int = 8, inference_batch_size: int = 2, patch_size: tuple = (512, 512), num_patches: int = 1, images_sub_folder: str = 'images', labels_sub_folder: str = 'labels', seed: int = 42, num_workers: Optional[int] = 7, num_inference_workers: Optional[int] = 7, pin_memory: bool = True)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>DataLoader for the Cell Segmentation Demo.</p>
+<p>Constructor.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>campaign_transforms</code></strong> :&ensp;<code>CampaignTransforms</code></dt>
+<dd>Define all transforms necessary for training, validation, testing and (full) prediction.
+@see <code>qute.transforms.CampaignTransforms</code> for documentation.</dd>
+<dt><strong><code>download_dir</code></strong> :&ensp;<code>Path | str = Path()</code></dt>
+<dd>Directory where the cell segmentation datasets will be downloaded and extracted.</dd>
+<dt><strong><code>three_classes</code></strong> :&ensp;<code>bool = True</code></dt>
+<dd>Whether to download and extract the demo dataset with 3 labels (classes), or the one with two.</dd>
+<dt><strong><code>num_folds</code></strong> :&ensp;<code>int = 1</code></dt>
+<dd>Set to a number larger than one to set up k-fold cross-validation. All images
+that do not belong to the test set fraction as defined by <code>test_fraction</code> will
+be rotated for k-fold cross-validations. In this regime, the training set will
+contain n * (k-1)/k images, while the validation set will contain n / k images
+(with k = num_folds, and n = number of images in the training + validation set).</dd>
+<dt><strong><code>train_fraction</code></strong> :&ensp;<code>float = 0.7</code></dt>
+<dd>Fraction of images and corresponding labels that go into the training set.</dd>
+<dt><strong><code>val_fraction</code></strong> :&ensp;<code>float = 0.2</code></dt>
+<dd>Fraction of images and corresponding labels that go into the validation set.</dd>
+<dt><strong><code>test_fraction</code></strong> :&ensp;<code>float = 0.1</code></dt>
+<dd>Fraction of images and corresponding labels that go into the test set.</dd>
+<dt><strong><code>batch_size</code></strong> :&ensp;<code>int = 8</code></dt>
+<dd>Size of one batch of image pairs.</dd>
+<dt><strong><code>inference_batch_size</code></strong> :&ensp;<code>int = 2</code></dt>
+<dd>Size of one batch of image pairs for full inference.</dd>
+<dt><strong><code>patch_size</code></strong> :&ensp;<code>tuple = (512, 512)</code></dt>
+<dd>Size of the patch to be extracted (at random positions) from images and labels.</dd>
+<dt><strong><code>num_patches</code></strong> :&ensp;<code>int = 1</code></dt>
+<dd>Number of patches per image to be extracted (and collated in the batch).</dd>
+<dt><strong><code>images_sub_folder</code></strong> :&ensp;<code>str = "images"</code></dt>
+<dd>Name of the images sub-folder. It can be used to override the default "images".</dd>
+<dt><strong><code>labels_sub_folder</code></strong> :&ensp;<code>str = "labels"</code></dt>
+<dd>Name of the labels sub-folder. It can be used to override the default "labels".</dd>
+<dt><strong><code>seed</code></strong> :&ensp;<code>int = 42</code></dt>
+<dd>Seed for all random number generators.</dd>
+<dt><strong><code>num_workers</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of workers to be used in the training, validation and test data loaders.</dd>
+<dt><strong><code>num_inference_workers</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of workers to be used in the inference data loader.</dd>
+<dt><strong><code>pin_memory</code></strong> :&ensp;<code>bool = True</code></dt>
+<dd>Whether to pin the GPU memory.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class CellSegmentationDemo(SegmentationDataModuleLocalFolder):
+    &#34;&#34;&#34;DataLoader for the Cell Segmentation Demo.&#34;&#34;&#34;
+
+    def __init__(
+        self,
+        campaign_transforms: CampaignTransforms,
+        download_dir: Union[Path, str, None] = None,
+        three_classes: bool = True,
+        num_folds: int = 1,
+        train_fraction: float = 0.7,
+        val_fraction: float = 0.2,
+        test_fraction: float = 0.1,
+        batch_size: int = 8,
+        inference_batch_size: int = 2,
+        patch_size: tuple = (512, 512),
+        num_patches: int = 1,
+        images_sub_folder: str = &#34;images&#34;,
+        labels_sub_folder: str = &#34;labels&#34;,
+        seed: int = 42,
+        num_workers: Optional[int] = os.cpu_count() - 1,
+        num_inference_workers: Optional[int] = os.cpu_count() - 1,
+        pin_memory: bool = True,
+    ):
+        &#34;&#34;&#34;
+        Constructor.
+
+        Parameters
+        ----------
+
+        campaign_transforms: CampaignTransforms
+            Define all transforms necessary for training, validation, testing and (full) prediction.
+            @see `qute.transforms.CampaignTransforms` for documentation.
+
+        download_dir: Path | str = Path()
+            Directory where the cell segmentation datasets will be downloaded and extracted.
+
+        three_classes: bool = True
+            Whether to download and extract the demo dataset with 3 labels (classes), or the one with two.
+
+        num_folds: int = 1
+            Set to a number larger than one to set up k-fold cross-validation. All images
+            that do not belong to the test set fraction as defined by `test_fraction` will
+            be rotated for k-fold cross-validations. In this regime, the training set will
+            contain n * (k-1)/k images, while the validation set will contain n / k images
+            (with k = num_folds, and n = number of images in the training + validation set).
+
+        train_fraction: float = 0.7
+            Fraction of images and corresponding labels that go into the training set.
+
+        val_fraction: float = 0.2
+            Fraction of images and corresponding labels that go into the validation set.
+
+        test_fraction: float = 0.1
+            Fraction of images and corresponding labels that go into the test set.
+
+        batch_size: int = 8
+            Size of one batch of image pairs.
+
+        inference_batch_size: int = 2
+            Size of one batch of image pairs for full inference.
+
+        patch_size: tuple = (512, 512)
+            Size of the patch to be extracted (at random positions) from images and labels.
+
+        num_patches: int = 1
+            Number of patches per image to be extracted (and collated in the batch).
+
+        images_sub_folder: str = &#34;images&#34;
+            Name of the images sub-folder. It can be used to override the default &#34;images&#34;.
+
+        labels_sub_folder: str = &#34;labels&#34;
+            Name of the labels sub-folder. It can be used to override the default &#34;labels&#34;.
+
+        seed: int = 42
+            Seed for all random number generators.
+
+        num_workers: int
+            Number of workers to be used in the training, validation and test data loaders.
+
+        num_inference_workers: int
+            Number of workers to be used in the inference data loader.
+
+        pin_memory: bool = True
+            Whether to pin the GPU memory.
+        &#34;&#34;&#34;
+
+        # Check that download_dir is set
+        if download_dir is None:
+            download_dir = Path(userpaths.get_my_documents()) / &#34;qute&#34; / &#34;data&#34;
+
+        # Download directory is parent of the actual data_dir that we pass to the parent class
+        self.download_dir = Path(download_dir).resolve()
+
+        # Make the number of classes explicit
+        self.three_classes = three_classes
+        if self.three_classes:
+            self.num_classes = 3
+        else:
+            self.num_classes = 2
+        data_dir = self.download_dir / f&#34;demo_segmentation_{self.num_classes}_classes&#34;
+
+        # Call base constructor
+        super().__init__(
+            campaign_transforms=campaign_transforms,
+            data_dir=data_dir,
+            num_classes=self.num_classes,
+            num_folds=num_folds,
+            train_fraction=train_fraction,
+            val_fraction=val_fraction,
+            test_fraction=test_fraction,
+            batch_size=batch_size,
+            inference_batch_size=inference_batch_size,
+            patch_size=patch_size,
+            num_patches=num_patches,
+            images_sub_folder=images_sub_folder,
+            labels_sub_folder=labels_sub_folder,
+            seed=seed,
+            num_workers=num_workers,
+            num_inference_workers=num_inference_workers,
+            pin_memory=pin_memory,
+        )
+
+    def prepare_data(self):
+        &#34;&#34;&#34;Prepare the data on main thread.&#34;&#34;&#34;
+
+        # Download and extract the demo dataset if needed.
+        get_cell_segmentation_demo_dataset(
+            self.download_dir, three_classes=self.three_classes
+        )
+
+    def setup(self, stage):
+        &#34;&#34;&#34;Set up data on each GPU.&#34;&#34;&#34;
+        # Call parent setup()
+        return super().setup(stage)</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder" href="dataloaders.html#qute.data.dataloaders.SegmentationDataModuleLocalFolder">SegmentationDataModuleLocalFolder</a></li>
+<li>pytorch_lightning.core.datamodule.LightningDataModule</li>
+<li>pytorch_lightning.core.hooks.DataHooks</li>
+<li>pytorch_lightning.core.mixins.hparams_mixin.HyperparametersMixin</li>
+</ul>
+<h3>Methods</h3>
+<dl>
+<dt id="qute.data.demos.CellSegmentationDemo.prepare_data"><code class="name flex">
+<span>def <span class="ident">prepare_data</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Prepare the data on main thread.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def prepare_data(self):
+    &#34;&#34;&#34;Prepare the data on main thread.&#34;&#34;&#34;
+
+    # Download and extract the demo dataset if needed.
+    get_cell_segmentation_demo_dataset(
+        self.download_dir, three_classes=self.three_classes
+    )</code></pre>
+</details>
+</dd>
+<dt id="qute.data.demos.CellSegmentationDemo.setup"><code class="name flex">
+<span>def <span class="ident">setup</span></span>(<span>self, stage)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Set up data on each GPU.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def setup(self, stage):
+    &#34;&#34;&#34;Set up data on each GPU.&#34;&#34;&#34;
+    # Call parent setup()
+    return super().setup(stage)</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder" href="dataloaders.html#qute.data.dataloaders.SegmentationDataModuleLocalFolder">SegmentationDataModuleLocalFolder</a></b></code>:
+<ul class="hlist">
+<li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.inference_dataloader" href="dataloaders.html#qute.data.dataloaders.SegmentationDataModuleLocalFolder.inference_dataloader">inference_dataloader</a></code></li>
+<li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.set_fold" href="dataloaders.html#qute.data.dataloaders.SegmentationDataModuleLocalFolder.set_fold">set_fold</a></code></li>
+<li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.test_dataloader" href="dataloaders.html#qute.data.dataloaders.SegmentationDataModuleLocalFolder.test_dataloader">test_dataloader</a></code></li>
+<li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.train_dataloader" href="dataloaders.html#qute.data.dataloaders.SegmentationDataModuleLocalFolder.train_dataloader">train_dataloader</a></code></li>
+<li><code><a title="qute.data.dataloaders.SegmentationDataModuleLocalFolder.val_dataloader" href="dataloaders.html#qute.data.dataloaders.SegmentationDataModuleLocalFolder.val_dataloader">val_dataloader</a></code></li>
+</ul>
+</li>
+</ul>
+</dd>
+</dl>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="qute.data" href="index.html">qute.data</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-classes">Classes</a></h3>
+<ul>
+<li>
+<h4><code><a title="qute.data.demos.CellRestorationDemo" href="#qute.data.demos.CellRestorationDemo">CellRestorationDemo</a></code></h4>
+<ul class="">
+<li><code><a title="qute.data.demos.CellRestorationDemo.prepare_data" href="#qute.data.demos.CellRestorationDemo.prepare_data">prepare_data</a></code></li>
+<li><code><a title="qute.data.demos.CellRestorationDemo.setup" href="#qute.data.demos.CellRestorationDemo.setup">setup</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="qute.data.demos.CellSegmentationDemo" href="#qute.data.demos.CellSegmentationDemo">CellSegmentationDemo</a></code></h4>
+<ul class="">
+<li><code><a title="qute.data.demos.CellSegmentationDemo.prepare_data" href="#qute.data.demos.CellSegmentationDemo.prepare_data">prepare_data</a></code></li>
+<li><code><a title="qute.data.demos.CellSegmentationDemo.setup" href="#qute.data.demos.CellSegmentationDemo.setup">setup</a></code></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+</footer>
+</body>
+</html>
