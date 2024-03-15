@@ -20,7 +20,7 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 from monai.data import DataLoader
-from monai.inferers import sliding_window_inference
+from monai.inferers import SlidingWindowInferer
 from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
 from monai.networks.nets import UNet as MonaiUNet
@@ -300,20 +300,24 @@ class UNet(pl.LightningModule):
         # Switch to evaluation mode
         self.net.eval()
 
+        # Instantiate the inferer
+        sliding_window_inferer = SlidingWindowInferer(
+            roi_size=roi_size,
+            sw_batch_size=batch_size,
+            overlap=overlap,
+            mode=BlendMode.GAUSSIAN,
+            sigma_scale=0.125,
+            device=device,
+        )
+
         # Process all images
         c = 0
         with torch.no_grad():
             for images in data_loader:
                 # Apply sliding inference over ROI size
-                outputs = sliding_window_inference(
+                outputs = sliding_window_inferer(
                     inputs=images.to(device),
-                    roi_size=roi_size,
-                    sw_batch_size=batch_size,
-                    overlap=overlap,
-                    predictor=self.net,
-                    mode=BlendMode.GAUSSIAN,
-                    sigma_scale=0.125,
-                    device=device,
+                    network=self.net,
                 )
 
                 # Apply post-transforms?
@@ -457,6 +461,16 @@ class UNet(pl.LightningModule):
         for model in models:
             model.net.eval()
 
+        # Instantiate the inferer
+        sliding_window_inferer = SlidingWindowInferer(
+            roi_size=roi_size,
+            sw_batch_size=batch_size,
+            overlap=overlap,
+            mode=BlendMode.GAUSSIAN,
+            sigma_scale=0.125,
+            device=device,
+        )
+
         c = 0
         with (torch.no_grad()):
             for images in data_loader:
@@ -470,13 +484,9 @@ class UNet(pl.LightningModule):
                     model.to(device)
 
                     # Apply sliding inference over ROI size
-                    outputs = sliding_window_inference(
+                    outputs = sliding_window_inferer(
                         inputs=images.to(device),
-                        roi_size=roi_size,
-                        sw_batch_size=batch_size,
-                        overlap=overlap,
-                        predictor=model.net,
-                        device=device,
+                        network=model.net,
                     )
 
                     # Apply post-transforms?
