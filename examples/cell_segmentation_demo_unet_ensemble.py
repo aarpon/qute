@@ -40,7 +40,7 @@ try:
     PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
 except AssertionError:
     PRECISION = 32
-MAX_EPOCHS = 3
+MAX_EPOCHS = 2000
 EXP_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
 MODEL_DIR = Path(userpaths.get_my_documents()) / "qute" / "models" / EXP_NAME
 RESULTS_DIR = Path(userpaths.get_my_documents()) / "qute" / "results" / EXP_NAME
