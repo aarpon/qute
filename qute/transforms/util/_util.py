@@ -9,7 +9,11 @@
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
 
+from typing import Union
+
+import monai.data
 import numpy as np
+import torch
 
 
 def scale_dist_transform_by_region(
@@ -85,3 +89,44 @@ def scale_dist_transform_by_region(
 
     # Return updated dt
     return work_dt
+
+
+def get_tensor_num_spatial_dims(
+    data: Union[torch.tensor, monai.data.MetaTensor, np.ndarray],
+    with_batch_dim: bool = False,
+) -> int:
+    """Returns the spatial batch size of the tensor (either 2D or 3D).
+
+    Accepted input geometries are:
+
+    3D with with_batch_dim == True    |    3D with with_batch_dim == False
+          [B, C, D, H, W]                          [C, D, H, W]
+
+    2D with with_batch_dim == True    |    2D with with_batch_dim == False
+           [B, C, H, W]                             [C, H, W]
+
+    Parameters
+    ----------
+
+    data: Union[torch.tensor, monai.data.MetaTensor, np.ndarray]
+        Input tensor.
+
+    with_batch_dim: bool = False
+        Whether the first dimension of the tensor should be considered as the batch dimension.
+
+    Returns
+    -------
+
+    effective_size: int
+        Either 2 for two-dimensional data or 3 for three-dimensional data.
+    """
+
+    if with_batch_dim and len(data.shape) not in [4, 5]:
+        raise ValueError("Unexpected input geometry.")
+
+    if not with_batch_dim and len(data.shape) not in [3, 4]:
+        raise ValueError("Unexpected input geometry.")
+
+    # Do we have a 2D or 3D tensor (excluding batch and channel dimensions)?
+    num_spatial_dims = len(data.shape) - (1 if with_batch_dim else 0) - 1
+    return num_spatial_dims

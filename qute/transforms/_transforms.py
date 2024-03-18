@@ -21,12 +21,15 @@ import torch
 import torch.nn.functional as F
 from monai.data import MetaTensor
 from monai.transforms import MapTransform, Transform
-from scipy.ndimage import binary_erosion, distance_transform_edt
+from scipy.ndimage import distance_transform_edt
 from skimage.measure import label, regionprops
-from skimage.morphology import ball, disk
+from skimage.morphology import ball, disk, erosion
 from tifffile import imread
 
-from qute.transforms.util import scale_dist_transform_by_region
+from qute.transforms.util import (
+    get_tensor_num_spatial_dims,
+    scale_dist_transform_by_region,
+)
 
 
 class CellposeLabelReader(Transform):
@@ -246,7 +249,7 @@ class CustomTIFFReaderd(MapTransform):
 class CustomResampler(Transform):
     """Resamples a tensor to a new voxel size.
 
-    Accepted geometries are (C, D, H, W) for 3D and (D, H, W) for 2D.
+    Accepted geometries are (C, D, H, W) for 3D and (C, H, W) for 2D.
     """
 
     def __init__(
@@ -267,6 +270,8 @@ class CustomResampler(Transform):
         input_voxel_size: Optional[tuple[float, ...]]
             Input voxel size. If omitted, and if the input tensor is a MONAI MetaTensor,
             the voxel size will be extracted from the tensor metadata (see CustomTiffReader).
+            Please notice that only the scaling components of the affine matrix will be
+            considered; all others will be silently ignored.
 
         mode: str (Optional, default is "neareast")
             Interpolation mode: one of "nearest", or "bilinear" (for 2D data) and "trilinear" for 3D data.
@@ -285,13 +290,13 @@ class CustomResampler(Transform):
         self, data: Union[torch.tensor, monai.data.MetaTensor, np.ndarray]
     ) -> torch.Tensor:
         """
-        Resample the tensor and return it..
+        Resample the tensor and return it.
 
          Parameters
          ----------
 
-         file_name: str
-             File name
+         data: Union[torch.tensor, monai.data.MetaTensor, np.ndarray]
+             Input tensor.
 
          Returns
          -------
@@ -319,9 +324,7 @@ class CustomResampler(Transform):
             raise ValueError("Please specify `input_voxel_size`.")
 
         # Do we have a 2D or 3D tensor (excluding batch and channel dimensions)?
-        effective_dims = (
-            len(data.shape) - (1 if self.with_batch_dim else 0) - 1
-        )  # Subtract 1 for channels
+        effective_dims = get_tensor_num_spatial_dims(data, self.with_batch_dim)
 
         if effective_dims not in [2, 3]:
             raise ValueError("Unsupported geometry.")
@@ -412,7 +415,7 @@ class CustomResampler(Transform):
 class CustomResamplerd(MapTransform):
     """Resamples a tensor to a new voxel size.
 
-    Accepted geometries are (C, D, H, W) for 3D and (D, H, W) for 2D.
+    Accepted geometries are (C, D, H, W) for 3D and (C, H, W) for 2D.
     """
 
     def __init__(
@@ -436,6 +439,8 @@ class CustomResamplerd(MapTransform):
         input_voxel_size: Optional[tuple[float, ...]]
             Input voxel size. If omitted, and if the input tensor is a MONAI MetaTensor,
             the voxel size will be extracted from the tensor metadata (see CustomTiffReader).
+            Please notice that only the scaling components of the affine matrix will be
+            considered; all others will be silently ignored.
 
         mode: str (Optional, default is "neareast")
             Interpolation mode: one of "nearest", or "bilinear" (for 2D data) and "trilinear" for 3D data.
@@ -451,19 +456,19 @@ class CustomResamplerd(MapTransform):
         self, data: Union[torch.tensor, monai.data.MetaTensor, np.ndarray]
     ) -> torch.Tensor:
         """
-        Resample the tensor and return it..
+        Resample the tensor and return it.
 
          Parameters
          ----------
 
-         file_name: str
-             File name
+         data: Union[torch.tensor, monai.data.MetaTensor, np.ndarray]
+             Input tensor
 
          Returns
          -------
 
          tensor: torch.Tensor | monai.MetaTensor
-             Tensor with requested type and shape.
+             Resampled tensor.
         """
 
         # Make sure that we have the same number of keys and modes of interpolation
@@ -479,6 +484,132 @@ class CustomResamplerd(MapTransform):
             data[key] = interpolator(data[key])
 
         return data
+
+
+class LabelToTwoClassMask(Transform):
+    """Maps a labels image to a two-class mask."""
+
+    def __init__(self, border_thickness: int = 1):
+        """Constructor"""
+        super().__init__()
+        self.border_thickness = border_thickness
+
+    def __call__(
+        self, data: Union[torch.tensor, monai.data.MetaTensor, np.ndarray]
+    ) -> torch.Tensor:
+        """
+        Maps a labels image to a two-class mask.
+
+        Parameters
+        ----------
+
+        data: Union[torch.tensor, monai.data.MetaTensor, np.ndarray]
+            Input tensor
+
+        Returns
+        -------
+
+        tensor: torch.Tensor | monai.MetaTensor
+            Tensor as with two-class mask.
+        """
+
+        # Keep track of whether we are working with MONAI MetaTensor
+        is_meta_tensor = type(data) is monai.data.MetaTensor
+
+        # Get the number of spatial dimensions
+        num_spatial_dims = get_tensor_num_spatial_dims(data, with_batch_dim=False)
+
+        # Footprint (structuring element) for erosion
+        if num_spatial_dims == 2:
+            footprint = disk(self.border_thickness)
+        else:
+            footprint = ball(self.border_thickness)
+
+        # Make sure to bring the structuring element to the same
+        # number of dimensions as the data
+        for d in range(len(data.shape) - num_spatial_dims):
+            footprint = footprint[np.newaxis, :]
+
+        # We work on int32 NumPy arrays
+        if type(data) in [torch.tensor, monai.data.MetaTensor]:
+            np_data = data.cpu().numpy().astype(np.int32)
+        elif type(data) is np.ndarray:
+            np_data = data.copy().astype(np.int32)
+        else:
+            raise TypeError(
+                "Data must of type torch.tensor, monai.data.MetaTensor, or np.ndarray"
+            )
+
+        # Allocate output
+        out = np.zeros(np_data.shape, dtype=np_data.dtype)
+
+        # Process all individual labels
+        for lbl in np.unique(np_data):
+
+            # Ignore background
+            if lbl == 0:
+                continue
+
+            # Prepare the label for processing
+            bw = np.zeros(data.shape, dtype=np_data.dtype)
+            bw[np_data == lbl] = 1
+
+            # Perform erosion
+            eroded_bw = erosion(bw, footprint)
+
+            # Store object and border it in the output
+            out[bw == 1] = 2
+            out[eroded_bw == 1] = 1
+
+        # Pack the result into a (Meta)Tensor
+        out = torch.tensor(out, dtype=torch.int32)
+        if is_meta_tensor:
+            out = MetaTensor(out, meta=data.meta.copy())
+
+        return out
+
+
+class LabelToTwoClassMaskd(MapTransform):
+    """Maps a labels image to a two-class mask."""
+
+    def __init__(
+        self,
+        keys: tuple[str] = ("image", "label"),
+        border_thickness: int = 1,
+    ) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+
+        keys: tuple[str]
+            Keys for the data dictionary.
+        border_thickness: int = 1
+            Thickness of the border to add.
+        """
+        super().__init__(keys=keys)
+        self.keys = keys
+        self.border_thickness = border_thickness
+
+    def __call__(self, data: dict) -> dict:
+        """
+        Maps a labels image to a two-class mask.
+
+        Returns
+        -------
+
+        data: dict
+            Updated dictionary.
+        """
+
+        # Work on a copy of the input dictionary data
+        d = dict(data)
+
+        # Process the images
+        for key in self.keys:
+            transform = LabelToTwoClassMask(border_thickness=self.border_thickness)
+            d[key] = transform(d[key])
+        return d
 
 
 class MinMaxNormalize(Transform):

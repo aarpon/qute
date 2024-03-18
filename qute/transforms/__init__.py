@@ -25,6 +25,8 @@ from ._transforms import (
     DebugCheckAndFixAffineDimensions,
     DebugInformer,
     DebugMinNumVoxelCheckerd,
+    LabelToTwoClassMask,
+    LabelToTwoClassMaskd,
     MinMaxNormalize,
     MinMaxNormalized,
     Scale,

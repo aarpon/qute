@@ -9,4 +9,4 @@
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
 
-from ._util import scale_dist_transform_by_region
+from ._util import get_tensor_num_spatial_dims, scale_dist_transform_by_region
