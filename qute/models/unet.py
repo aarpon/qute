@@ -291,6 +291,9 @@ class UNet(pl.LightningModule):
         # Make sure the target folder exists
         Path(target_folder).mkdir(parents=True, exist_ok=True)
 
+        # Retrieve file names from the dataloader
+        input_file_names = data_loader.dataset.dataset.data
+
         # Device
         device = get_device()
 
@@ -349,7 +352,9 @@ class UNet(pl.LightningModule):
                         pred = pred.astype(output_dtype)
 
                     # Save prediction image as tiff file
-                    output_name = Path(target_folder) / f"pred_{c:04}.tif"
+                    output_name = (
+                        Path(target_folder) / f"pred_{input_file_names[c].stem}.tif"
+                    )
                     c += 1
                     with TiffWriter(output_name) as tif:
                         tif.write(pred)
@@ -447,6 +452,9 @@ class UNet(pl.LightningModule):
 
         # Make sure the target folder exists
         Path(target_folder).mkdir(parents=True, exist_ok=True)
+
+        # Retrieve file names from the dataloader
+        input_file_names = data_loader.dataset.dataset.data
 
         # If needed, create the sub-folders for the individual predictions
         if save_individual_preds:
@@ -560,7 +568,10 @@ class UNet(pl.LightningModule):
                         ensemble_pred = ensemble_pred.astype(output_dtype)
 
                     # Save ensemble prediction image as tiff file
-                    output_name = Path(target_folder) / f"ensemble_pred_{c:04}.tif"
+                    output_name = (
+                        Path(target_folder)
+                        / f"ensemble_pred_{input_file_names[c].stem}.tif"
+                    )
                     with TiffWriter(output_name) as tif:
                         tif.write(ensemble_pred)
 
@@ -573,7 +584,9 @@ class UNet(pl.LightningModule):
                         for p in range(len(predictions)):
                             # Save prediction image as tiff file
                             output_name = (
-                                Path(target_folder) / f"fold_{p}" / f"pred_{c:04}.tif"
+                                Path(target_folder)
+                                / f"fold_{p}"
+                                / f"pred_{input_file_names[c].stem}.tif"
                             )
 
                             # Get current prediction
