@@ -1,6 +1,6 @@
 # qute
 
-Leverages and extends several [PyTorch](https://pytorch.org)-based framework and tools.
+Framework to support deep-learning based computer-vision research in microscopy image analysis. Leverages and extends several [PyTorch](https://pytorch.org)-based framework and tools.
 
 * [PyTorch](https://pytorch.org)
 * [PyTorch Lightning](https://www.pytorchlightning.ai/)
