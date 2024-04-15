@@ -23,8 +23,8 @@ from qute.transforms import (
     AddNormalizedDistanceTransformd,
     CellposeLabelReader,
     CustomTIFFReader,
-    ToLabel,
-    ToLabelBatch,
+    OneHotToMask,
+    OneHotToMaskBatch,
 )
 
 
@@ -410,25 +410,25 @@ def test_to_label(tmpdir):
     # Test the 2D data
     #
 
-    # Call ToLabel() and check the output
-    to_label = ToLabel()
+    # Call OneHotToMask() and check the output
+    to_label = OneHotToMask()
     out_oh_2d = to_label(oh_2d)
 
     assert out_oh_2d.shape == (
         1,
         60,
         60,
-    ), "Unexpected shape of result of ToLabel() for 2D data."
+    ), "Unexpected shape of result of OneHotToMask() for 2D data."
     assert torch.equal(
         gt_2d, out_oh_2d
-    ), "Result of ToLabel() for 2D data does not match ground truth."
+    ), "Result of OneHotToMask() for 2D data does not match ground truth."
 
     #
     # Test the 3D data
     #
 
-    # Call ToLabel() on oh_3d and check the output
-    to_label = ToLabel()
+    # Call OneHotToMask() on oh_3d and check the output
+    to_label = OneHotToMask()
     out_oh_3d = to_label(oh_3d)
 
     assert out_oh_3d.shape == (
@@ -436,13 +436,13 @@ def test_to_label(tmpdir):
         10,
         60,
         60,
-    ), "Unexpected shape of result of ToLabel() for 3D data."
+    ), "Unexpected shape of result of OneHotToMask() for 3D data."
     assert torch.equal(
         gt_3d, out_oh_3d
-    ), "Result of ToLabel() for 3D data does not match ground truth."
+    ), "Result of OneHotToMask() for 3D data does not match ground truth."
 
     # Check that other shapes are not supported
-    to_label = ToLabel()
+    to_label = OneHotToMask()
 
     with pytest.raises(ValueError) as e_info:
         # Single 2D image (H, W)
@@ -521,8 +521,8 @@ def test_to_label_batch(tmpdir):
     # Test the batched 2D data
     #
 
-    # Call ToLabel() and check the output
-    to_label_batch = ToLabelBatch()
+    # Call OneHotToMask() and check the output
+    to_label_batch = OneHotToMaskBatch()
     out_oh_2d = to_label_batch(oh_2d)
 
     assert out_oh_2d.shape == (
@@ -530,17 +530,17 @@ def test_to_label_batch(tmpdir):
         1,
         60,
         60,
-    ), "Unexpected shape of result of ToLabel() for 2D data."
+    ), "Unexpected shape of result of OneHotToMask() for 2D data."
     assert torch.equal(
         gt_2d, out_oh_2d
-    ), "Result of ToLabel() for 2D data does not match ground truth."
+    ), "Result of OneHotToMask() for 2D data does not match ground truth."
 
     #
     # Test the 3D data
     #
 
-    # Call ToLabel() on oh_3d and check the output
-    to_label_batch = ToLabelBatch()
+    # Call OneHotToMask() on oh_3d and check the output
+    to_label_batch = OneHotToMaskBatch()
     out_oh_3d = to_label_batch(oh_3d)
 
     assert out_oh_3d.shape == (
@@ -549,13 +549,13 @@ def test_to_label_batch(tmpdir):
         10,
         60,
         60,
-    ), "Unexpected shape of result of ToLabel() for 3D data."
+    ), "Unexpected shape of result of OneHotToMask() for 3D data."
     assert torch.equal(
         gt_3d, out_oh_3d
-    ), "Result of ToLabel() for 3D data does not match ground truth."
+    ), "Result of OneHotToMask() for 3D data does not match ground truth."
 
     # Check that other shapes are not supported
-    to_label_batch = ToLabelBatch()
+    to_label_batch = OneHotToMaskBatch()
 
     with pytest.raises(ValueError) as e_info:
         # Single 2D image (H, W)

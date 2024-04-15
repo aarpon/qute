@@ -21,7 +21,7 @@ import torch
 import torch.nn.functional as F
 from monai.data import MetaTensor
 from monai.transforms import MapTransform, Transform
-from scipy.ndimage import distance_transform_edt
+from scipy.ndimage import binary_erosion, distance_transform_edt
 from skimage.measure import label, regionprops
 from skimage.morphology import ball, disk, erosion
 from tifffile import imread
@@ -513,6 +513,9 @@ class LabelToTwoClassMask(Transform):
             Tensor as with two-class mask.
         """
 
+        if not type(data) in [torch.tensor, monai.data.MetaTensor, np.ndarray]:
+            raise TypeError(f"Unsupported input type {type(data)}.")
+
         # Keep track of whether we are working with MONAI MetaTensor
         is_meta_tensor = type(data) is monai.data.MetaTensor
 
@@ -521,48 +524,43 @@ class LabelToTwoClassMask(Transform):
 
         # Footprint (structuring element) for erosion
         if num_spatial_dims == 2:
-            footprint = disk(self.border_thickness)
+            footprint = torch.tensor(disk(self.border_thickness), dtype=torch.int32)
         else:
-            footprint = ball(self.border_thickness)
+            footprint = torch.tensor(ball(self.border_thickness), dtype=torch.int32)
 
         # Make sure to bring the structuring element to the same
         # number of dimensions as the data
         for d in range(len(data.shape) - num_spatial_dims):
-            footprint = footprint[np.newaxis, :]
+            footprint = footprint.unsqueeze(0)
 
-        # We work on int32 NumPy arrays
-        if type(data) in [torch.tensor, monai.data.MetaTensor]:
-            np_data = data.cpu().numpy().astype(np.int32)
-        elif type(data) is np.ndarray:
-            np_data = data.copy().astype(np.int32)
-        else:
-            raise TypeError(
-                "Data must of type torch.tensor, monai.data.MetaTensor, or np.ndarray"
-            )
+        # Make sure to work with int32 tensors
+        if type(data) is np.ndarray:
+            data = torch.tensor(data)
+        data.to(torch.int32)
 
         # Allocate output
-        out = np.zeros(np_data.shape, dtype=np_data.dtype)
+        out = torch.zeros(data.shape, dtype=data.dtype)
 
         # Process all individual labels
-        for lbl in np.unique(np_data):
+        for lbl in data.unique():
 
             # Ignore background
             if lbl == 0:
                 continue
 
             # Prepare the label for processing
-            bw = np.zeros(data.shape, dtype=np_data.dtype)
-            bw[np_data == lbl] = 1
+            bw = torch.zeros(data.shape, dtype=data.dtype)
+            bw[data == lbl] = 1
 
             # Perform erosion
-            eroded_bw = erosion(bw, footprint)
+            eroded_bw = binary_erosion(bw, footprint)
 
             # Store object and border it in the output
             out[bw == 1] = 2
             out[eroded_bw == 1] = 1
 
-        # Pack the result into a (Meta)Tensor
-        out = torch.tensor(out, dtype=torch.int32)
+        # If needed, pack the result into a MetaTensor and
+        # transfer the metadata dictionary.
         if is_meta_tensor:
             out = MetaTensor(out, meta=data.meta.copy())
 
@@ -812,9 +810,9 @@ class Scaled(MapTransform):
         return d
 
 
-class ToLabel(Transform):
+class OneHotToMask(Transform):
     """
-    Converts Tensor from one-hot representation to 2D/3D label image.
+    Converts Tensor from one-hot representation to 2D/3D mask image.
     Supported and expected are either 2D data of shape (C, H, W) or 3D
     data of shape (C, D, H, W).
 
@@ -846,9 +844,9 @@ class ToLabel(Transform):
             )
 
 
-class ToLabelBatch(Transform):
+class OneHotToMaskBatch(Transform):
     """
-    Converts batches of Tensors from one-hot representation to 2D/3D label image.
+    Converts batches of Tensors from one-hot representation to 2D/3D mask image.
     Supported and expected are either batches of 2D data of shape (B, C, H, W) or
     batches of 3D data of shape (B, C, D, H, W).
 

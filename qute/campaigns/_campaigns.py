@@ -33,8 +33,8 @@ from qute.transforms import (
     LabelToTwoClassMaskd,
     MinMaxNormalize,
     MinMaxNormalized,
+    OneHotToMaskBatch,
     Scale,
-    ToLabelBatch,
     ToPyTorchLightningOutputd,
     ZNormalize,
     ZNormalized,
@@ -220,7 +220,7 @@ class SegmentationCampaignTransforms(CampaignTransforms):
 
     def get_post_inference_transforms(self):
         """Define post inference transforms to apply after prediction on patch."""
-        post_inference_transforms = Compose([ToLabelBatch()])
+        post_inference_transforms = Compose([OneHotToMaskBatch()])
         return post_inference_transforms
 
     def get_post_full_inference_transforms(self):
@@ -411,7 +411,7 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
         """Define post inference transforms to apply after prediction on patch."""
         post_inference_transforms = Compose(
             [
-                ToLabelBatch(),
+                OneHotToMaskBatch(),
             ]
         )
         return post_inference_transforms
@@ -421,7 +421,7 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
         if self.to_isotropic:
             post_full_inference_transforms = Compose(
                 [
-                    ToLabelBatch(),
+                    OneHotToMaskBatch(),
                     CustomResampler(
                         target_voxel_size=self.voxel_size,
                         input_voxel_size=self.target_voxel_size,
@@ -433,7 +433,7 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
         else:
             post_full_inference_transforms = Compose(
                 [
-                    ToLabelBatch(),
+                    OneHotToMaskBatch(),
                 ]
             )
         return post_full_inference_transforms
