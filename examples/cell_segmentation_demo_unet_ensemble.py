@@ -26,6 +26,7 @@ from pytorch_lightning.callbacks import (
 )
 from torch.optim.lr_scheduler import OneCycleLR
 
+from qute import device
 from qute.campaigns import SegmentationCampaignTransforms
 from qute.data.demos import CellSegmentationDemo
 from qute.models.unet import UNet
@@ -36,6 +37,8 @@ INFERENCE_BATCH_SIZE = 4
 NUM_PATCHES = 1
 PATCH_SIZE = (640, 640)
 LEARNING_RATE = 0.001
+INCLUDE_BACKGROUND = True
+CLASS_NAMES = ["background", "cell", "membrane"]
 try:
     PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
 except AssertionError:
@@ -66,9 +69,10 @@ if __name__ == "__main__":
         inference_batch_size=INFERENCE_BATCH_SIZE,
     )
 
-    # Run the prepare/setup steps
+    # Calculate the number of steps per epoch
     data_module.prepare_data()
-    data_module.setup(stage="train")
+    data_module.setup("train")
+    steps_per_epoch = len(data_module.train_dataloader())
 
     # Loss
     criterion = DiceCELoss(include_background=True, to_onehot_y=False, softmax=True)
@@ -85,7 +89,7 @@ if __name__ == "__main__":
         # Learning rate scheduler
         lr_scheduler_class = OneCycleLR
         lr_scheduler_parameters = {
-            "total_steps": len(data_module.train_dataloader()) * MAX_EPOCHS,
+            "total_steps": steps_per_epoch * MAX_EPOCHS,
             "div_factor": 5.0,
             "max_lr": LEARNING_RATE,
             "pct_start": 0.5,  # Fraction of total_steps at which the learning rate starts decaying after reaching max_lr
@@ -97,6 +101,7 @@ if __name__ == "__main__":
             campaign_transforms=campaign_transforms,
             in_channels=1,
             out_channels=3,
+            class_names=CLASS_NAMES,
             num_res_units=4,
             criterion=criterion,
             channels=(16, 32, 64),
@@ -118,8 +123,8 @@ if __name__ == "__main__":
 
         # Instantiate the Trainer
         trainer = pl.Trainer(
-            default_root_dir=RESULTS_DIR / EXP_NAME / f"fold_{fold}",
-            accelerator="gpu",
+            default_root_dir=RESULTS_DIR / f"fold_{fold}",
+            accelerator=device.get_accelerator(),
             devices=1,
             precision=PRECISION,
             # callbacks=[model_checkpoint, early_stopping, lr_monitor],

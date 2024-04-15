@@ -133,7 +133,7 @@ if __name__ == "__main__":
 
     # Instantiate the Trainer
     trainer = pl.Trainer(
-        default_root_dir=RESULTS_DIR / EXP_NAME,
+        default_root_dir=RESULTS_DIR,
         accelerator=device.get_accelerator(),
         devices=1,
         precision=PRECISION,
