@@ -254,6 +254,7 @@ class UNet(pl.LightningModule):
         overlap: float = 0.25,
         transpose: bool = True,
         output_dtype: Optional[np.dtype] = None,
+        prefix: str = "pred_",
     ):
         """Run inference on full images using given model.
 
@@ -280,6 +281,9 @@ class UNet(pl.LightningModule):
 
         output_dtype: Optional[np.dtype]
             Optional NumPy dtype for the output image. Omit to save the output of inference without casting.
+
+        prefix: str = "pred_"
+            Prefix to append to the file name. Set to "" to keep the original file name.
 
         Returns
         -------
@@ -353,7 +357,7 @@ class UNet(pl.LightningModule):
 
                     # Save prediction image as tiff file
                     output_name = (
-                        Path(target_folder) / f"pred_{input_file_names[c].stem}.tif"
+                        Path(target_folder) / f"{prefix}{input_file_names[c].stem}.tif"
                     )
                     c += 1
                     with TiffWriter(output_name) as tif:
@@ -381,6 +385,8 @@ class UNet(pl.LightningModule):
         transpose: bool = True,
         save_individual_preds: bool = False,
         output_dtype: Optional[np.dtype] = None,
+        prefix: str = "pred_",
+        ensemble_prefix: str = "ensemble_",
     ):
         """Run inference on full images using given model.
 
@@ -426,6 +432,12 @@ class UNet(pl.LightningModule):
 
         output_dtype: Optional[np.dtype]
             Optional NumPy dtype for the output image. Omit to save the output of inference without casting.
+
+        prefix: str = "pred_"
+            Prefix to append to the file name. Set to "" to keep the original file name.
+
+        ensemble_prefix: str = "ensemble_pred_"
+            Prefix to append to the ensemble prediction file name. Set to "" to keep the original file name.
 
         Returns
         -------
@@ -570,7 +582,7 @@ class UNet(pl.LightningModule):
                     # Save ensemble prediction image as tiff file
                     output_name = (
                         Path(target_folder)
-                        / f"ensemble_pred_{input_file_names[c].stem}.tif"
+                        / f"{ensemble_prefix}{input_file_names[c].stem}.tif"
                     )
                     with TiffWriter(output_name) as tif:
                         tif.write(ensemble_pred)
@@ -586,7 +598,7 @@ class UNet(pl.LightningModule):
                             output_name = (
                                 Path(target_folder)
                                 / f"fold_{p}"
-                                / f"pred_{input_file_names[c].stem}.tif"
+                                / f"{prefix}{input_file_names[c].stem}.tif"
                             )
 
                             # Get current prediction
