@@ -10,10 +10,8 @@
 # ******************************************************************************
 
 import pathlib
-import random
-from copy import deepcopy
 from pathlib import Path
-from typing import Optional, Union
+from typing import NamedTuple, Optional, Union
 
 import monai.data
 import numpy as np
@@ -21,9 +19,9 @@ import torch
 import torch.nn.functional as F
 from monai.data import MetaTensor
 from monai.transforms import MapTransform, Transform
+from nd2reader import ND2Reader
 from scipy.ndimage import binary_erosion, distance_transform_edt
-from skimage.measure import label, regionprops
-from skimage.morphology import ball, disk, erosion
+from skimage.morphology import ball, disk
 from tifffile import imread
 
 from qute.transforms.util import (
@@ -75,6 +73,329 @@ class CellposeLabelReader(Transform):
             return d["masks"].astype(np.int32)
         else:
             return d["masks"]
+
+
+class CustomND2Reader(Transform):
+    """Loads a Nikon ND2 file using the nd2reader library."""
+
+    def __init__(
+        self,
+        ensure_channel_first: bool = True,
+        dtype: torch.dtype = torch.float32,
+        as_meta_tensor: bool = False,
+        voxel_size: Optional[tuple] = None,
+        voxel_size_from_file: bool = False,
+    ) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+
+        ensure_channel_first: bool
+            Ensure that the image is in the channel first format.
+
+        dtype: torch.dtype = torch.float32
+            Type of the image.
+
+        as_meta_tensor: bool (default = False)
+            Set to True to return a MONAI MetaTensor, set to False for a PyTorch Tensor.
+            If both `as_meta_tensor` is True and `voxel_size` is specified, `ensure_channel_first`
+            must be True.
+
+        voxel_size: Optional[tuple]
+            Set the voxel size [y, x, z] as metadata to the MetaTensor (only if `as_meta_tensor` is
+            True; otherwise it is ignored).
+            If both `as_meta_tensor` is True and `voxel_size` is specified, `ensure_channel_first`
+            must be True.
+
+        voxel_size_from_file: Optional[tuple]
+            If voxel size is not specified, as_meta_tensor is set to True, and set voxel_size_from_file is True
+            the voxel size is read from the file and set it [y, x, z] as metadata to the MetaTensor.
+            If both `as_meta_tensor` is True and either `voxel_size` is specified or voxel_size_from_file
+            is True, then `ensure_channel_first` must also be True.
+        """
+        super().__init__()
+        self.ensure_channel_first = ensure_channel_first
+        self.dtype = dtype
+        self.as_meta_tensor = as_meta_tensor
+        self.voxel_size = tuple(voxel_size) if voxel_size is not None else None
+        self.voxel_size_from_file = voxel_size_from_file
+
+    def _parse_voxel_sizes(self, reader, meta) -> tuple[float, ...]:
+        """
+        Parse metadata of ND2 file and extracts pixel size and z step.
+        """
+
+        # Build the array step by step
+        voxel_sizes = [0.0, 0.0, 0.0]  # y, x, z
+
+        if "pixel_microns" in reader.metadata:
+            p = reader.metadata["pixel_microns"]
+            voxel_sizes[0] = p
+            voxel_sizes[1] = p
+
+        # If there is only one plane, we leave the z step to 0.0
+        z_coords = None
+        if meta.num_planes > 1:
+            if (
+                "z_coordinates" in reader.metadata
+                and reader.metadata["z_coordinates"] is not None
+            ):
+                z_coords = np.array(reader.metadata["z_coordinates"])
+            elif (
+                hasattr(reader.parser._raw_metadata, "z_data")
+                and reader.parser._raw_metadata.z_data is not None
+            ):
+                z_coords = np.array(reader.parser._raw_metadata.z_data)
+            else:
+                print("Could not read z coordinates!")
+
+        if z_coords is not None:
+            z_steps = np.zeros(meta.num_series * meta.num_timepoints)
+            for i, z in enumerate(range(0, len(z_coords), meta.num_planes)):
+                z_range = z_coords[z : z + meta.num_planes]
+                z_steps[i] = np.mean(np.diff(z_range))
+
+            voxel_sizes[2] = z_steps.mean()
+
+        # Return the voxel sizes
+        return tuple(voxel_sizes)
+
+    def _parse_geometry(self, reader):
+        """
+        Parse geometry of ND2 file and sets `bundle_axis` and `_iter_axis` properties of ND2Reader.
+        """
+
+        # Initialize _geometry
+        num_series: int = 1
+        num_timepoints: int = 1
+        num_channels: int = 1
+        num_planes: int = 1
+        geometry: str = "xy"
+        iter_axis: str = ""
+
+        class Meta(NamedTuple):
+            geometry: str
+            num_planes: int
+            num_channels: int
+            num_timepoints: int
+            num_series: int
+            iter_axis: str
+
+        if "z" in reader.sizes and reader.sizes["z"] > 1:
+            num_planes = reader.sizes["z"]
+            geometry = "z" + geometry
+        if "c" in reader.sizes and reader.sizes["c"] > 1:
+            num_channels = reader.sizes["c"]
+            geometry = "c" + geometry
+        if "t" in reader.sizes and reader.sizes["t"] > 1:
+            num_timepoints = reader.sizes["t"]
+            geometry = "t" + geometry
+
+        reader.bundle_axes = geometry
+
+        # Axis to iterate upon
+        if "z" in reader.sizes:
+            reader.iter_axes = ["z"]
+        if "c" in reader.sizes:
+            reader.iter_axes = ["c"]
+        if "t" in reader.sizes:
+            reader.iter_axes = ["t"]
+        if "v" in reader.sizes:
+            self._num_series = reader.sizes["v"]
+            reader.iter_axes = ["v"]
+
+        # Set the main axis for iteration
+        iter_axis = reader.iter_axes[0]
+
+        # Fill the metadata tuple
+        meta = Meta(
+            geometry=geometry,
+            num_planes=num_planes,
+            num_channels=num_channels,
+            num_timepoints=num_timepoints,
+            num_series=num_series,
+            iter_axis=iter_axis,
+        )
+
+        return meta
+
+    def __call__(
+        self,
+        file_name: Union[Path, str],
+        series_num: int = 0,
+        timepoint: int = 0,
+        channel: int = 0,
+        plane: Optional[int] = None,
+    ) -> torch.Tensor:
+        """
+        Load the file and return the image/labels Tensor.
+
+        Parameters
+        ----------
+
+        file_name: str
+            File name
+
+        series_num: int = 0
+            Number of series to read.
+
+        timepoint: int = 0
+            Timepoint to read.
+
+        channel: int = 0
+            Channel to read.
+
+        plane: Optional[int] = None
+            Plane to read. If not specified, and the dataset is 3D, the whole stack will be returned.
+
+        Returns
+        -------
+
+        tensor: torch.Tensor | monai.MetaTensor
+            Tensor with requested type and shape.
+        """
+
+        # Check the consistency of the input arguments
+        if self.as_meta_tensor and self.voxel_size is not None:
+            if not self.ensure_channel_first:
+                raise ValueError(
+                    f"If both `as_meta_tensor` is True and `voxel_size` is specified,"
+                    f"`ensure_channel_first` must be True."
+                )
+
+        # File path
+        file_path = str(Path(file_name).resolve())
+
+        # Load and process image
+        reader = ND2Reader(file_path)
+        meta = self._parse_geometry(reader)
+
+        # Check the compatibility of the requested dimensions
+        if series_num + 1 > meta.num_series:
+            raise ValueError("The requested series number does not exist.")
+
+        if timepoint + 1 > meta.num_timepoints:
+            raise ValueError("The requested time point does not exist.")
+
+        if channel + 1 > meta.num_channels:
+            raise ValueError("The requested channel does not exist.")
+
+        if plane is not None and plane + 1 > meta.num_planes:
+            raise ValueError("The requested plane does not exist.")
+
+        match meta.geometry:
+            case "xy":
+                data = torch.Tensor(reader[0].astype(np.float32))
+            case _:
+                raise NotImplementedError(
+                    "Support for this geometry is not implemented yet."
+                )
+
+        if self.as_meta_tensor:
+            if self.voxel_size is None and self.voxel_size_from_file:
+                # Get the voxel size
+                self.voxel_size = self._parse_voxel_sizes(reader, meta)
+            else:
+                self.voxel_size = tuple([1.0, 1.0, 1.0])
+
+            # To pass a voxel size to the MetaTensor, we need to define the
+            # corresponding affine transform:
+            affine = torch.tensor(
+                [
+                    [self.voxel_size[0], 0.0, 0.0, 0.0],
+                    [0.0, self.voxel_size[1], 0.0, 0.0],
+                    [0.0, 0.0, self.voxel_size[2], 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            )
+            data = MetaTensor(data, affine=affine)
+
+        if self.ensure_channel_first:
+            data = data.unsqueeze(0)
+        if self.dtype is not None:
+            data = data.to(self.dtype)
+        return data
+
+
+class CustomND2Readerd(MapTransform):
+    """Loads TIFF files using the tifffile library."""
+
+    def __init__(
+        self,
+        keys: tuple[str, ...] = ("image", "label"),
+        ensure_channel_first: bool = True,
+        dtype: torch.dtype = torch.float32,
+        as_meta_tensor: bool = False,
+        voxel_size: Optional[tuple] = None,
+        voxel_size_from_file: bool = False,
+    ) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+
+        keys: tuple[str]
+            Keys for the data dictionary.
+
+        ensure_channel_first: bool
+            Ensure that the image is in the channel first format.
+
+        dtype: torch.dtype = torch.float32
+            Type of the image.
+
+        as_meta_tensor: bool (default = False)
+            Set to True to return a MONAI MetaTensor, set to False for a PyTorch Tensor.
+            If both `as_meta_tensor` is True and `voxel_size` is specified, `ensure_channel_first`
+            must be True.
+
+        voxel_size: Optional[tuple]
+            Set the voxel size [y, x, z] as metadata to the MetaTensor (only if `as_meta_tensor` is
+            True; otherwise it is ignored).
+            If both `as_meta_tensor` is True and `voxel_size` is specified, `ensure_channel_first`
+            must be True.
+
+        voxel_size_from_file: Optional[tuple]
+            If voxel size is not specified, as_meta_tensor is set to True, and set voxel_size_from_file is True
+            the voxel size is read from the file and set it [y, x, z] as metadata to the MetaTensor.
+            If both `as_meta_tensor` is True and either `voxel_size` is specified or voxel_size_from_file
+            is True, then `ensure_channel_first` must also be True.
+        """
+        super().__init__(keys=keys)
+        self.keys = keys
+        self.tensor_reader = CustomND2Reader(
+            ensure_channel_first=ensure_channel_first,
+            dtype=dtype,
+            as_meta_tensor=as_meta_tensor,
+            voxel_size=voxel_size,
+            voxel_size_from_file=voxel_size_from_file,
+        )
+
+    def __call__(self, data: dict) -> dict:
+        """
+        Load the files and return the image and labels Tensors in the data dictionary.
+
+        Returns
+        -------
+
+        data: dict
+            Updated dictionary with normalized "image" tensor.
+        """
+
+        # Work on a copy of the dictionary
+        d = dict(data)
+
+        for key in self.keys:
+            # Get arguments
+            image_path = str(Path(d[key]).resolve())
+
+            # Use the single tensor reader
+            out = self.tensor_reader(image_path)
+
+            # Assign the tensor to the corresponding key
+            d[key] = out  # (Meta)Tensor(image)
+
+        return d
 
 
 class CustomTIFFReader(Transform):
@@ -153,7 +474,7 @@ class CustomTIFFReader(Transform):
                         "The size of `voxel_size` does not natch the dimensionality of the image."
                     )
             else:
-                self.voxel_size = tuple((1.0 for _ in range(data.ndim)))
+                self.voxel_size = tuple([1.0, 1.0, 1.0])
 
             # To pass a voxel size to the MetaTensor, we need to define the
             # corresponding affine transform:
@@ -175,7 +496,7 @@ class CustomTIFFReader(Transform):
 
 
 class CustomTIFFReaderd(MapTransform):
-    """Loads a TIFF file using the tifffile library."""
+    """Loads TIFF files using the tifffile library."""
 
     def __init__(
         self,
@@ -308,7 +629,7 @@ class CustomResampler(Transform):
         # Keep track of whether we are working with MONAI MetaTensor
         is_meta_tensor = type(data) is monai.data.MetaTensor
 
-        # If input_voxel_size is not set and we have a MetaTensor, let's
+        # If input_voxel_size is not set, and we have a MetaTensor, let's
         # try to extract the calibration from the metadata
         if self.input_voxel_size is None and is_meta_tensor:
             if hasattr(data, "affine"):
@@ -513,7 +834,7 @@ class LabelToTwoClassMask(Transform):
             Tensor as with two-class mask.
         """
 
-        if not type(data) in [torch.tensor, monai.data.MetaTensor, np.ndarray]:
+        if not type(data) in [torch.Tensor, monai.data.MetaTensor, np.ndarray]:
             raise TypeError(f"Unsupported input type {type(data)}.")
 
         # Keep track of whether we are working with MONAI MetaTensor
@@ -1045,133 +1366,6 @@ class ClippedZNormalized(MapTransform):
         return d
 
 
-class SelectPatchesByLabeld(MapTransform):
-    """Pick labels at random and extract the requested window from both label and image."""
-
-    def __init__(
-        self,
-        image_key: str = "image",
-        label_key: str = "label",
-        patch_size: tuple[int, int] = (128, 128),
-        label_indx: int = 1,
-        num_patches: int = 1,
-        no_batch_dim: bool = False,
-    ) -> None:
-        """Constructor
-
-        Parameters
-        ----------
-
-        image_key: str
-            Key for the image in the data dictionary.
-        label_key: str
-            Key for the label in the data dictionary.
-        patch_size: tuple[int, int]
-            Size of the window to be extracted centered on the selected label.
-        num_patches: int
-            Number of stacked labels to be returned. The Transform will sample with repetitions if the number of objects
-            in the image with the requested label index is lower than the number of requested windows.
-        no_batch_dim: bool
-            If only one window is returned, the batch dimension can be omitted, to return a (channel, height, width)
-            tensor. This ensures that the dataloader does not require a custom collate function to handle the double
-            batching. If num_windows > 1, this parameter is ignored.
-        """
-        super().__init__(keys=[image_key, label_key])
-        self.label_key = label_key
-        self.image_key = image_key
-        self.patch_size = patch_size
-        self.label_indx = label_indx
-        self.num_patches = num_patches
-        self.no_batch_dim = no_batch_dim
-
-    def __call__(self, data: dict) -> list[dict]:
-        """
-        Select the requested number of labels from the label image, and extract region of defined window size for both
-        image and label in stacked Tensors in the data dictionary.
-
-        Returns
-        -------
-
-        data: list[dict]
-            List of dictionaries with extracted windows for the "image" and "label" tensors.
-        """
-
-        # Get the 2D label image to work with
-        label_img = label(data[self.label_key][..., :, :].squeeze() == self.label_indx)
-        sy, sx = label_img.shape
-
-        # Get the window half-side lengths
-        wy = self.patch_size[0] // 2
-        wx = self.patch_size[1] // 2
-
-        # Get the number of distinct objects in the image with the requested label index
-        regions = regionprops(label_img)
-
-        # Build a list of valid labels, by dropping all labels that are too close to the
-        # borders to allow for extracting a valid window of requested size.
-        valid_labels = []
-        cached_regions = {}
-        for region in regions:
-
-            # Get the centroid
-            cy, cx = region.centroid
-
-            # Get the boundaries of the area to extract
-            cy = round(cy)
-            cx = round(cx)
-
-            # Get the boundaries
-            y0 = cy - wy
-            y = cy + wy
-            x0 = cx - wx
-            x = cx + wx
-
-            if y0 >= 0 and y < sy and x0 >= 0 and x < sx:
-                # This window is completely contained in the image, keep (and cache) it
-                valid_labels.append(region.label)
-                cached_regions[region.label] = {"y0": y0, "y": y, "x0": x0, "x": x}
-
-        # Number of valid labels in the image
-        num_labels = len(valid_labels)
-
-        # Get the range of labels to select from
-        if num_labels >= self.num_patches:
-            selected_labels = random.sample(valid_labels, k=self.num_patches)
-        else:
-            # Allow for repetitions
-            selected_labels = random.choices(valid_labels, k=self.num_patches)
-
-        # Initialize returned list with shallow copy to preserve key ordering
-        ret: list = [dict(data) for _ in range(self.num_patches)]
-
-        # Meta keys
-        meta_keys = set(data.keys()).difference({self.label_key, self.image_key})
-
-        # Deep copy all the unmodified data
-        if len(meta_keys) > 0:
-            for i in range(self.num_patches):
-                for key in meta_keys:
-                    ret[i][key] = deepcopy(data[key])
-
-        # Extract the areas around the selected labels
-        for i, selected_label in enumerate(selected_labels):
-            # Extract the cached region boundaries
-            region = cached_regions[selected_label]
-
-            # Get the region
-            y0 = region["y0"]
-            y = region["y"]
-            x0 = region["x0"]
-            x = region["x"]
-
-            # Store it
-            ret[i][self.image_key] = data[self.image_key][..., y0:y, x0:x]
-            ret[i][self.label_key] = data[self.label_key][..., y0:y, x0:x]
-
-        # Return the new data
-        return ret
-
-
 class AddFFT2(Transform):
     """Calculates the Fourier transform of the selected single-channel image and adds its z-normalized real
     and imaginary parts as two additional planes."""
@@ -1411,13 +1605,11 @@ class AddBorderd(MapTransform):
         return d
 
 
-class AddNormalizedDistanceTransform(Transform):
-    """Calculates and normalizes the distance transform per region of the selected pixel class from a labels image
-    and adds it as an additional plane to the image."""
+class NormalizedDistanceTransform(Transform):
+    """Calculates and normalizes the distance transform per region of the selected pixel class from a labels image."""
 
     def __init__(
         self,
-        pixel_class: int = 1,
         reverse: bool = False,
         do_not_zero: bool = False,
         in_place: bool = True,
@@ -1426,9 +1618,6 @@ class AddNormalizedDistanceTransform(Transform):
 
         Parameters
         ----------
-
-        pixel_class: int
-            Class of the pixels to be used for calculating the distance transform.
 
         reverse: bool
             Whether to reverse the direction of the normalized distance transform: from 1.0 at the center of the
@@ -1442,7 +1631,6 @@ class AddNormalizedDistanceTransform(Transform):
             Set to True to modify the Tensor in place.
         """
         super().__init__()
-        self.pixel_class = pixel_class
         self.reverse = reverse
         self.do_not_zero = do_not_zero
         self.in_place = in_place
@@ -1459,8 +1647,22 @@ class AddNormalizedDistanceTransform(Transform):
             Updated array with the normalized distance transform added as a new plane.
         """
 
+        if not type(data) in [torch.Tensor, monai.data.MetaTensor, np.ndarray]:
+            raise TypeError(f"Unsupported input type {type(data)}.")
+
+        # Do we have a NumPy array?
+        is_np_array = type(data) is np.ndarray
+
+        # Keep track of whether we are working with MONAI MetaTensor
+        is_meta_tensor = False
+        meta = None
+        if not is_np_array:
+            is_meta_tensor = type(data) is monai.data.MetaTensor
+            if is_meta_tensor:
+                meta = data.meta.copy()
+
         # This Transform works on NumPy arrays
-        if data.dtype in [torch.float32, torch.int32]:
+        if not is_np_array:
             data_label = np.array(data.cpu())
         else:
             data_label = data
@@ -1486,24 +1688,22 @@ class AddNormalizedDistanceTransform(Transform):
             in_place=True,
         )
 
-        # Add the scaled distance transform as a new channel to the input image
-        data = torch.cat(
-            (data, torch.tensor(dt).to(torch.float32)),
-            dim=0,
-        )
+        # If we had a tensor, cast back to a tensor
+        if not is_np_array:
+            dt = torch.from_numpy(dt)
+            if is_meta_tensor:
+                dt = MetaTensor(dt, meta=meta)
 
         # Return the updated data dictionary
-        return data
+        return dt
 
 
-class AddNormalizedDistanceTransformd(MapTransform):
-    """Calculates and normalizes the distance transform per region from the labels image (from an instance segmentation)
-    and adds it as an additional plane to the image."""
+class NormalizedDistanceTransformd(MapTransform):
+    """Calculates and normalizes the distance transform per region from the labels image (from an instance segmentation)."""
 
     def __init__(
         self,
-        image_key: str = "image",
-        label_key: str = "label",
+        keys: tuple[str, ...] = ("label",),
         reverse: bool = False,
         do_not_zero: bool = False,
     ) -> None:
@@ -1512,11 +1712,8 @@ class AddNormalizedDistanceTransformd(MapTransform):
         Parameters
         ----------
 
-        image_key: str
-            Key for the image in the data dictionary.
-
-        label_key: str
-            Key for the label in the data dictionary.
+        keys: tuple[str, ...]
+            Keys fot the tensor to be transformed. This transform makes sense for label or mask images only.
 
         reverse: bool
             Whether to reverse the direction of the normalized distance transform: from 1.0 at the center of the
@@ -1526,59 +1723,29 @@ class AddNormalizedDistanceTransformd(MapTransform):
             This is only considered if `reverse` is True. Set to True not to allow that the center pixels in each
             region have an inverse distance transform of 0.0.
         """
-        super().__init__(keys=[image_key, label_key])
-        self.image_key = image_key
-        self.label_key = label_key
-        self.reverse = reverse
-        self.do_not_zero = do_not_zero
+        super().__init__(keys=keys)
+        self.keys = keys
+        self._transform = NormalizedDistanceTransform(
+            reverse=reverse, do_not_zero=do_not_zero
+        )
 
     def __call__(self, data: dict) -> dict:
         """
-        Calculates and normalizes the distance transform per region from the labels image (from an instance segmentation)
-        and adds it as an additional plane to the image
+        Calculates and normalizes the distance transform per region from the labels image (from an instance segmentation).
 
         Returns
         -------
 
         data: dict
-            Updated dictionary with modified "image" tensor.
+            Updated dictionary with modified tensors.
         """
 
         # Make a copy of the input dictionary
         d = dict(data)
 
-        # This Transform works on NumPy arrays
-        if d["label"].dtype in [torch.float32, torch.int32]:
-            data_label = np.array(d["label"].cpu())
-        else:
-            data_label = d[self.label_key]
-
-        # Make sure that the dimensions of the data are correct
-        if not (data_label.ndim in [3, 4] and data_label.shape[0] == 1):
-            raise ValueError(
-                "The image array must be of dimensions (1 { x depth} x height x width)!"
-            )
-
-        # Binarize the labels
-        bw = data_label > 0
-
-        # Calculate distance transform
-        dt = distance_transform_edt(bw, return_distances=True)
-
-        # Normalize the distance transform by object in place
-        dt = scale_dist_transform_by_region(
-            dt,
-            data_label,
-            reverse=self.reverse,
-            do_not_zero=self.do_not_zero,
-            in_place=True,
-        )
-
-        # Add the scaled distance transform as a new channel to the input image
-        d[self.image_key] = torch.cat(
-            (d[self.image_key], torch.tensor(dt).to(torch.float32)),
-            dim=0,
-        )
+        for key in self.keys:
+            dt = self._transform(d[key])
+            d[key] = dt
 
         # Return the updated data dictionary
         return d
