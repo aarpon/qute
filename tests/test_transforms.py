@@ -12,17 +12,21 @@
 import zipfile
 from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
 from monai.data import MetaTensor
 from monai.transforms import Spacing
+from tifffile import imread, imwrite
 
 from qute.transforms import (
     AddBorderd,
-    AddNormalizedDistanceTransform,
-    AddNormalizedDistanceTransformd,
     CellposeLabelReader,
+    CustomND2Reader,
+    CustomND2Readerd,
     CustomTIFFReader,
+    NormalizedDistanceTransform,
+    NormalizedDistanceTransformd,
     OneHotToMask,
     OneHotToMaskBatch,
 )
@@ -328,7 +332,7 @@ def test_add_normalized_transform(extract_test_transforms_data):
     assert len(torch.unique(label)) == 69, "Wrong number of labels."
 
     #
-    # AddNormalizedDistanceTransformd
+    # NormalizedDistanceTransformd
     #
 
     # Create the dictionary
@@ -336,42 +340,37 @@ def test_add_normalized_transform(extract_test_transforms_data):
     data = {"image": image, "label": label}
 
     # Pass it to the Transform
-    ndt = AddNormalizedDistanceTransformd(
-        image_key="image", label_key="label", reverse=True, do_not_zero=True
-    )
+    ndt = NormalizedDistanceTransformd(keys=("label",), reverse=True, do_not_zero=True)
     data_out = ndt(data)
 
-    assert data_out["image"].shape == (2, 26, 300, 300), "Unexpected image shape."
+    assert data_out["image"].shape == (1, 26, 300, 300), "Unexpected image shape."
+    assert data_out["label"].shape == (1, 26, 300, 300), "Unexpected labels shape."
+    assert torch.all(data_out["image"] == 0.0)
     assert (
-        torch.min(data_out["image"][1, :, :, :][data_out["image"][1, :, :, :] > 0])
-        == 0.1250
+        torch.min(data_out["label"][data_out["label"] > 0]) == 0.1250
     ), "Unexpected minimum pixel value."
-    assert (
-        torch.max(data_out["image"][1, :, :, :]) == 1.0
-    ), "Unexpected maximum pixel value."
+    assert torch.max(data_out["label"] == 1.0), "Unexpected maximum pixel value."
 
     #
-    # AddNormalizedDistanceTransform
+    # NormalizedDistanceTransform
     #
 
     # Load TIFF file with (dtype=torch.int32)
-    reader = CustomTIFFReader(dtype=torch.int32)
+    reader = CustomTIFFReader(dtype=torch.int32, as_meta_tensor=True)
     label = reader(Path(__file__).parent / "data" / "labels.tif")
 
     # Transform the image
-    ndt = AddNormalizedDistanceTransform(reverse=True, do_not_zero=True)
+    ndt = NormalizedDistanceTransform(reverse=True, do_not_zero=True)
     label_out = ndt(label)
 
-    assert label_out.shape == (2, 26, 300, 300), "Unexpected image shape."
+    assert label_out.shape == (1, 26, 300, 300), "Unexpected image shape."
     assert (
-        torch.min(label_out[1, :, :, :][label_out[1, :, :, :] > 0]) == 0.1250
+        torch.min(label_out[label_out > 0]) == 0.1250
     ), "Unexpected minimum pixel value."
-    assert torch.max(label_out[1, :, :, :]) == 1.0, "Unexpected maximum pixel value."
+    assert torch.max(label_out) == 1.0, "Unexpected maximum pixel value."
 
     # Compare with the previous result
-    assert torch.all(
-        data_out["image"][1, :, :, :] == label_out[1, :, :, :]
-    ), "Unexpected result."
+    assert torch.all(data_out["label"] == label_out), "Unexpected result."
 
 
 def test_to_label(tmpdir):
@@ -564,3 +563,49 @@ def test_to_label_batch(tmpdir):
     with pytest.raises(ValueError) as e_info:
         # 5 batches of 3D images (5, B, C, D, H, W)
         _ = to_label_batch(torch.zeros((5, 3, 3, 10, 60, 60), dtype=torch.int32))
+
+
+def test_normalized_inverse_distance_transform(tmpdir):
+
+    #
+    # 3D
+    #
+
+    # CDHW
+    label_3d = imread(Path(__file__).parent / "data" / "labels.tif")
+
+    # Add channel dimension
+    label_3d_c = label_3d[np.newaxis, :]
+
+    # Process
+    data_3d = {"label": label_3d_c}
+    ndt = NormalizedDistanceTransformd(keys=("label",), reverse=True, do_not_zero=True)
+    data_3d_t = ndt(data_3d)
+
+    # Test
+    assert data_3d_t["label"].shape == label_3d_c.shape, "Unexpected output shape."
+    assert (
+        torch.max(data_3d_t["label"]) == 1.0
+    ), "The tranform does not appear to have been normalized correctly."
+
+    #
+    # 2D
+    #
+
+    # CHW
+    label_2d = label_3d[17]
+
+    # Add channel dimension
+    label_2d_c = label_2d[np.newaxis, :]
+
+    # Process
+    data_2d = {"label": label_2d_c}
+    ndt = NormalizedDistanceTransformd(keys=("label",), reverse=True, do_not_zero=True)
+    data_2d_t = ndt(data_2d)
+    assert data_2d_t["label"].shape == label_2d_c.shape, "Unexpected output shape."
+
+    # Test
+    assert data_2d_t["label"].shape == label_2d_c.shape, "Unexpected output shape."
+    assert (
+        torch.max(data_2d_t["label"]) == 1.0
+    ), "The tranform does not appear to have been normalized correctly."

@@ -21,6 +21,7 @@ from monai.data import MetaTensor
 from monai.transforms import MapTransform, Transform
 from nd2reader import ND2Reader
 from scipy.ndimage import binary_erosion, distance_transform_edt
+from skimage.measure import regionprops
 from skimage.morphology import ball, disk
 from tifffile import imread
 
@@ -1613,6 +1614,7 @@ class NormalizedDistanceTransform(Transform):
         reverse: bool = False,
         do_not_zero: bool = False,
         in_place: bool = True,
+        with_batch_dim: bool = False,
     ) -> None:
         """Constructor
 
@@ -1629,11 +1631,122 @@ class NormalizedDistanceTransform(Transform):
 
         in_place: bool (optional, default is True)
             Set to True to modify the Tensor in place.
+
+        with_batch_dim: bool (Optional, default is False)
+            Whether the input tensor has a batch dimension or not. This is to distinguish between the
+            2D case (B, C, H, W) and the 3D case (C, D, H, W). All other supported cases are clear.
         """
         super().__init__()
         self.reverse = reverse
         self.do_not_zero = do_not_zero
         self.in_place = in_place
+        self.with_batch_dim = with_batch_dim
+
+    def _extract_subvolume(self, image, bbox):
+        """
+        Extracts a subset from a given 2D or 3D image using a bounding box.
+
+        Parameters:
+        image (np.ndarray): The n-dimensional image.
+        bbox (tuple): The bounding box with format (min_dim1, max_dim1, ..., min_dimN, max_dimN),
+        where N is the number of dimensions in the image.
+
+        Returns:
+        np.ndarray: The extracted subvolume.
+        """
+        # Validate bounding box
+        if len(bbox) != 2 * image.ndim:
+            raise ValueError("Bounding box format does not match image dimensions.")
+
+        # Construct the slice object for each dimension
+        ndim = image.ndim
+        slices = tuple(slice(bbox[i], bbox[i + ndim]) for i in range(ndim))
+        return image[slices]
+
+    def _insert_subvolume(self, image, subvolume, bbox):
+        """
+        Inserts a subvolume into an image using a specified bounding box.
+
+        Parameters:
+        image (np.ndarray): The original n-dimensional image or volume.
+        subvolume (np.ndarray): The subvolume or subimage to insert, which must fit within the dimensions specified by bbox.
+        bbox (tuple): The bounding box with format (min_dim1, max_dim1, ..., min_dimN, max_dimN),
+                      where N is the number of dimensions in the image. The bounding box specifies where to insert the subvolume.
+
+        Returns:
+        np.ndarray: The image with the subvolume inserted.
+        """
+        ndim = image.ndim
+        # Validate bounding box and sub-volume
+        if len(bbox) != 2 * image.ndim:
+            raise ValueError("Bounding box format does not match image dimensions.")
+        if not (
+            all(subvolume.shape[i] == bbox[i + ndim] - bbox[i] for i in range(ndim))
+        ):
+            raise ValueError(
+                "Sub-volume dimensions must match the bounding box dimensions."
+            )
+
+        # Construct the slice object for each dimension
+        slices = tuple(slice(bbox[i], bbox[i + ndim]) for i in range(ndim))
+
+        # Insert the subvolume into the image
+        image[slices] = subvolume
+        return image
+
+    def _process_single(self, data_label):
+        """Process a single image (of a potential batch)."""
+        # Prepare data out
+        dt_out = np.zeros(data_label.shape, dtype=np.float32)
+
+        # Remove singleton dimensions
+        data_label = data_label.squeeze()
+
+        # Calculate bounding boxes
+        regions = regionprops(data_label)
+
+        # Process all labels serially
+        for region in regions:
+
+            if region.label == 0:
+                continue
+
+            # Extract the subvolume
+            cropped_mask = self._extract_subvolume(data_label, region.bbox) > 0
+
+            # Calculate distance transform
+            dt_tmp = distance_transform_edt(cropped_mask, return_distances=True)
+
+            # Normalize the distance transform in place
+            in_mask_indices = dt_tmp > 0.0
+            if self.reverse:
+                # Reverse the direction of the distance transform: make sure to stretch
+                # the maximum to 1.0; we can keep a minimum larger than 0.0 in the center.
+                if self.do_not_zero:
+                    # Do not set the distance at the center to 0.0; the gradient is
+                    # slightly lower, depending on the original range.
+                    tmp = dt_tmp[in_mask_indices]
+                    tmp = (tmp.max() + 1) - tmp
+                    dt_tmp[in_mask_indices] = tmp / tmp.max()
+                else:
+                    # Plain linear inverse
+                    min_value = dt_tmp[in_mask_indices].min()
+                    max_value = dt_tmp[in_mask_indices].max()
+                    dt_tmp[in_mask_indices] = (dt_tmp[in_mask_indices] - max_value) / (
+                        min_value - max_value
+                    )
+            else:
+                dt_tmp[in_mask_indices] = dt_tmp[in_mask_indices] / dt_tmp.max()
+
+            # Insert it into dt_out
+            bbox = region.bbox
+            while dt_tmp.ndim < dt_out.ndim:
+                dt_tmp = dt_tmp[np.newaxis, :]
+                m = len(bbox) // 2
+                bbox = tuple([0] + list(bbox[:m]) + [1] + list(bbox[m:]))
+            dt_out = self._insert_subvolume(dt_out, dt_tmp, bbox)
+
+        return dt_out
 
     def __call__(self, data: np.ndarray) -> torch.Tensor:
         """
@@ -1649,6 +1762,12 @@ class NormalizedDistanceTransform(Transform):
 
         if not type(data) in [torch.Tensor, monai.data.MetaTensor, np.ndarray]:
             raise TypeError(f"Unsupported input type {type(data)}.")
+
+        # Do we have a 2D or 3D tensor (excluding batch and channel dimensions)?
+        effective_dims = get_tensor_num_spatial_dims(data, self.with_batch_dim)
+
+        if effective_dims not in [2, 3]:
+            raise ValueError("Unsupported geometry.")
 
         # Do we have a NumPy array?
         is_np_array = type(data) is np.ndarray
@@ -1667,32 +1786,17 @@ class NormalizedDistanceTransform(Transform):
         else:
             data_label = data
 
-        # Make sure that the dimensions of the data are correct
-        if not (data_label.ndim in [3, 4] and data_label.shape[0] == 1):
-            raise ValueError(
-                "The image array must be of dimensions (1 x height x width)!"
-            )
+        if self.with_batch_dim:
+            dt_final = np.zeros(data_label.shape, dtype=float)
+            for b in range(data_label.shape[0]):
+                dt_final[b] = self._process_single(data_label[b])
+        else:
+            dt_final = self._process_single(data_label)
 
-        # Binarize the labels
-        bw = data_label > 0
-
-        # Calculate distance transform
-        dt = distance_transform_edt(bw, return_distances=True)
-
-        # Normalize the distance transform by object in place
-        dt = scale_dist_transform_by_region(
-            dt,
-            data_label,
-            reverse=self.reverse,
-            do_not_zero=self.do_not_zero,
-            in_place=True,
-        )
-
-        # If we had a tensor, cast back to a tensor
-        if not is_np_array:
-            dt = torch.from_numpy(dt)
-            if is_meta_tensor:
-                dt = MetaTensor(dt, meta=meta)
+        # Cast to a tensor
+        dt = torch.from_numpy(dt_final)
+        if is_meta_tensor:
+            dt = MetaTensor(dt, meta=meta)
 
         # Return the updated data dictionary
         return dt
@@ -1706,6 +1810,7 @@ class NormalizedDistanceTransformd(MapTransform):
         keys: tuple[str, ...] = ("label",),
         reverse: bool = False,
         do_not_zero: bool = False,
+        with_batch_dim: bool = False,
     ) -> None:
         """Constructor
 
@@ -1722,11 +1827,15 @@ class NormalizedDistanceTransformd(MapTransform):
         do_not_zero: bool (optional, default is False)
             This is only considered if `reverse` is True. Set to True not to allow that the center pixels in each
             region have an inverse distance transform of 0.0.
+
+        with_batch_dim: bool (Optional, default is False)
+            Whether the input tensor has a batch dimension or not. This is to distinguish between the
+            2D case (B, C, H, W) and the 3D case (C, D, H, W). All other supported cases are clear.
         """
         super().__init__(keys=keys)
         self.keys = keys
         self._transform = NormalizedDistanceTransform(
-            reverse=reverse, do_not_zero=do_not_zero
+            reverse=reverse, do_not_zero=do_not_zero, with_batch_dim=with_batch_dim
         )
 
     def __call__(self, data: dict) -> dict:
