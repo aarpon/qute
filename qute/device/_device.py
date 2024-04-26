@@ -10,7 +10,6 @@
 # ******************************************************************************
 
 import torch
-from pytorch_lightning.accelerators import Accelerator
 
 
 def get_device() -> torch.device:

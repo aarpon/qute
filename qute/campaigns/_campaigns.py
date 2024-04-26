@@ -27,18 +27,17 @@ from monai.transforms import (
 from qute.transforms import (
     CustomResampler,
     CustomResamplerd,
-    CustomTIFFReader,
-    CustomTIFFReaderd,
-    LabelToTwoClassMask,
     LabelToTwoClassMaskd,
     MinMaxNormalize,
     MinMaxNormalized,
+    NormalizedDistanceTransformd,
     OneHotToMaskBatch,
     Scale,
     ToPyTorchLightningOutputd,
     ZNormalize,
     ZNormalized,
 )
+from qute.transforms.io import CustomTIFFReader, CustomTIFFReaderd
 
 
 class CampaignTransforms(ABC):

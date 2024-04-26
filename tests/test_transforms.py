@@ -17,18 +17,20 @@ import pytest
 import torch
 from monai.data import MetaTensor
 from monai.transforms import Spacing
-from tifffile import imread, imwrite
+from tifffile import imread
 
 from qute.transforms import (
     AddBorderd,
-    CellposeLabelReader,
-    CustomND2Reader,
-    CustomND2Readerd,
-    CustomTIFFReader,
     NormalizedDistanceTransform,
     NormalizedDistanceTransformd,
     OneHotToMask,
     OneHotToMaskBatch,
+)
+from qute.transforms.io import (
+    CellposeLabelReader,
+    CustomND2Reader,
+    CustomND2Readerd,
+    CustomTIFFReader,
 )
 
 

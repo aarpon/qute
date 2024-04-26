@@ -191,12 +191,19 @@ class UNet(pl.LightningModule):
 
             # Make sure to log the correct class name in case the background is not
             # considered in the calculation
-            start = len(self.class_names) - val_metrics.shape[1]
-
-            for i, val_score in enumerate(mean_val_per_class):
+            if val_metrics.ndim > 0:
+                start = len(self.class_names) - val_metrics.shape[1]
+                for i, val_score in enumerate(mean_val_per_class):
+                    self.log(
+                        f"val_metrics_{self.class_names[start + i]}",
+                        torch.tensor([val_score]),
+                        on_step=False,
+                        on_epoch=True,
+                    )
+            else:
                 self.log(
-                    f"val_metrics_{self.class_names[start + i]}",
-                    torch.tensor([val_score]),
+                    f"val_metrics",
+                    torch.tensor([mean_val_per_class]),
                     on_step=False,
                     on_epoch=True,
                 )
@@ -222,11 +229,19 @@ class UNet(pl.LightningModule):
 
             # Make sure to log the correct class name in case the background is not
             # considered in the calculation
-            start = len(self.class_names) - test_metrics.shape[1]
-            for i, test_score in enumerate(mean_test_per_class):
+            if test_metrics.ndim > 0:
+                start = len(self.class_names) - test_metrics.shape[1]
+                for i, test_score in enumerate(mean_test_per_class):
+                    self.log(
+                        f"test_metrics_{self.class_names[start + i]}",
+                        torch.tensor([test_score]),
+                        on_step=False,
+                        on_epoch=True,
+                    )
+            else:
                 self.log(
-                    f"test_metrics_{self.class_names[start + i]}",
-                    torch.tensor([test_score]),
+                    f"test_metrics",
+                    torch.tensor([mean_test_per_class]),
                     on_step=False,
                     on_epoch=True,
                 )

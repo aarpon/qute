@@ -86,6 +86,9 @@ if __name__ == "__main__":
         # Set the fold for current training
         data_module.set_fold(fold)
 
+        # Update steps per epoch
+        steps_per_epoch = len(data_module.train_dataloader())
+
         # Learning rate scheduler
         lr_scheduler_class = OneCycleLR
         lr_scheduler_parameters = {
