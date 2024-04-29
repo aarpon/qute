@@ -8,7 +8,6 @@
 # Contributors:
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
-
 from typing import Optional, Union
 
 import monai.data
@@ -518,14 +517,14 @@ class Scale(Transform):
         self.dtype = dtype
         self.in_place = in_place
 
-    def __call__(self, data: np.ndarray) -> np.ndarray:
+    def __call__(self, data: np.ndarray) -> Union[np.ndarray, torch.Tensor]:
         """
         Apply the transform to `image`.
 
         Returns
         -------
 
-        result: tensor
+        result: Union[np.ndarray, torch.Tensor]
             Tensor or NumPy array with scaled intensities and type-cast.
         """
         if not self.in_place:
@@ -1155,8 +1154,12 @@ class NormalizedDistanceTransform(Transform):
         # Prepare data out
         dt_out = np.zeros(data_label.shape, dtype=np.float32)
 
-        # Remove singleton dimensions
-        data_label = data_label.squeeze()
+        # Remove singleton dimensions (in a copy)
+        data_label = data_label.copy().squeeze()
+
+        # Make sure that the input is of integer type
+        if not data_label.dtype.kind == "i":
+            data_label = data_label.astype(np.int32)
 
         # Calculate bounding boxes
         regions = regionprops(data_label)
@@ -1243,7 +1246,7 @@ class NormalizedDistanceTransform(Transform):
             data_label = data
 
         if self.with_batch_dim:
-            dt_final = np.zeros(data_label.shape, dtype=float)
+            dt_final = np.zeros(data_label.shape, dtype=np.float32)
             for b in range(data_label.shape[0]):
                 dt_final[b] = self._process_single(data_label[b])
         else:

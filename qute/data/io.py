@@ -103,6 +103,82 @@ def get_cell_segmentation_demo_dataset(
     return demo_folder
 
 
+def get_cell_segmentation_idt_demo_dataset(
+    download_dir: Optional[Union[Path, str]] = None
+):
+    """If not yet present, download and expands segmentation demo dataset.
+
+    Parameters
+    ----------
+
+    download_dir: Path | str = Path()
+        Directory where the cell segmentation datasets will be downloaded and extracted.
+
+    Returns
+    -------
+
+    path: Path of the extracted segmentation demo dataset.
+    """
+
+    # Data folder
+    if download_dir is None:
+        data_folder = Path(userpaths.get_my_documents()) / "qute" / "data"
+    else:
+        data_folder = Path(download_dir).resolve()
+
+    # Make sure the folder exists
+    data_folder.mkdir(parents=True, exist_ok=True)
+
+    # Dataset metadata
+    dataset_name = "demo_segmentation_idt"
+    archive_url = "https://polybox.ethz.ch/index.php/s/5OkHEZumO4UPMpf/download"
+    archive_file_size = 69598065
+
+    # Check if the demo data folder already exists
+    demo_folder = data_folder / dataset_name
+    images_folder = demo_folder / "images"
+    labels_folder = demo_folder / "labels"
+
+    # Is the data already present?
+    if demo_folder.is_dir():
+        if images_folder.is_dir():
+            if len(glob(str(images_folder / "*.tif*"))) == 90:
+                if labels_folder.is_dir():
+                    if len(glob(str(labels_folder / "*.tif*"))) == 90:
+                        return demo_folder
+
+    # Is the zip archive already present?
+    archive_found = False
+    if (data_folder / f"{dataset_name}.zip").is_file():
+        if (data_folder / f"{dataset_name}.zip").stat().st_size == archive_file_size:
+            archive_found = True
+        else:
+            (data_folder / f"{dataset_name}.zip").unlink()
+
+    if not archive_found:
+        # Get binary stream
+        r = requests.get(archive_url)
+
+        # Target file
+        with open(data_folder / f"{dataset_name}.zip", "wb") as f:
+            f.write(r.content)
+
+        # Inform
+        num_bytes = (data_folder / f"{dataset_name}.zip").stat().st_size
+        print(f"Downloaded '{dataset_name}.zip' ({num_bytes} bytes).")
+
+    # Make sure there are no remnants of previous extractions
+    if demo_folder.is_dir():
+        rmtree(demo_folder)
+
+    # Extract zip file
+    with ZipFile(data_folder / f"{dataset_name}.zip", "r") as z:
+        # Extract all the contents of zip file
+        z.extractall(data_folder)
+
+    return demo_folder
+
+
 def get_cell_restoration_demo_dataset(download_dir: Optional[Union[Path, str]] = None):
     """If not yet present, download and expands restoration demo dataset.
 

@@ -238,6 +238,120 @@ class SegmentationCampaignTransforms(CampaignTransforms):
         return self.get_val_metrics_transforms()
 
 
+class SegmentationCampaignTransformsIDT(CampaignTransforms):
+    """Example segmentation campaign transforms using regression to Inverse Distance Transform."""
+
+    def __init__(self, patch_size: tuple = (640, 640), num_patches: int = 1):
+        """Constructor.
+
+        By default, these transforms apply to a single-channel input image to
+        predict three output classes.
+        """
+        super().__init__()
+
+        self.patch_size = patch_size
+        self.num_patches = num_patches
+
+    def get_train_transforms(self):
+        """Return a composition of Transforms needed to train (patch)."""
+        train_transforms = Compose(
+            [
+                CustomTIFFReaderd(
+                    keys=("image", "label"),
+                    ensure_channel_first=True,
+                    dtype=torch.float32,
+                ),
+                RandCropByPosNegLabeld(
+                    keys=("image", "label"),
+                    label_key="label",
+                    spatial_size=self.patch_size,
+                    pos=1.0,
+                    neg=0.0,
+                    num_samples=self.num_patches,
+                    image_key="image",
+                    image_threshold=0.0,
+                    allow_smaller=False,
+                    lazy=False,
+                ),
+                ZNormalized(keys=("image",)),
+                RandRotate90d(keys=("image", "label"), prob=0.5, spatial_axes=(-2, -1)),
+                RandGaussianNoised(keys=("image",), prob=0.2),
+                RandGaussianSmoothd(keys=("image",), prob=0.2),
+                NormalizedDistanceTransformd(
+                    keys=("label",), reverse=True, do_not_zero=True
+                ),
+                ToPyTorchLightningOutputd(label_key="label", label_dtype=torch.float32),
+            ]
+        )
+        return train_transforms
+
+    def get_valid_transforms(self):
+        """Return a composition of Transforms needed to validate (patch)."""
+        val_transforms = Compose(
+            [
+                CustomTIFFReaderd(
+                    keys=("image", "label"),
+                    ensure_channel_first=True,
+                    dtype=torch.float32,
+                ),
+                RandCropByPosNegLabeld(
+                    keys=("image", "label"),
+                    label_key="label",
+                    spatial_size=self.patch_size,
+                    pos=1.0,
+                    neg=0.0,
+                    num_samples=self.num_patches,
+                    image_key="image",
+                    image_threshold=0.0,
+                    allow_smaller=False,
+                    lazy=False,
+                ),
+                ZNormalized(keys=("image",)),
+                NormalizedDistanceTransformd(
+                    keys=("label",), reverse=True, do_not_zero=True
+                ),
+                ToPyTorchLightningOutputd(),
+            ]
+        )
+        return val_transforms
+
+    def get_test_transforms(self):
+        """Return a composition of Transforms needed to test (patch)."""
+        return self.get_valid_transforms()
+
+    def get_inference_transforms(self):
+        """Define inference transforms to predict (patch)."""
+        inference_transforms = Compose(
+            [
+                CustomTIFFReader(
+                    ensure_channel_first=True,
+                    dtype=torch.float32,
+                ),
+                ZNormalize(),
+            ]
+        )
+        return inference_transforms
+
+    def get_post_inference_transforms(self):
+        """Define post inference transforms to apply after prediction on patch."""
+        # @TODO: Add Distance transforms to labels image
+        post_inference_transforms = Compose([])
+        return post_inference_transforms
+
+    def get_post_full_inference_transforms(self):
+        """Define post full-inference transforms to apply after reconstructed prediction on whole image."""
+        return self.get_post_inference_transforms()
+
+    def get_val_metrics_transforms(self):
+        """Define default transforms for validation metric calculation (patch)."""
+        val_metrics_transforms = Compose([])
+        return val_metrics_transforms
+
+    def get_test_metrics_transforms(self):
+        """Define default transforms for testing metric calculation (patch)."""
+        return self.get_val_metrics_transforms()
+
+
 class SegmentationCampaignTransforms3D(CampaignTransforms):
     """Example 3D segmentation campaign transforms."""
 
