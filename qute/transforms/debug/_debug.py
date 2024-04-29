@@ -228,7 +228,7 @@ class DebugInformer(Transform):
                     if hasattr(data[key], "meta") and "affine" in data[key].meta:
                         a = data[key].meta["affine"]
                         print(
-                            f"'{key}': voxel size=({a[0, 0]}, {a[1, 1]}, {a[2, 2]});",
+                            f"voxel size=({a[0, 0]}, {a[1, 1]}, {a[2, 2]});",
                             end=" ",
                         )
                 elif t is dict:

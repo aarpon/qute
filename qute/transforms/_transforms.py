@@ -13,262 +13,43 @@ from typing import Optional, Union
 import monai.data
 import numpy as np
 import torch
-import torch.nn.functional as F
 from monai.data import MetaTensor
 from monai.transforms import MapTransform, Transform
 from scipy.ndimage import binary_erosion, distance_transform_edt
-from skimage.measure import regionprops
+from skimage.measure import label, regionprops
 from skimage.morphology import ball, disk
 
 from qute.transforms.util import get_tensor_num_spatial_dims
 
 
-class CustomResampler(Transform):
-    """Resamples a tensor to a new voxel size.
-
-    Accepted geometries are (C, D, H, W) for 3D and (C, H, W) for 2D.
-    """
-
-    def __init__(
-        self,
-        target_voxel_size: tuple[float, ...],
-        input_voxel_size: Optional[tuple[float, ...]] = None,
-        mode: str = "nearest",
-        with_batch_dim: bool = False,
-    ):
-        """Constructor
-
-        Parameters
-        ----------
-
-        target_voxel_size: tuple[float, ...]
-            Target voxel size (z, y, x). For 2D data, set z = 1.
-
-        input_voxel_size: Optional[tuple[float, ...]]
-            Input voxel size. If omitted, and if the input tensor is a MONAI MetaTensor,
-            the voxel size will be extracted from the tensor metadata (see CustomTiffReader).
-            Please notice that only the scaling components of the affine matrix will be
-            considered; all others will be silently ignored.
-
-        mode: str (Optional, default is "neareast")
-            Interpolation mode: one of "nearest", or "bilinear" (for 2D data) and "trilinear" for 3D data.
-
-        with_batch_dim: bool (Optional, default is False)
-            Whether the input tensor has a batch dimension or not. This is to distinguish between the
-            2D case (B, C, H, W) and the 3D case (C, D, H, W). All other supported cases are clear.
-        """
-        super().__init__()
-        self.target_voxel_size = target_voxel_size
-        self.input_voxel_size = input_voxel_size
-        self.mode = mode
-        self.with_batch_dim = with_batch_dim
-
-    def __call__(
-        self, data: Union[torch.tensor, monai.data.MetaTensor, np.ndarray]
-    ) -> torch.Tensor:
-        """
-        Resample the tensor and return it.
-
-         Parameters
-         ----------
-
-         data: Union[torch.tensor, monai.data.MetaTensor, np.ndarray]
-             Input tensor.
-
-         Returns
-         -------
-
-         tensor: torch.Tensor | monai.MetaTensor
-             Tensor with requested type and shape.
-        """
-
-        # Keep track of whether we are working with MONAI MetaTensor
-        is_meta_tensor = type(data) is monai.data.MetaTensor
-
-        # If input_voxel_size is not set, and we have a MetaTensor, let's
-        # try to extract the calibration from the metadata
-        if self.input_voxel_size is None and is_meta_tensor:
-            if hasattr(data, "affine"):
-                if data.affine.shape == (4, 4):
-                    self.input_voxel_size = (
-                        float(data.affine[0, 0]),
-                        float(data.affine[1, 1]),
-                        float(data.affine[2, 2]),
-                    )
-
-        # If input_voxel_size is still None, raise an exception
-        if self.input_voxel_size is None:
-            raise ValueError("Please specify `input_voxel_size`.")
-
-        # Do we have a 2D or 3D tensor (excluding batch and channel dimensions)?
-        effective_dims = get_tensor_num_spatial_dims(data, self.with_batch_dim)
-
-        if effective_dims not in [2, 3]:
-            raise ValueError("Unsupported geometry.")
-
-        # Is the mode correct?
-        self.mode = self.mode.lower()
-        if self.mode not in ["nearest", "bilinear", "trilinear"]:
-            raise ValueError(f"Unexpected interpolation mode {self.mode}")
-
-        # Make sure that the mode matches the geometry
-        if self.mode != "nearest":
-            if effective_dims == 2 and self.mode == "trilinear":
-                self.mode = "bilinear"
-                print("Changed `trilinear` to `bilinear` for 2D data.")
-            elif effective_dims == 3 and self.mode == "bilinear":
-                self.mode = "trilinear"
-                print("Changed `bilinear` to `trilinear` for 3D data.")
-            elif effective_dims not in [2, 3]:
-                raise ValueError("Unsupported geometry.")
-
-        # Do we have a NumPy array?
-        if type(data) is np.ndarray:
-            data = torch.from_numpy(data)
-
-        # Calculate the output shape based on the ratio of voxel sizes
-        ratios = np.array(self.input_voxel_size) / np.array(self.target_voxel_size)
-        output_size = np.round(
-            data.shape[-effective_dims:] * ratios[-effective_dims:]
-        ).astype(int)
-        output_size[output_size == 0.0] = 1.0
-        output_size = tuple(output_size)
-
-        # Prepare the arguments for the transformation: torch.nn.functional.interpolate expects the batch dimension
-        if is_meta_tensor:
-            data = data.as_tensor()
-
-        if not self.with_batch_dim:
-            data = data.unsqueeze(0)
-
-        # Make sure the tensor is not of integer type, or the interpolation will fail
-        current_dtype = data.dtype
-        convert_back = False
-        if data.dtype in {
-            torch.int8,
-            torch.uint8,
-            torch.int16,
-            torch.int32,
-            torch.int64,
-        }:
-            data = data.to(torch.float32)
-            convert_back = True
-
-        # Run the interpolation
-        if self.mode == "nearest":
-            data = F.interpolate(
-                data,
-                size=output_size,
-                mode=self.mode,
-            )
-        else:
-            data = F.interpolate(
-                data, size=output_size, mode=self.mode, align_corners=False
-            )
-
-        # If necessary, convert back
-        if convert_back:
-            data = data.to(current_dtype)
-
-        # Remove the batch dimension if needed
-        if not self.with_batch_dim:
-            data = data.squeeze(0)
-
-        # In case of a MONAI MetaTensor, we update the metadata
-        if is_meta_tensor:
-            affine = torch.tensor(
-                [
-                    [self.target_voxel_size[0], 0.0, 0.0, 0.0],
-                    [0.0, self.target_voxel_size[1], 0.0, 0.0],
-                    [0.0, 0.0, self.target_voxel_size[2], 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ]
-            )
-            data = MetaTensor(data, affine=affine)
-
-        return data
-
-
-class CustomResamplerd(MapTransform):
-    """Resamples a tensor to a new voxel size.
-
-    Accepted geometries are (C, D, H, W) for 3D and (C, H, W) for 2D.
-    """
-
-    def __init__(
-        self,
-        keys: tuple[str, ...],
-        target_voxel_size: tuple[float, ...],
-        input_voxel_size: Optional[tuple[float, ...]] = None,
-        mode: tuple[str, ...] = ("trilinear", "nearest"),
-    ):
-        """Constructor
-
-        Parameters
-        ----------
-
-        keys: tuple[str]
-            Keys for the data dictionary.
-
-        target_voxel_size: tuple[float, ...]
-            Target voxel size (z, y, x). For 2D data, set z = 1.
-
-        input_voxel_size: Optional[tuple[float, ...]]
-            Input voxel size. If omitted, and if the input tensor is a MONAI MetaTensor,
-            the voxel size will be extracted from the tensor metadata (see CustomTiffReader).
-            Please notice that only the scaling components of the affine matrix will be
-            considered; all others will be silently ignored.
-
-        mode: str (Optional, default is "neareast")
-            Interpolation mode: one of "nearest", or "bilinear" (for 2D data) and "trilinear" for 3D data.
-
-        """
-        super().__init__(keys=keys)
-        self.keys = keys
-        self.target_voxel_size = target_voxel_size
-        self.input_voxel_size = input_voxel_size
-        self.mode = mode
-
-    def __call__(
-        self, data: Union[torch.tensor, monai.data.MetaTensor, np.ndarray]
-    ) -> torch.Tensor:
-        """
-        Resample the tensor and return it.
-
-         Parameters
-         ----------
-
-         data: Union[torch.tensor, monai.data.MetaTensor, np.ndarray]
-             Input tensor
-
-         Returns
-         -------
-
-         tensor: torch.Tensor | monai.MetaTensor
-             Resampled tensor.
-        """
-
-        # Make sure that we have the same number of keys and modes of interpolation
-        if len(self.keys) != len(self.mode):
-            raise ValueError("Number of keys and interpolation modes do not match!")
-
-        for key, mode in zip(self.keys, self.mode):
-            interpolator = CustomResampler(
-                target_voxel_size=self.target_voxel_size,
-                input_voxel_size=self.input_voxel_size,
-                mode=mode,
-            )
-            data[key] = interpolator(data[key])
-
-        return data
-
-
 class LabelToTwoClassMask(Transform):
-    """Maps a labels image to a two-class mask."""
+    """Maps a labels image to a two-class mask: object and border.
+
+    Supported and expected are either 2D data of shape (C, H, W) or 3D
+    data of shape (C, D, H, W).
+
+    The alternative possibility of 2D batch data (B, C, H, W) can't robustly
+    be distinguished from 3D (C, D, H, W) data and will result in unexpected
+    labels.
+    """
 
     def __init__(self, border_thickness: int = 1):
-        """Constructor"""
+        """Constructor.
+
+        Parameters
+        ----------
+
+        border_thickness: int = 1
+            Thickness of the border to be created. Please notice that the border is obtained from
+            the erosion of the objects (that is, it does not extend outside the original connected
+            components.
+
+        Please notice that if the input tensor is black-and-white, the labeling will be applied by
+        the transform before creating the two classes.
+        """
         super().__init__()
+        if border_thickness <= 0:
+            raise ValueError("The border thickness cannot be zero!")
         self.border_thickness = border_thickness
 
     def __call__(
@@ -299,6 +80,10 @@ class LabelToTwoClassMask(Transform):
         # Get the number of spatial dimensions
         num_spatial_dims = get_tensor_num_spatial_dims(data, with_batch_dim=False)
 
+        # Make sure the channel dimension has only one element
+        if data.shape[0] != 1:
+            raise ValueError("The input tensor must have only one channel!")
+
         # Footprint (structuring element) for erosion
         if num_spatial_dims == 2:
             footprint = torch.tensor(disk(self.border_thickness), dtype=torch.int32)
@@ -316,10 +101,18 @@ class LabelToTwoClassMask(Transform):
         data.to(torch.int32)
 
         # Allocate output
-        out = torch.zeros(data.shape, dtype=data.dtype)
+        out = torch.zeros(data.shape, dtype=torch.int32)
+
+        # Make sure we have labels
+        unique_labels = torch.unique(data)
+        if len(unique_labels) == 2 and torch.all(unique_labels == torch.tensor([0, 1])):
+            data_np = data.cpu().detach().numpy()
+            labels_np = label(data_np, background=0, connectivity=1).astype(np.int32)
+            data = torch.from_numpy(labels_np)
+            unique_labels = torch.unique(data)
 
         # Process all individual labels
-        for lbl in data.unique():
+        for lbl in unique_labels:
 
             # Ignore background
             if lbl == 0:
@@ -327,14 +120,18 @@ class LabelToTwoClassMask(Transform):
 
             # Prepare the label for processing
             bw = torch.zeros(data.shape, dtype=data.dtype)
-            bw[data == lbl] = 1
+            indices = data == lbl
+            bw[indices] = 1
 
             # Perform erosion
             eroded_bw = binary_erosion(bw, footprint)
 
             # Store object and border it in the output
-            out[bw == 1] = 2
-            out[eroded_bw == 1] = 1
+            border = bw - eroded_bw
+            bw_tc = bw + border  # Count border pixels twice
+
+            # Store in the output
+            out[indices] = bw_tc[indices]
 
         # If needed, pack the result into a MetaTensor and
         # transfer the metadata dictionary.
@@ -345,7 +142,15 @@ class LabelToTwoClassMask(Transform):
 
 
 class LabelToTwoClassMaskd(MapTransform):
-    """Maps a labels image to a two-class mask."""
+    """Maps labels images to two-class masks.
+
+    Supported and expected are either 2D data of shape (C, H, W) or 3D
+    data of shape (C, D, H, W).
+
+    The alternative possibility of 2D batch data (B, C, H, W) can't robustly
+    be distinguished from 3D (C, D, H, W) data and will result in unexpected
+    labels.
+    """
 
     def __init__(
         self,
@@ -949,116 +754,116 @@ class AddFFT2d(MapTransform):
         return d
 
 
-class AddBorderd(MapTransform):
-    """Add a border class to the (binary) label image.
-
-    Please notice that the border is obtained from the erosion of the objects (that is, it does not extend outside
-    the original connected components.
-    """
-
-    def __init__(self, label_key: str = "label", border_width: int = 3) -> None:
-        """Constructor
-
-        Parameters
-        ----------
-
-        label_key: str
-            Key for the label image in the data dictionary.
-        border_width: int
-            Width of the border to be eroded from the binary image and added as new class.
-        """
-        super().__init__(keys=[label_key])
-        self.label_key = label_key
-        self.border_width = border_width
-
-    def __call__(self, data: dict) -> dict:
-        """
-        Add  the requested number of labels from the label image, and extract region of defined window size for both image and label in stacked Tensors in the data dictionary.
-
-        Returns
-        -------
-
-        data: dict
-            Updated dictionary with new and "label" tensor.
-        """
-
-        def process_label(lbl, footprint):
-            """Create and add object borders as new class."""
-
-            # Add the border as class 2
-            eroded = binary_erosion(lbl, footprint)
-            border = lbl - eroded
-            return lbl + border  # Count border pixels twice
-
-        # Make a copy of the input dictionary
-        d = dict(data)
-
-        # Make sure the label datatype is torch.int32
-        if type(d["label"]) is np.ndarray:
-            d["label"] = torch.Tensor(d["label"].astype(np.int32)).to(torch.int32)
-
-        if d["label"].dtype != torch.int32:
-            d["label"] = d["label"].to(torch.int32)
-
-        # Make sure there are only two classes: background and foreground
-        if len(torch.unique(d["label"])) > 2:
-            d["label"][d["label"] > 0] = 1
-
-        # Do we have a 2D or a 3D image? Extract the image or stack to work with and
-        # prepare the structuring element for erosion accordingly
-        if d["label"].ndim == 2:
-
-            # A plain 2D image
-            label_img = d["label"][..., :, :].squeeze()
-
-            # Create 2D disk footprint
-            footprint = torch.tensor(disk(self.border_width), dtype=torch.int32)
-
-            # Process and update
-            d["label"] = process_label(label_img, footprint)
-
-        elif d["label"].ndim == 3:
-
-            if d["label"].shape[0] == 1:
-
-                # A 2D image with a channel or z dimension of 1
-                label_img = d["label"][..., :, :].squeeze()
-
-                # Create 2D disk footprint
-                footprint = torch.tensor(disk(self.border_width), dtype=torch.int32)
-
-                # Process and update
-                d["label"] = process_label(label_img, footprint).unsqueeze(0)
-
-            else:
-
-                # A 3D image with a z extent larger of 1
-                label_img = d["label"]
-
-                # Create 3D ball footprint
-                footprint = torch.tensor(ball(self.border_width), dtype=torch.int32)
-
-                # Process and update
-                d["label"] = process_label(label_img, footprint)
-
-        elif d["label"].ndim == 4:
-
-            if d["label"].shape[0] > 1:
-                raise ValueError("CDHW tensor must have only one channel!")
-
-            # A 3D image with a z extent larger of 1
-            label_img = d["label"][..., :, :].squeeze()
-
-            # Create 3D ball footprint
-            footprint = torch.tensor(ball(self.border_width), dtype=torch.int32)
-
-            # Process and update
-            d["label"] = process_label(label_img, footprint).unsqueeze(0)
-
-        else:
-            raise ValueError("Unsupported image dimensions!")
-
-        return d
+# class AddBorderd(MapTransform):
+#     """Add a border class to the (binary) label image.
+#
+#     Please notice that the border is obtained from the erosion of the objects (that is, it does not extend outside
+#     the original connected components.
+#     """
+#
+#     def __init__(self, label_key: str = "label", border_width: int = 3) -> None:
+#         """Constructor
+#
+#         Parameters
+#         ----------
+#
+#         label_key: str
+#             Key for the label image in the data dictionary.
+#         border_width: int
+#             Width of the border to be eroded from the binary image and added as new class.
+#         """
+#         super().__init__(keys=[label_key])
+#         self.label_key = label_key
+#         self.border_width = border_width
+#
+#     def __call__(self, data: dict) -> dict:
+#         """
+#         Add  the requested number of labels from the label image, and extract region of defined window size for both image and label in stacked Tensors in the data dictionary.
+#
+#         Returns
+#         -------
+#
+#         data: dict
+#             Updated dictionary with new and "label" tensor.
+#         """
+#
+#         def process_label(lbl, footprint):
+#             """Create and add object borders as new class."""
+#
+#             # Add the border as class 2
+#             eroded = binary_erosion(lbl, footprint)
+#             border = lbl - eroded
+#             return lbl + border  # Count border pixels twice
+#
+#         # Make a copy of the input dictionary
+#         d = dict(data)
+#
+#         # Make sure the label datatype is torch.int32
+#         if type(d["label"]) is np.ndarray:
+#             d["label"] = torch.Tensor(d["label"].astype(np.int32)).to(torch.int32)
+#
+#         if d["label"].dtype != torch.int32:
+#             d["label"] = d["label"].to(torch.int32)
+#
+#         # Make sure there are only two classes: background and foreground
+#         if len(torch.unique(d["label"])) > 2:
+#             d["label"][d["label"] > 0] = 1
+#
+#         # Do we have a 2D or a 3D image? Extract the image or stack to work with and
+#         # prepare the structuring element for erosion accordingly
+#         if d["label"].ndim == 2:
+#
+#             # A plain 2D image
+#             label_img = d["label"][..., :, :].squeeze()
+#
+#             # Create 2D disk footprint
+#             footprint = torch.tensor(disk(self.border_width), dtype=torch.int32)
+#
+#             # Process and update
+#             d["label"] = process_label(label_img, footprint)
+#
+#         elif d["label"].ndim == 3:
+#
+#             if d["label"].shape[0] == 1:
+#
+#                 # A 2D image with a channel or z dimension of 1
+#                 label_img = d["label"][..., :, :].squeeze()
+#
+#                 # Create 2D disk footprint
+#                 footprint = torch.tensor(disk(self.border_width), dtype=torch.int32)
+#
+#                 # Process and update
+#                 d["label"] = process_label(label_img, footprint).unsqueeze(0)
+#
+#             else:
+#
+#                 # A 3D image with a z extent larger of 1
+#                 label_img = d["label"]
+#
+#                 # Create 3D ball footprint
+#                 footprint = torch.tensor(ball(self.border_width), dtype=torch.int32)
+#
+#                 # Process and update
+#                 d["label"] = process_label(label_img, footprint)
+#
+#         elif d["label"].ndim == 4:
+#
+#             if d["label"].shape[0] > 1:
+#                 raise ValueError("CDHW tensor must have only one channel!")
+#
+#             # A 3D image with a z extent larger of 1
+#             label_img = d["label"][..., :, :].squeeze()
+#
+#             # Create 3D ball footprint
+#             footprint = torch.tensor(ball(self.border_width), dtype=torch.int32)
+#
+#             # Process and update
+#             d["label"] = process_label(label_img, footprint).unsqueeze(0)
+#
+#         else:
+#             raise ValueError("Unsupported image dimensions!")
+#
+#         return d
 
 
 class NormalizedDistanceTransform(Transform):

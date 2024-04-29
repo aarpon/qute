@@ -17,21 +17,16 @@ import pytest
 import torch
 from monai.data import MetaTensor
 from monai.transforms import Spacing
-from tifffile import imread
 
 from qute.transforms import (
-    AddBorderd,
+    LabelToTwoClassMask,
+    LabelToTwoClassMaskd,
     NormalizedDistanceTransform,
     NormalizedDistanceTransformd,
     OneHotToMask,
     OneHotToMaskBatch,
 )
-from qute.transforms.io import (
-    CellposeLabelReader,
-    CustomND2Reader,
-    CustomND2Readerd,
-    CustomTIFFReader,
-)
+from qute.transforms.io import CellposeLabelReader, CustomTIFFReader
 
 
 @pytest.fixture(autouse=False)
@@ -69,107 +64,103 @@ def extract_test_transforms_data(tmpdir):
     # - Nothing for the moment
 
 
-def test_add_borderd(extract_test_transforms_data):
+def test_label_to_two_class_mask(extract_test_transforms_data):
 
-    # Load CellPose dataset
+    # Load CellPose dataset (two objects)
     reader = CellposeLabelReader()
     label = reader(Path(__file__).parent / "data" / "cellpose.npy")
     assert label.shape == (300, 300), "Unexpected image size."
 
-    # Add to data dictionary
-    data = {}
-    data["label"] = label
+    # Test passing a 2D array - it must fail.
+    with pytest.raises(ValueError):
+        _ = LabelToTwoClassMask()(label)
 
-    # Add the border
-    addb = AddBorderd()
-    data = addb(data)
+    # Add the channel dimension
+    label = label[np.newaxis, :, :]
+
+    # Pass the augmented array
+    mask = LabelToTwoClassMask()(label)
 
     # Check that there are indeed three classes
-    assert data["label"].shape == (300, 300), "Unexpected output shape."
-    assert len(torch.unique(data["label"])) == 3, "Expected three classes."
+    assert mask.shape == (1, 300, 300), "Unexpected output shape."
+    assert len(torch.unique(mask)) == 3, "Expected three classes."
     assert torch.all(
-        torch.unique(data["label"]) == torch.tensor((0, 1, 2))
+        torch.unique(mask) == torch.tensor((0, 1, 2))
     ), "Expected classes [0, 1, 2]."
 
     #
-    # Test support for various dimensions
+    # Test BW input
     #
 
-    # Simple 2D
-    input_2d = torch.zeros((10, 10), dtype=torch.int32)
-    input_2d[4:7, 4:7] = 1
-    data["label"] = input_2d
-    addb = AddBorderd(label_key="label", border_width=1)
-    data = addb(data)
+    # Binarize the image
+    label[label > 0] = 1
+
+    # Add to data dictionary
+    data = {"label": label}
+
+    # Pass the augmented array
+    data = LabelToTwoClassMaskd(keys=("label",))(data)
 
     # Check that there are indeed three classes with the expected number of pixels
-    assert data["label"].shape == (10, 10), "Unexpected output shape."
+    assert data["label"].shape == (1, 300, 300), "Unexpected output shape."
     assert len(torch.unique(data["label"])) == 3, "Expected three classes."
     assert torch.all(
         torch.unique(data["label"]) == torch.tensor((0, 1, 2))
     ), "Expected classes [0, 1, 2]."
-    assert torch.sum(data["label"] == 1) == 1, "One pixel with class 1 expected."
-    assert torch.sum(data["label"] == 2) == 8, "Eight pixels with class 2 expected."
 
-    # 2D with channel first
-    input_2d_c = torch.zeros((1, 10, 10), dtype=torch.int32)
-    input_2d_c[0, 4:7, 4:7] = 1
-    data["label"] = input_2d_c
-    addb = AddBorderd(label_key="label", border_width=1)
-    data = addb(data)
+    # Check that the result of this run is the same as the result of the previous
+    assert torch.all(mask == data["label"]), "Unexpected result of the bw input."
+
+    # Load 3D labels dataset (many objects)
+    reader = CustomTIFFReader(dtype=torch.int32)
+    label = reader(Path(__file__).parent / "data" / "labels.tif")
+    assert label.shape == (1, 26, 300, 300), "Unexpected image size."
+
+    data["label"] = label
+    data = LabelToTwoClassMaskd(keys=("label",), border_thickness=1)(data)
 
     # Check that there are indeed three classes with the expected number of pixels
-    assert data["label"].shape == (1, 10, 10), "Unexpected output shape."
+    assert data["label"].shape == (1, 26, 300, 300), "Unexpected output shape."
     assert len(torch.unique(data["label"])) == 3, "Expected three classes."
     assert torch.all(
         torch.unique(data["label"]) == torch.tensor((0, 1, 2))
     ), "Expected classes [0, 1, 2]."
-    assert torch.sum(data["label"] == 1) == 1, "One pixel with class 1 expected."
-    assert torch.sum(data["label"] == 2) == 8, "Eight pixels with class 2 expected."
-
-    # 3D
-    input_3d = torch.zeros((10, 10, 10), dtype=torch.int32)
-    input_3d[4:7, 4:7, 4:7] = 1
-    data["label"] = input_3d
-    addb = AddBorderd(label_key="label", border_width=1)
-    data = addb(data)
-
-    # Check that there are indeed three classes with the expected number of pixels
-    assert data["label"].shape == (10, 10, 10), "Unexpected output shape."
-    assert len(torch.unique(data["label"])) == 3, "Expected three classes."
-    assert torch.all(
-        torch.unique(data["label"]) == torch.tensor((0, 1, 2))
-    ), "Expected classes [0, 1, 2]."
-    assert torch.sum(data["label"] == 1) == 1, "One pixel with class 1 expected."
     assert (
-        torch.sum(data["label"] == 2) == 26
+        torch.sum(data["label"] == 1) == 52496
+    ), "Unexpected nuber of pixels with class 1."
+    assert (
+        torch.sum(data["label"] == 2) == 53251
     ), "Twenty-six pixels with class 2 expected."
 
-    # 3D with channel first
-    input_3d_c = torch.zeros((1, 10, 10, 10), dtype=torch.int32)
-    input_3d_c[0, 4:7, 4:7, 4:7] = 1
-    data["label"] = input_3d_c
-    addb = AddBorderd(label_key="label", border_width=1)
-    data = addb(data)
+    # Same as before but with BW mask (notice that the re-labeling will create
+    # a slightly different set of starting objects)
+    reader = CustomTIFFReader(dtype=torch.int32)
+    label = reader(Path(__file__).parent / "data" / "labels.tif")
+    assert label.shape == (1, 26, 300, 300), "Unexpected image size."
+
+    data["label"] = label > 0
+    data = LabelToTwoClassMaskd(keys=("label",), border_thickness=1)(data)
 
     # Check that there are indeed three classes with the expected number of pixels
-    assert data["label"].shape == (1, 10, 10, 10), "Unexpected output shape."
+    assert data["label"].shape == (1, 26, 300, 300), "Unexpected output shape."
     assert len(torch.unique(data["label"])) == 3, "Expected three classes."
     assert torch.all(
         torch.unique(data["label"]) == torch.tensor((0, 1, 2))
     ), "Expected classes [0, 1, 2]."
-    assert torch.sum(data["label"] == 1) == 1, "One pixel with class 1 expected."
     assert (
-        torch.sum(data["label"] == 2) == 26
+        torch.sum(data["label"] == 1) == 55335
+    ), "Unexpected nuber of pixels with class 1."
+    assert (
+        torch.sum(data["label"] == 2) == 50412
     ), "Twenty-six pixels with class 2 expected."
 
     # Make sure that 3D with more than one channel is not supported
     input_3d_2c = torch.zeros((2, 10, 10, 10), dtype=torch.int32)  # 2 channels
     input_3d_2c[0, 4:7, 4:7, 4:7] = 1
     data["label"] = input_3d_2c
-    addb = AddBorderd(label_key="label", border_width=1)
+    tr = LabelToTwoClassMaskd(keys=("label",), border_thickness=1)
     with pytest.raises(Exception):
-        _ = addb(data)
+        _ = tr(data)
 
 
 def test_custom_tiff_reader(extract_test_transforms_data):
@@ -322,7 +313,7 @@ def test_custom_tiff_reader(extract_test_transforms_data):
     assert inv_source.shape == (1, 20, 300, 300), "Unexpected inverted source shape."
 
 
-def test_add_normalized_transform(extract_test_transforms_data):
+def test_normalized_distance_transform(extract_test_transforms_data):
 
     # Load TIFF file with (dtype=torch.int32)
     reader = CustomTIFFReader(dtype=torch.int32)
@@ -348,8 +339,8 @@ def test_add_normalized_transform(extract_test_transforms_data):
     assert data_out["image"].shape == (1, 26, 300, 300), "Unexpected image shape."
     assert data_out["label"].shape == (1, 26, 300, 300), "Unexpected labels shape."
     assert torch.all(data_out["image"] == 0.0)
-    assert (
-        torch.min(data_out["label"][data_out["label"] > 0]) == 0.1250
+    assert 0.08944272249937057 == pytest.approx(
+        torch.min(data_out["label"][data_out["label"] > 0]).item()
     ), "Unexpected minimum pixel value."
     assert torch.max(data_out["label"] == 1.0), "Unexpected maximum pixel value."
 
@@ -366,8 +357,8 @@ def test_add_normalized_transform(extract_test_transforms_data):
     label_out = ndt(label)
 
     assert label_out.shape == (1, 26, 300, 300), "Unexpected image shape."
-    assert (
-        torch.min(label_out[label_out > 0]) == 0.1250
+    assert 0.08944272249937057 == pytest.approx(
+        torch.min(data_out["label"][data_out["label"] > 0]).item()
     ), "Unexpected minimum pixel value."
     assert torch.max(label_out) == 1.0, "Unexpected maximum pixel value."
 
@@ -565,49 +556,3 @@ def test_to_label_batch(tmpdir):
     with pytest.raises(ValueError) as e_info:
         # 5 batches of 3D images (5, B, C, D, H, W)
         _ = to_label_batch(torch.zeros((5, 3, 3, 10, 60, 60), dtype=torch.int32))
-
-
-def test_normalized_inverse_distance_transform(tmpdir):
-
-    #
-    # 3D
-    #
-
-    # CDHW
-    label_3d = imread(Path(__file__).parent / "data" / "labels.tif")
-
-    # Add channel dimension
-    label_3d_c = label_3d[np.newaxis, :]
-
-    # Process
-    data_3d = {"label": label_3d_c}
-    ndt = NormalizedDistanceTransformd(keys=("label",), reverse=True, do_not_zero=True)
-    data_3d_t = ndt(data_3d)
-
-    # Test
-    assert data_3d_t["label"].shape == label_3d_c.shape, "Unexpected output shape."
-    assert (
-        torch.max(data_3d_t["label"]) == 1.0
-    ), "The tranform does not appear to have been normalized correctly."
-
-    #
-    # 2D
-    #
-
-    # CHW
-    label_2d = label_3d[17]
-
-    # Add channel dimension
-    label_2d_c = label_2d[np.newaxis, :]
-
-    # Process
-    data_2d = {"label": label_2d_c}
-    ndt = NormalizedDistanceTransformd(keys=("label",), reverse=True, do_not_zero=True)
-    data_2d_t = ndt(data_2d)
-    assert data_2d_t["label"].shape == label_2d_c.shape, "Unexpected output shape."
-
-    # Test
-    assert data_2d_t["label"].shape == label_2d_c.shape, "Unexpected output shape."
-    assert (
-        torch.max(data_2d_t["label"]) == 1.0
-    ), "The tranform does not appear to have been normalized correctly."
