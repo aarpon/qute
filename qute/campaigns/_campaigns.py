@@ -24,16 +24,16 @@ from monai.transforms import (
     RandSpatialCropd,
 )
 
-from qute.transforms import (
+from qute.transforms import ToPyTorchLightningOutputd
+from qute.transforms.geom import CustomResampler, CustomResamplerd
+from qute.transforms.io import CustomTIFFReader, CustomTIFFReaderd
+from qute.transforms.norm import (
     MinMaxNormalize,
     MinMaxNormalized,
     Scale,
-    ToPyTorchLightningOutputd,
     ZNormalize,
     ZNormalized,
 )
-from qute.transforms.geom import CustomResampler, CustomResamplerd
-from qute.transforms.io import CustomTIFFReader, CustomTIFFReaderd
 from qute.transforms.objects import (
     LabelToTwoClassMaskd,
     NormalizedDistanceTransformd,

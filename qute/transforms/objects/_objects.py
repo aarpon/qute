@@ -235,6 +235,8 @@ class TwoClassMaskToLabel(Transform):
     The alternative possibility of 2D batch data (B, C, H, W) can't robustly
     be distinguished from 3D (C, D, H, W) data and will result in unexpected
     labels.
+
+    @TODO: Add with_batch_dim support.
     """
 
     def __init__(self, object_class: int = 1, border_thickness: int = 1):
