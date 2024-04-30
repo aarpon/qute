@@ -17,6 +17,7 @@ import pytest
 import torch
 from monai.data import MetaTensor
 from monai.transforms import Spacing
+from skimage.measure import label
 
 from qute.transforms import (
     LabelToTwoClassMask,
@@ -25,6 +26,8 @@ from qute.transforms import (
     NormalizedDistanceTransformd,
     OneHotToMask,
     OneHotToMaskBatch,
+    TwoClassMaskToLabel,
+    TwoClassMaskToLabeld,
 )
 from qute.transforms.io import CellposeLabelReader, CustomTIFFReader
 
@@ -161,6 +164,114 @@ def test_label_to_two_class_mask(extract_test_transforms_data):
     tr = LabelToTwoClassMaskd(keys=("label",), border_thickness=1)
     with pytest.raises(Exception):
         _ = tr(data)
+
+
+def test_two_class_mask_to_labels(extract_test_transforms_data):
+
+    # Load 3D labels image
+    reader = CustomTIFFReader(dtype=torch.int32)
+    labels = reader(Path(__file__).parent / "data" / "labels.tif")
+    assert labels.shape == (1, 26, 300, 300), "Unexpected image size."
+    assert len(np.unique(labels)) - 1 == 68, "Unexpected number of labels."
+
+    #
+    # Test LabelToTwoClassMask
+    #
+
+    # Create a 2-class mask
+    two_class = LabelToTwoClassMask(border_thickness=1, drop_eroded=False)(labels)
+    assert two_class.shape == (1, 26, 300, 300), "Unexpected result size."
+    assert len(two_class.unique()) == 3, "Unexpected number of labels."
+
+    # Create a 2-class mask (dropping eroded objects)
+    two_class_eroded = LabelToTwoClassMask(border_thickness=1, drop_eroded=True)(labels)
+    assert two_class_eroded.shape == (1, 26, 300, 300), "Unexpected result size."
+    assert len(two_class_eroded.unique()) == 3, "Unexpected number of labels."
+
+    # Compare
+    # The mask `two_class` will have some border pixels coming from class 2 that will not be
+    # present in `two_mask_eroded` since their object was dropped.
+    assert torch.all(
+        (two_class == 1) == (two_class_eroded == 1)
+    ), "Unexpected reconstruction!"
+    assert torch.sum(two_class == 2) > torch.sum(
+        two_class_eroded == 2
+    ), "Two many pixels with class 2 in `two_class_eroded`!"
+    assert (
+        torch.sum(two_class == 2) == 53251
+    ), "Unexpected number of pixels with class 2 in `two_class`!"
+    assert (
+        torch.sum(two_class_eroded == 2) == 49441
+    ), "Unexpected number of pixels with class 2 in `two_class_eroded`!"
+
+    # Count objects - 18 objects are eroded away because they are too flat.
+    two_class_mask = two_class == 1
+    count_labels, num = label(two_class_mask.squeeze(), background=0, return_num=True)
+    assert num == 50, "Unexpected number of labels."
+    assert len(np.unique(count_labels)) - 1 == 50, "Unexpected number of labels."
+
+    # Now go back
+    reconstructed_label = TwoClassMaskToLabel(border_thickness=1)(two_class)
+    assert (
+        len(np.unique(reconstructed_label)) - 1 == 50
+    ), "Unexpected number of reconstructed labels."
+
+    #
+    # Test LabelToTwoClassMaskd
+    #
+
+    data = {"label": labels}
+
+    # Create a 2-class mask
+    data_two_class = LabelToTwoClassMaskd(
+        keys=("label",), border_thickness=1, drop_eroded=False
+    )(data)
+    assert data_two_class["label"].shape == (1, 26, 300, 300), "Unexpected result size."
+    assert len(data_two_class["label"].unique()) == 3, "Unexpected number of labels."
+
+    # Create a 2-class mask (dropping eroded objects)
+    data_two_class_eroded = LabelToTwoClassMaskd(
+        keys=("label",), border_thickness=1, drop_eroded=True
+    )(data)
+    assert data_two_class_eroded["label"].shape == (
+        1,
+        26,
+        300,
+        300,
+    ), "Unexpected result size."
+    assert (
+        len(data_two_class_eroded["label"].unique()) == 3
+    ), "Unexpected number of labels."
+
+    # Compare
+    # The mask `two_class` will have some border pixels coming from class 2 that will not be
+    # present in `two_mask_eroded` since their object was dropped.
+    assert torch.all(
+        (data_two_class["label"] == 1) == (data_two_class_eroded["label"] == 1)
+    ), "Unexpected reconstruction!"
+    assert torch.sum(data_two_class["label"] == 2) > torch.sum(
+        data_two_class_eroded["label"] == 2
+    ), "Two many pixels with class 2 in `two_class_eroded`!"
+    assert (
+        torch.sum(data_two_class["label"] == 2) == 53251
+    ), "Unexpected number of pixels with class 2 in `two_class`!"
+    assert (
+        torch.sum(data_two_class_eroded["label"] == 2) == 49441
+    ), "Unexpected number of pixels with class 2 in `two_class_eroded`!"
+
+    # Count objects - 18 objects are eroded away because they are too flat.
+    two_class_mask = data_two_class["label"] == 1
+    count_labels, num = label(two_class_mask.squeeze(), background=0, return_num=True)
+    assert num == 50, "Unexpected number of labels."
+    assert len(np.unique(count_labels)) - 1 == 50, "Unexpected number of labels."
+
+    # Now go back
+    data_reconstructed_label = TwoClassMaskToLabeld(
+        keys=("label",), border_thickness=1
+    )(data_two_class)
+    assert (
+        len(np.unique(data_reconstructed_label["label"])) - 1 == 50
+    ), "Unexpected number of reconstructed labels."
 
 
 def test_custom_tiff_reader(extract_test_transforms_data):

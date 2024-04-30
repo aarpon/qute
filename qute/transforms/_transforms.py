@@ -15,7 +15,7 @@ import numpy as np
 import torch
 from monai.data import MetaTensor
 from monai.transforms import MapTransform, Transform
-from scipy.ndimage import binary_erosion, distance_transform_edt
+from scipy.ndimage import binary_dilation, binary_erosion, distance_transform_edt
 from skimage.measure import label, regionprops
 from skimage.morphology import ball, disk
 
@@ -37,7 +37,7 @@ class LabelToTwoClassMask(Transform):
     labels.
     """
 
-    def __init__(self, border_thickness: int = 1):
+    def __init__(self, border_thickness: int = 1, drop_eroded: bool = False):
         """Constructor.
 
         Parameters
@@ -48,13 +48,19 @@ class LabelToTwoClassMask(Transform):
             the erosion of the objects (that is, it does not extend outside the original connected
             components.
 
-        Please notice that if the input tensor is black-and-white, the labeling will be applied by
-        the transform before creating the two classes.
+        drop_eroded: bool = False
+            Objects that are eroded away because smaller than the structuring element (e.g., flat
+             in z direction) will have only border. Set `drop_eroded = True` to remove also the
+             border.
+
+        Please notice that if the input tensor is black-and-white, connected component analysis will be applied by
+        the transform before creating the two classes. This may cause objects to fuse.
         """
         super().__init__()
         if border_thickness <= 0:
             raise ValueError("The border thickness cannot be zero!")
         self.border_thickness = border_thickness
+        self.drop_eroded = drop_eroded
 
     def __call__(
         self, data: Union[torch.tensor, monai.data.MetaTensor, np.ndarray]
@@ -112,7 +118,7 @@ class LabelToTwoClassMask(Transform):
         unique_labels = torch.unique(data)
         if len(unique_labels) == 2 and torch.all(unique_labels == torch.tensor([0, 1])):
             data_np = data.cpu().detach().numpy()
-            labels_np = label(data_np, background=0, connectivity=1).astype(np.int32)
+            labels_np = label(data_np, background=0).astype(np.int32)
             data = torch.from_numpy(labels_np)
 
         # Calculate bounding boxes
@@ -136,6 +142,10 @@ class LabelToTwoClassMask(Transform):
             # Crete object and border
             border = mask - eroded_mask
             bw_tc = mask + border  # Count border pixels twice
+
+            # Drop objects that have been eroded away?
+            if (bw_tc == 1).sum() == 0 and self.drop_eroded:
+                continue
 
             # Insert it into dt_out
             bbox = region.bbox
@@ -168,6 +178,7 @@ class LabelToTwoClassMaskd(MapTransform):
         self,
         keys: tuple[str] = ("image", "label"),
         border_thickness: int = 1,
+        drop_eroded: bool = False,
     ) -> None:
         """Constructor
 
@@ -176,11 +187,201 @@ class LabelToTwoClassMaskd(MapTransform):
 
         keys: tuple[str]
             Keys for the data dictionary.
+
         border_thickness: int = 1
-            Thickness of the border to add.
+            Thickness of the border to be created. Please notice that the border is obtained from
+            the erosion of the objects (that is, it does not extend outside the original connected
+            components.
+
+        drop_eroded: bool = False
+            Objects that are eroded away because smaller than the structuring element (e.g., flat
+             in z direction) will have only border. Set `drop_eroded = True` to remove also the
+             border.
         """
         super().__init__(keys=keys)
         self.keys = keys
+        self.border_thickness = border_thickness
+        self.drop_eroded = drop_eroded
+
+    def __call__(self, data: dict) -> dict:
+        """
+        Maps a labels image to a two-class mask.
+
+        Returns
+        -------
+
+        data: dict
+            Updated dictionary.
+        """
+
+        # Work on a copy of the input dictionary data
+        d = dict(data)
+
+        # Process the images
+        for key in self.keys:
+            transform = LabelToTwoClassMask(
+                border_thickness=self.border_thickness, drop_eroded=self.drop_eroded
+            )
+            d[key] = transform(d[key])
+        return d
+
+
+class TwoClassMaskToLabel(Transform):
+    """Maps a two-class (object and border) mask to labels image.
+
+    Supported and expected are either 2D data of shape (C, H, W) or 3D
+    data of shape (C, D, H, W).
+
+    The alternative possibility of 2D batch data (B, C, H, W) can't robustly
+    be distinguished from 3D (C, D, H, W) data and will result in unexpected
+    labels.
+    """
+
+    def __init__(self, object_class: int = 1, border_thickness: int = 1):
+        """Constructor.
+
+        Parameters
+        ----------
+
+        object_class: int = 1
+            Class of the object pixels. Usually, object pixels have class 1 and border pixels have class 0.
+
+        border_thickness: Optional[int] = None
+            Thickness of the border to be added. If set, it should be the same as the one used in
+            LabelToTwoClassMask(d), but it is optional (and disabled by default).
+        """
+        super().__init__()
+        self.object_class = object_class
+        self.border_thickness = border_thickness
+
+    def __call__(
+        self, data: Union[torch.tensor, monai.data.MetaTensor, np.ndarray]
+    ) -> torch.Tensor:
+        """
+        Maps a two-class mask to a labels image.
+
+        # @TODO: Speed it up by using bounding boxes around labels!
+
+        Parameters
+        ----------
+
+        data: Union[torch.tensor, monai.data.MetaTensor, np.ndarray]
+            Input tensor
+
+        Returns
+        -------
+
+        tensor: torch.Tensor | monai.MetaTensor
+            Tensor as with label image.
+        """
+
+        if not type(data) in [torch.Tensor, monai.data.MetaTensor, np.ndarray]:
+            raise TypeError(f"Unsupported input type {type(data)}.")
+
+        # Keep track of whether we are working with MONAI MetaTensor
+        is_meta_tensor = type(data) is monai.data.MetaTensor
+
+        # Get the number of spatial dimensions
+        num_spatial_dims = get_tensor_num_spatial_dims(data, with_batch_dim=False)
+
+        # Make sure the channel dimension has only one element
+        if data.shape[0] != 1:
+            raise ValueError("The input tensor must have only one channel!")
+
+        # Original shape
+        original_shape = data.shape
+
+        # Make sure to work with int32 tensors
+        if type(data) is np.ndarray:
+            data = torch.tensor(data)
+        data.to(torch.int32)
+
+        # Remove singleton dimensions (in a copy)
+        data = data.squeeze()
+
+        # Extract the pixels with selected class
+        data_mask = data == self.object_class
+
+        # Run a connected-component analysis on the mask
+        labels = torch.tensor(label(data_mask, background=0), dtype=torch.int32)
+
+        # Do we need to dilate?
+        if self.border_thickness is not None and self.border_thickness > 0:
+
+            # Allocate result
+            labels_dilated = torch.zeros(data.shape, dtype=torch.int32)
+
+            # Footprint (structuring element) for dilation
+            if num_spatial_dims == 2:
+                footprint = torch.tensor(disk(self.border_thickness), dtype=torch.int32)
+            else:
+                footprint = torch.tensor(ball(self.border_thickness), dtype=torch.int32)
+
+            # Process all labels serially
+            for lbl in torch.unique(labels):
+
+                if lbl == 0:
+                    continue
+
+                # Select object
+                mask = torch.tensor(labels == lbl, dtype=torch.int32)
+
+                # Perform dilation
+                dilated_mask = binary_dilation(mask, footprint)
+
+                # Store in the output
+                labels_dilated[dilated_mask > 0] = lbl
+
+            # Set labels to the dilated version
+            labels = labels_dilated
+
+        # Restore original shape
+        while len(labels.shape) < len(original_shape):
+            labels = labels.unsqueeze(0)
+
+        # If needed, pack the result into a MetaTensor and
+        # transfer the metadata dictionary.
+        if is_meta_tensor:
+            labels = MetaTensor(labels, meta=data.meta.copy())
+
+        return labels
+
+
+class TwoClassMaskToLabeld(MapTransform):
+    """Maps a two-class (object and border) mask to labels image.
+
+    Supported and expected are either 2D data of shape (C, H, W) or 3D
+    data of shape (C, D, H, W).
+
+    The alternative possibility of 2D batch data (B, C, H, W) can't robustly
+    be distinguished from 3D (C, D, H, W) data and will result in unexpected
+    labels.
+    """
+
+    def __init__(
+        self,
+        keys: tuple[str] = ("image", "label"),
+        object_class: int = 1,
+        border_thickness: int = 1,
+    ) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+
+        keys: tuple[str]
+            Keys for the data dictionary.
+
+        object_class: int = 1
+            Class of the object pixels. Usually, object pixels have class 1 and border pixels have class 0.
+
+        border_thickness: Optional[int] = None
+            Thickness of the border to be added. If set, it should be the same as the one used in
+            LabelToTwoClassMask(d), but it is optional (and disabled by default).
+        """
+        super().__init__(keys=keys)
+        self.keys = keys
+        self.object_class = object_class
         self.border_thickness = border_thickness
 
     def __call__(self, data: dict) -> dict:
@@ -199,7 +400,9 @@ class LabelToTwoClassMaskd(MapTransform):
 
         # Process the images
         for key in self.keys:
-            transform = LabelToTwoClassMask(border_thickness=self.border_thickness)
+            transform = TwoClassMaskToLabel(
+                object_class=self.object_class, border_thickness=self.border_thickness
+            )
             d[key] = transform(d[key])
         return d
 

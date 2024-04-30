@@ -25,9 +25,10 @@ from ._transforms import (
     Scale,
     Scaled,
     ToPyTorchLightningOutputd,
+    TwoClassMaskToLabel,
+    TwoClassMaskToLabeld,
     ZNormalize,
     ZNormalized,
 )
-from .geom._geom import CustomResampler, CustomResamplerd
 
 __doc__ = """Custom transforms."""
