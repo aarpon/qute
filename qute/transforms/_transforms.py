@@ -260,8 +260,6 @@ class TwoClassMaskToLabel(Transform):
         """
         Maps a two-class mask to a labels image.
 
-        # @TODO: Speed it up by using bounding boxes around labels!
-
         Parameters
         ----------
 
@@ -326,11 +324,31 @@ class TwoClassMaskToLabel(Transform):
                 # Select object
                 mask = torch.tensor(labels == lbl, dtype=torch.int32)
 
+                # Find the indices of the non-zero elements
+                positions = np.where(mask > 0)
+                if not positions[0].size:
+                    raise ValueError("No connected components found.")
+
+                # Determine bounds and apply borders for each dimension
+                bounds = []
+                for dim in range(num_spatial_dims):
+                    min_bound = positions[dim].min() - self.border_thickness
+                    max_bound = positions[dim].max() + self.border_thickness + 1
+                    bounds.append((max(min_bound, 0), min(max_bound, mask.shape[dim])))
+
+                # Unpack bounds to slicing format
+                slices = tuple(
+                    slice(min_bound, max_bound) for min_bound, max_bound in bounds
+                )
+
+                # Crop the (extended) mask
+                cropped_mask = mask[slices]
+
                 # Perform dilation
-                dilated_mask = binary_dilation(mask, footprint)
+                dilated_mask = binary_dilation(cropped_mask, footprint)
 
                 # Store in the output
-                labels_dilated[dilated_mask > 0] = lbl
+                labels_dilated[slices][dilated_mask > 0] = lbl
 
             # Set labels to the dilated version
             labels = labels_dilated
