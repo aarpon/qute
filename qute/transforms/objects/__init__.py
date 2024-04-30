@@ -9,4 +9,13 @@
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
 
-from ._geom import CustomResampler, CustomResamplerd
+from ._objects import (
+    LabelToTwoClassMask,
+    LabelToTwoClassMaskd,
+    NormalizedDistanceTransform,
+    NormalizedDistanceTransformd,
+    OneHotToMask,
+    OneHotToMaskBatch,
+    TwoClassMaskToLabel,
+    TwoClassMaskToLabeld,
+)

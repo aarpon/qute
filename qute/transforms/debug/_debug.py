@@ -39,7 +39,7 @@ class DebugCheckAndFixAffineDimensions(Transform):
         prefix = f"{self.name} :: " if self.name != "" else ""
         if type(data) is list:
             for item in data:
-                if type(item) == dict:
+                if type(item) is dict:
                     for key in item.keys():
                         sub_item = item[key]
                         if type(sub_item) is MetaTensor and hasattr(sub_item, "affine"):
@@ -175,9 +175,9 @@ class DebugInformer(Transform):
     def __call__(self, data):
         """Call the Transform."""
         prefix = f"{self.name} :: " if self.name != "" else ""
-        if type(data) == tuple and len(data) > 1:
+        if type(data) is tuple and len(data) > 1:
             data = data[0]
-        if type(data) == torch.Tensor:
+        if type(data) is torch.Tensor:
             print(
                 f"{prefix}"
                 f"Type = Torch Tensor: "
@@ -188,7 +188,7 @@ class DebugInformer(Transform):
                 f"median = {torch.median(data).item()}, "
                 f"max = {data.max()}"
             )
-        elif type(data) == np.ndarray:
+        elif type(data) is np.ndarray:
             print(
                 f"{prefix}"
                 f"Type = Numpy Array: "
@@ -199,7 +199,7 @@ class DebugInformer(Transform):
                 f"median = {np.median(data)}, "
                 f"max = {data.max()}"
             )
-        elif type(data) == str:
+        elif type(data) is str:
             print(f"{prefix}String: value = '{str}'")
         elif str(type(data)).startswith("<class 'itk."):
             # This is a bit of a hack...
@@ -214,7 +214,7 @@ class DebugInformer(Transform):
                 f"median = {np.median(data_numpy)}, "
                 f"max = {data_numpy.max()}"
             )
-        elif type(data) == dict:
+        elif type(data) is dict:
             # A dictionary, most likely of "image" and "label"
             print(f"{prefix}Dictionary with keys: ", end=" ")
             for key in data.keys():
@@ -238,7 +238,7 @@ class DebugInformer(Transform):
                 else:
                     print(f"'{key}': {t};", end=" ")
             print()
-        elif type(data) == MetaTensor:
+        elif type(data) is MetaTensor:
             print(f"{prefix}MONAI MetaTensor: shape={data.shape}, dtype={data.dtype}")
         else:
             try:

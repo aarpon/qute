@@ -19,7 +19,8 @@ from monai.data import MetaTensor
 from monai.transforms import Spacing
 from skimage.measure import label
 
-from qute.transforms import (
+from qute.transforms.io import CellposeLabelReader, CustomTIFFReader
+from qute.transforms.objects import (
     LabelToTwoClassMask,
     LabelToTwoClassMaskd,
     NormalizedDistanceTransform,
@@ -29,7 +30,6 @@ from qute.transforms import (
     TwoClassMaskToLabel,
     TwoClassMaskToLabeld,
 )
-from qute.transforms.io import CellposeLabelReader, CustomTIFFReader
 
 
 @pytest.fixture(autouse=False)
@@ -654,11 +654,11 @@ def test_to_label(tmpdir):
     # Check that other shapes are not supported
     to_label = OneHotToMask()
 
-    with pytest.raises(ValueError) as e_info:
+    with pytest.raises(ValueError):
         # Single 2D image (H, W)
         _ = to_label(torch.zeros((60, 60), dtype=torch.int32))
 
-    with pytest.raises(ValueError) as e_info:
+    with pytest.raises(ValueError):
         # Batch of 3D images (B, C, D, H, W)
         _ = to_label(torch.zeros((3, 3, 10, 60, 60), dtype=torch.int32))
 
@@ -767,10 +767,10 @@ def test_to_label_batch(tmpdir):
     # Check that other shapes are not supported
     to_label_batch = OneHotToMaskBatch()
 
-    with pytest.raises(ValueError) as e_info:
+    with pytest.raises(ValueError):
         # Single 2D image (H, W)
         _ = to_label_batch(torch.zeros((60, 60), dtype=torch.int32))
 
-    with pytest.raises(ValueError) as e_info:
+    with pytest.raises(ValueError):
         # 5 batches of 3D images (5, B, C, D, H, W)
         _ = to_label_batch(torch.zeros((5, 3, 3, 10, 60, 60), dtype=torch.int32))

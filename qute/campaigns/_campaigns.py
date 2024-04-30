@@ -25,19 +25,20 @@ from monai.transforms import (
 )
 
 from qute.transforms import (
-    CustomResampler,
-    CustomResamplerd,
-    LabelToTwoClassMaskd,
     MinMaxNormalize,
     MinMaxNormalized,
-    NormalizedDistanceTransformd,
-    OneHotToMaskBatch,
     Scale,
     ToPyTorchLightningOutputd,
     ZNormalize,
     ZNormalized,
 )
+from qute.transforms.geom import CustomResampler, CustomResamplerd
 from qute.transforms.io import CustomTIFFReader, CustomTIFFReaderd
+from qute.transforms.objects import (
+    LabelToTwoClassMaskd,
+    NormalizedDistanceTransformd,
+    OneHotToMaskBatch,
+)
 
 
 class CampaignTransforms(ABC):
