@@ -10,8 +10,14 @@
 # ******************************************************************************
 
 from ._util import (
+    compute_2d_flow_magnitude_and_angle,
+    compute_2d_flows,
+    compute_3d_flow_magnitude_and_angle,
+    compute_3d_flows,
     extract_subvolume,
     get_tensor_num_spatial_dims,
     insert_subvolume,
     scale_dist_transform_by_region,
 )
+
+__doc__ = """Utility functions for transforms."""

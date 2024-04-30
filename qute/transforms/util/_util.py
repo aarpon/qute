@@ -14,6 +14,7 @@ from typing import Union
 import monai.data
 import numpy as np
 import torch
+from scipy.ndimage import distance_transform_edt
 
 
 def scale_dist_transform_by_region(
@@ -130,6 +131,150 @@ def get_tensor_num_spatial_dims(
     # Do we have a 2D or 3D tensor (excluding batch and channel dimensions)?
     num_spatial_dims = len(data.shape) - (1 if with_batch_dim else 0) - 1
     return num_spatial_dims
+
+
+def compute_2d_flows(label_img):
+    """Compute the 2D flows for each cell in a label image where each cell has a unique label.
+
+    Parameters
+    ----------
+    label_img (ndarray): A 2D array where each cell has a unique integer label.
+
+    Returns
+    -------
+    flow_x (ndarray): The x-component of flow vectors.
+    flow_y (ndarray): The y-component of flow vectors.
+    """
+
+    # Compute distance from each cell voxel to the nearest background
+    background = label_img == 0
+    dist_transform = distance_transform_edt(background)
+
+    # Compute gradients of the distance transform
+    grad_x, grad_y = np.gradient(-dist_transform)
+
+    # Normalize the gradients to get unit vectors for flow fields
+    magnitude = np.sqrt(grad_x**2 + grad_y**2) + 1e-5  # Prevent division by zero
+    unit_grad_x = grad_x / magnitude
+    unit_grad_y = grad_y / magnitude
+
+    # Only use flow vectors within cells
+    mask = label_img > 0
+    flow_x = np.zeros_like(dist_transform, dtype=np.float32)
+    flow_y = np.zeros_like(dist_transform, dtype=np.float32)
+    flow_x[mask] = unit_grad_x[mask]
+    flow_y[mask] = unit_grad_y[mask]
+
+    return flow_x, flow_y
+
+
+def compute_2d_flow_magnitude_and_angle(flow_x: np.ndarray, flow_y: np.ndarray):
+    """Compute magnitude and direction of a 2D flow field given its components.
+
+    Parameters
+    ----------
+    flow_x: np.ndarray
+        The x-component of flow vectors.
+    flow_y: np.ndarray
+        The y-component of flow vectors.
+
+    Returns
+    -------
+
+    flow_magnitude: np.ndarray
+        The magnitude of the flow field.
+
+    flow_direction: np.ndarray
+        The direction of the flow field.
+    """
+
+    # Calculate the magnitude of the vector field
+    flow_magnitude = np.sqrt(flow_x**2 + flow_y**2)
+
+    # Calculate the vector field's direction
+    flow_direction = np.arctan2(flow_y, flow_x)
+
+    return flow_magnitude, flow_direction
+
+
+def compute_3d_flow_magnitude_and_angle(
+    flow_x: np.ndarray, flow_y: np.ndarray, flow_z: np.ndarray
+):
+    """Compute magnitude and direction (azimuthal and polar angles) of a 3D flow field given its components.
+
+    Parameters
+    ----------
+    flow_x: np.ndarray
+        The x-component of flow field.
+    flow_y: np.ndarray
+        The y-component of flow field.
+    flow_z: np.ndarray
+        The z-component of flow field.
+
+    Returns
+    -------
+
+    flow_magnitude: np.ndarray
+        The magnitude of the flow field.
+
+    theta: np.ndarray
+        Azimuthal angle in radians of the flow field.
+
+    phi: np.ndarray
+        Polar angle in radians of the flow field.
+    """
+
+    # Calculate the magnitude of the vector field
+    flow_magnitude = np.sqrt(flow_x**2 + flow_y**2 + flow_z**2)
+
+    # Calculate the vector field's direction
+    theta = np.arctan2(flow_y, flow_x)
+    phi = np.arccos(
+        np.clip(flow_z / flow_magnitude, -1, 1)
+    )  # Clipping for numerical stability
+
+    return flow_magnitude, theta, phi
+
+
+def compute_3d_flows(label_img):
+    """Compute the 3D flows for each cell in a label image where each cell has a unique label.
+
+    Parameters
+    ----------
+    label_img (ndarray): A 3D array where each cell has a unique integer label.
+
+    Returns
+    -------
+    flow_x (ndarray): The x-component of flow vectors.
+    flow_y (ndarray): The y-component of flow vectors.
+    flow_z (ndarray): The z-component of flow vectors.
+    """
+
+    # Compute distance from each cell voxel to the nearest background
+    background = label_img == 0
+    dist_transform = distance_transform_edt(background)
+
+    # Compute gradients of the distance transform
+    grad_x, grad_y, grad_z = np.gradient(-dist_transform)
+
+    # Normalize the gradients to get unit vectors for flow fields
+    magnitude = (
+        np.sqrt(grad_x**2 + grad_y**2 + grad_z**2) + 1e-5
+    )  # Prevent division by zero
+    unit_grad_x = grad_x / magnitude
+    unit_grad_y = grad_y / magnitude
+    unit_grad_z = grad_z / magnitude
+
+    # Only use flow vectors within cells
+    mask = label_img > 0
+    flow_x = np.zeros_like(dist_transform, dtype=np.float32)
+    flow_y = np.zeros_like(dist_transform, dtype=np.float32)
+    flow_z = np.zeros_like(dist_transform, dtype=np.float32)
+    flow_x[mask] = unit_grad_x[mask]
+    flow_y[mask] = unit_grad_y[mask]
+    flow_z[mask] = unit_grad_z[mask]
+
+    return flow_x, flow_y, flow_z
 
 
 def extract_subvolume(image, bbox):

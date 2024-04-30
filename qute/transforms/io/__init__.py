@@ -16,3 +16,5 @@ from ._io import (
     CustomTIFFReader,
     CustomTIFFReaderd,
 )
+
+__doc__ = """Input/output transforms."""

@@ -8,10 +8,6 @@
 # Contributors:
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
-from ._preprocess import (
-    extract_fft_stats,
-    extract_intensity_stats,
-    labels_to_two_class_masks,
-)
+from ._preprocess import extract_fft_stats, extract_intensity_stats
 
 __doc__ = """Preprocessing functions."""

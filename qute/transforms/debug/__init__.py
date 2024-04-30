@@ -14,3 +14,5 @@ from ._debug import (
     DebugInformer,
     DebugMinNumVoxelCheckerd,
 )
+
+__doc__ = """Debugging transforms."""

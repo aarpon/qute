@@ -19,3 +19,5 @@ from ._objects import (
     TwoClassMaskToLabel,
     TwoClassMaskToLabeld,
 )
+
+__doc__ = """Object-related transforms."""

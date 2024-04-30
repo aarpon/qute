@@ -10,3 +10,5 @@
 # ******************************************************************************
 
 from ._geom import CustomResampler, CustomResamplerd
+
+__doc__ = """Geometric transforms."""

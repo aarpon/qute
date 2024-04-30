@@ -8,6 +8,5 @@
 # Contributors:
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
-from ._postprocess import two_class_mask_to_label
 
 __doc__ = """Postprocessing functions."""
