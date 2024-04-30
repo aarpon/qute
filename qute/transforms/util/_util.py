@@ -130,3 +130,71 @@ def get_tensor_num_spatial_dims(
     # Do we have a 2D or 3D tensor (excluding batch and channel dimensions)?
     num_spatial_dims = len(data.shape) - (1 if with_batch_dim else 0) - 1
     return num_spatial_dims
+
+
+def extract_subvolume(image, bbox):
+    """
+    Extracts a subset from a given 2D or 3D image using a bounding box.
+
+    Parameters:
+    image (np.ndarray): The n-dimensional image.
+    bbox (tuple): The bounding box with format (min_dim1, max_dim1, ..., min_dimN, max_dimN),
+    where N is the number of dimensions in the image.
+
+    Returns:
+    np.ndarray: The extracted subvolume.
+    """
+    # Validate bounding box
+    if len(bbox) != 2 * image.ndim:
+        raise ValueError("Bounding box format does not match image dimensions.")
+
+    # Construct the slice object for each dimension
+    ndim = image.ndim
+    slices = tuple(slice(bbox[i], bbox[i + ndim]) for i in range(ndim))
+    return image[slices]
+
+
+def insert_subvolume(image, subvolume, bbox, masked: bool = False):
+    """
+    Inserts a subvolume into an image using a specified bounding box.
+
+    Parameters
+    ----------
+
+    image: np.ndarray
+        The original n-dimensional image or volume.
+
+    subvolume: (np.ndarray)
+        The subvolume or subimage to insert, which must fit within the dimensions specified by bbox.
+
+    bbox: tuple
+        The bounding box with format (min_dim1, max_dim1, ..., min_dimN, max_dimN),
+        where N is the number of dimensions in the image. The bounding box specifies where to insert the subvolume.
+
+    masked: bool (Optional)
+        If True, overwrite only non-zero values in the image.
+
+    Returns
+    -------
+    image: np.ndarray
+        The image with the subvolume inserted.
+    """
+    ndim = image.ndim
+    # Validate bounding box and sub-volume
+    if len(bbox) != 2 * image.ndim:
+        raise ValueError("Bounding box format does not match image dimensions.")
+    if not (all(subvolume.shape[i] == bbox[i + ndim] - bbox[i] for i in range(ndim))):
+        raise ValueError(
+            "Sub-volume dimensions must match the bounding box dimensions."
+        )
+
+    # Construct the slice object for each dimension
+    slices = tuple(slice(bbox[i], bbox[i + ndim]) for i in range(ndim))
+
+    # Insert the subvolume into the image
+    if masked:
+        non_neg_indices = subvolume > 0
+        image[slices][non_neg_indices] = subvolume[non_neg_indices]
+    else:
+        image[slices] = subvolume
+    return image

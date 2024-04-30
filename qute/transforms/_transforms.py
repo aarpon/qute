@@ -19,7 +19,11 @@ from scipy.ndimage import binary_erosion, distance_transform_edt
 from skimage.measure import label, regionprops
 from skimage.morphology import ball, disk
 
-from qute.transforms.util import get_tensor_num_spatial_dims
+from qute.transforms.util import (
+    extract_subvolume,
+    get_tensor_num_spatial_dims,
+    insert_subvolume,
+)
 
 
 class LabelToTwoClassMask(Transform):
@@ -90,18 +94,19 @@ class LabelToTwoClassMask(Transform):
         else:
             footprint = torch.tensor(ball(self.border_thickness), dtype=torch.int32)
 
-        # Make sure to bring the structuring element to the same
-        # number of dimensions as the data
-        for d in range(len(data.shape) - num_spatial_dims):
-            footprint = footprint.unsqueeze(0)
+        # Original size
+        original_size = data.shape
 
         # Make sure to work with int32 tensors
         if type(data) is np.ndarray:
             data = torch.tensor(data)
         data.to(torch.int32)
 
-        # Allocate output
-        out = torch.zeros(data.shape, dtype=torch.int32)
+        # Remove singleton dimensions (in a copy)
+        data = data.squeeze()
+
+        # Allocate output (with the original shape)
+        out = torch.zeros(original_size, dtype=torch.int32)
 
         # Make sure we have labels
         unique_labels = torch.unique(data)
@@ -109,29 +114,36 @@ class LabelToTwoClassMask(Transform):
             data_np = data.cpu().detach().numpy()
             labels_np = label(data_np, background=0, connectivity=1).astype(np.int32)
             data = torch.from_numpy(labels_np)
-            unique_labels = torch.unique(data)
 
-        # Process all individual labels
-        for lbl in unique_labels:
+        # Calculate bounding boxes
+        regions = regionprops(data.numpy())
 
-            # Ignore background
-            if lbl == 0:
+        # Process all labels serially
+        for region in regions:
+
+            if region.label == 0:
                 continue
 
-            # Prepare the label for processing
-            bw = torch.zeros(data.shape, dtype=data.dtype)
-            indices = data == lbl
-            bw[indices] = 1
+            # Extract the subvolume
+            cropped_masks = extract_subvolume(data, region.bbox)
+
+            # Select object
+            mask = torch.tensor(cropped_masks == region.label, dtype=torch.int32)
 
             # Perform erosion
-            eroded_bw = binary_erosion(bw, footprint)
+            eroded_mask = binary_erosion(mask, footprint)
 
-            # Store object and border it in the output
-            border = bw - eroded_bw
-            bw_tc = bw + border  # Count border pixels twice
+            # Crete object and border
+            border = mask - eroded_mask
+            bw_tc = mask + border  # Count border pixels twice
 
-            # Store in the output
-            out[indices] = bw_tc[indices]
+            # Insert it into dt_out
+            bbox = region.bbox
+            while bw_tc.ndim < out.ndim:
+                bw_tc = bw_tc[np.newaxis, :]
+                m = len(bbox) // 2
+                bbox = tuple([0] + list(bbox[:m]) + [1] + list(bbox[m:]))
+            out = insert_subvolume(out, bw_tc, bbox, masked=True)
 
         # If needed, pack the result into a MetaTensor and
         # transfer the metadata dictionary.
@@ -902,58 +914,6 @@ class NormalizedDistanceTransform(Transform):
         self.in_place = in_place
         self.with_batch_dim = with_batch_dim
 
-    def _extract_subvolume(self, image, bbox):
-        """
-        Extracts a subset from a given 2D or 3D image using a bounding box.
-
-        Parameters:
-        image (np.ndarray): The n-dimensional image.
-        bbox (tuple): The bounding box with format (min_dim1, max_dim1, ..., min_dimN, max_dimN),
-        where N is the number of dimensions in the image.
-
-        Returns:
-        np.ndarray: The extracted subvolume.
-        """
-        # Validate bounding box
-        if len(bbox) != 2 * image.ndim:
-            raise ValueError("Bounding box format does not match image dimensions.")
-
-        # Construct the slice object for each dimension
-        ndim = image.ndim
-        slices = tuple(slice(bbox[i], bbox[i + ndim]) for i in range(ndim))
-        return image[slices]
-
-    def _insert_subvolume(self, image, subvolume, bbox):
-        """
-        Inserts a subvolume into an image using a specified bounding box.
-
-        Parameters:
-        image (np.ndarray): The original n-dimensional image or volume.
-        subvolume (np.ndarray): The subvolume or subimage to insert, which must fit within the dimensions specified by bbox.
-        bbox (tuple): The bounding box with format (min_dim1, max_dim1, ..., min_dimN, max_dimN),
-                      where N is the number of dimensions in the image. The bounding box specifies where to insert the subvolume.
-
-        Returns:
-        np.ndarray: The image with the subvolume inserted.
-        """
-        ndim = image.ndim
-        # Validate bounding box and sub-volume
-        if len(bbox) != 2 * image.ndim:
-            raise ValueError("Bounding box format does not match image dimensions.")
-        if not (
-            all(subvolume.shape[i] == bbox[i + ndim] - bbox[i] for i in range(ndim))
-        ):
-            raise ValueError(
-                "Sub-volume dimensions must match the bounding box dimensions."
-            )
-
-        # Construct the slice object for each dimension
-        slices = tuple(slice(bbox[i], bbox[i + ndim]) for i in range(ndim))
-
-        # Insert the subvolume into the image
-        image[slices] = subvolume
-        return image
-
     def _process_single(self, data_label):
         """Process a single image (of a potential batch)."""
         # Prepare data out
@@ -976,7 +936,7 @@ class NormalizedDistanceTransform(Transform):
                 continue
 
             # Extract the subvolume
-            cropped_mask = self._extract_subvolume(data_label, region.bbox) > 0
+            cropped_mask = extract_subvolume(data_label, region.bbox) > 0
 
             # Calculate distance transform
             dt_tmp = distance_transform_edt(cropped_mask, return_distances=True)
@@ -1008,7 +968,7 @@ class NormalizedDistanceTransform(Transform):
                 dt_tmp = dt_tmp[np.newaxis, :]
                 m = len(bbox) // 2
                 bbox = tuple([0] + list(bbox[:m]) + [1] + list(bbox[m:]))
-            dt_out = self._insert_subvolume(dt_out, dt_tmp, bbox)
+            dt_out = insert_subvolume(dt_out, dt_tmp, bbox)
 
         return dt_out
 
