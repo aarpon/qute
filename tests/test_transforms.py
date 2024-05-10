@@ -560,7 +560,7 @@ def test_normalized_distance_transform(extract_test_transforms_data):
     assert 0.08944272249937057 == pytest.approx(
         torch.min(data_out["label"][data_out["label"] > 0]).item()
     ), "Unexpected minimum pixel value."
-    assert torch.max(data_out["label"] == 1.0), "Unexpected maximum pixel value."
+    assert torch.max(data_out["label"]) == 1.0, "Unexpected maximum pixel value."
 
     #
     # NormalizedDistanceTransform
@@ -579,6 +579,69 @@ def test_normalized_distance_transform(extract_test_transforms_data):
         torch.min(data_out["label"][data_out["label"] > 0]).item()
     ), "Unexpected minimum pixel value."
     assert torch.max(label_out) == 1.0, "Unexpected maximum pixel value."
+
+    # Compare with the previous result
+    assert torch.all(data_out["label"] == label_out), "Unexpected result."
+
+
+def test_normalized_distance_transform_with_seeds(extract_test_transforms_data):
+
+    # Load TIFF file with (dtype=torch.int32)
+    reader = CustomTIFFReader(dtype=torch.int32)
+    label = reader(Path(__file__).parent / "data" / "labels.tif")
+    assert label.shape == (1, 26, 300, 300), "Unexpected image shape."
+    assert not hasattr(label, "meta"), "Metadata should not be present."
+
+    # Make sure this is a label image
+    assert len(torch.unique(label)) == 69, "Wrong number of labels."
+
+    #
+    # NormalizedDistanceTransformd
+    #
+
+    # Create the dictionary
+    image = torch.zeros(label.shape, dtype=torch.float32)
+    data = {"image": image, "label": label}
+
+    # Pass it to the Transform
+    ndt = NormalizedDistanceTransformd(
+        keys=("label",),
+        reverse=True,
+        do_not_zero=True,
+        add_seed_channel=True,
+        seed_radius=1,
+    )
+    data_out = ndt(data)
+
+    assert data_out["image"].shape == (1, 26, 300, 300), "Unexpected image shape."
+    assert data_out["label"].shape == (2, 26, 300, 300), "Unexpected labels shape."
+    assert torch.all(data_out["image"] == 0.0)
+    assert 0.08944272249937057 == pytest.approx(
+        torch.min(data_out["label"][data_out["label"] > 0]).item()
+    ), "Unexpected minimum pixel value."
+    assert torch.max(data_out["label"][0]) == 1.0, "Unexpected maximum pixel value."
+    assert torch.max(data_out["label"][1]) == 1.0, "Unexpected maximum pixel value."
+
+    #
+    # NormalizedDistanceTransform
+    #
+
+    # Load TIFF file with (dtype=torch.int32)
+    reader = CustomTIFFReader(dtype=torch.int32, as_meta_tensor=True)
+    label = reader(Path(__file__).parent / "data" / "labels.tif")
+
+    # Transform the image
+    ndt = NormalizedDistanceTransform(
+        reverse=True, do_not_zero=True, add_seed_channel=True, seed_radius=1
+    )
+    label_out = ndt(label)
+
+    assert label_out.shape == (2, 26, 300, 300), "Unexpected image shape."
+    assert 0.08944272249937057 == pytest.approx(
+        torch.min(data_out["label"][data_out["label"] > 0]).item()
+    ), "Unexpected minimum pixel value."
+    assert torch.max(data_out["label"][0]) == 1.0, "Unexpected maximum pixel value."
+    assert torch.max(data_out["label"][1]) == 1.0, "Unexpected maximum pixel value."
 
     # Compare with the previous result
     assert torch.all(data_out["label"] == label_out), "Unexpected result."

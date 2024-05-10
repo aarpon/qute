@@ -499,6 +499,8 @@ class NormalizedDistanceTransformd(MapTransform):
         keys: tuple[str, ...] = ("label",),
         reverse: bool = False,
         do_not_zero: bool = False,
+        add_seed_channel: bool = False,
+        seed_radius: int = 1,
         with_batch_dim: bool = False,
     ) -> None:
         """Constructor
@@ -517,6 +519,14 @@ class NormalizedDistanceTransformd(MapTransform):
             This is only considered if `reverse` is True. Set to True not to allow that the center pixels in each
             region have an inverse distance transform of 0.0.
 
+        add_seed_channel: bool = False
+            Whether to also add a white disk of radius `seed_radius` at the center of mass of each label in a second
+            channel.
+
+        seed_radius: int = 1
+            Radius of the disk to be added at the center of mass of each label in a second channel. Ignored if
+            add_seed_channel is False.
+
         with_batch_dim: bool (Optional, default is False)
             Whether the input tensor has a batch dimension or not. This is to distinguish between the
             2D case (B, C, H, W) and the 3D case (C, D, H, W). All other supported cases are clear.
@@ -524,7 +534,11 @@ class NormalizedDistanceTransformd(MapTransform):
         super().__init__(keys=keys)
         self.keys = keys
         self._transform = NormalizedDistanceTransform(
-            reverse=reverse, do_not_zero=do_not_zero, with_batch_dim=with_batch_dim
+            reverse=reverse,
+            do_not_zero=do_not_zero,
+            add_seed_channel=add_seed_channel,
+            seed_radius=seed_radius,
+            with_batch_dim=with_batch_dim,
         )
 
     def __call__(self, data: dict) -> dict:
@@ -557,6 +571,8 @@ class NormalizedDistanceTransform(Transform):
         reverse: bool = False,
         do_not_zero: bool = False,
         in_place: bool = True,
+        add_seed_channel: bool = False,
+        seed_radius: int = 1,
         with_batch_dim: bool = False,
     ) -> None:
         """Constructor
@@ -575,6 +591,14 @@ class NormalizedDistanceTransform(Transform):
         in_place: bool (optional, default is True)
             Set to True to modify the Tensor in place.
 
+        add_seed_channel: bool = False
+            Whether to also add a white disk of radius `seed_radius` at the center of mass of each label in a second
+            channel.
+
+        seed_radius: int = 1
+            Radius of the disk to be added at the center of mass of each label in a second channel. Ignored if
+            add_seed_channel is False.
+
         with_batch_dim: bool (Optional, default is False)
             Whether the input tensor has a batch dimension or not. This is to distinguish between the
             2D case (B, C, H, W) and the 3D case (C, D, H, W). All other supported cases are clear.
@@ -583,12 +607,20 @@ class NormalizedDistanceTransform(Transform):
         self.reverse = reverse
         self.do_not_zero = do_not_zero
         self.in_place = in_place
+        self.add_seed_channel = add_seed_channel
+        self.seed_radius = seed_radius
         self.with_batch_dim = with_batch_dim
 
     def _process_single(self, data_label):
         """Process a single image (of a potential batch)."""
         # Prepare data out
         dt_out = np.zeros(data_label.shape, dtype=np.float32)
+
+        # If needed, allocate the seeds stack
+        dt_seeds = None
+        disk_seed = None
+        if self.add_seed_channel:
+            dt_seeds = np.zeros(dt_out.shape, dtype=np.float32)
 
         # Remove singleton dimensions (in a copy)
         data_label = data_label.copy().squeeze()
@@ -633,15 +665,36 @@ class NormalizedDistanceTransform(Transform):
             else:
                 dt_tmp[in_mask_indices] = dt_tmp[in_mask_indices] / dt_tmp.max()
 
+            # Calculate the center of the connected component
+            seed_tmp = None
+            if self.add_seed_channel:
+                if disk_seed is None:
+                    disk_seed = ball(radius=self.seed_radius)
+                center_of_mass = np.round(
+                    np.mean(np.argwhere(dt_tmp > 0), axis=0)
+                ).astype(int)
+                seed_tmp = np.zeros(cropped_mask.shape, dtype=dt_tmp.dtype)
+                seed_tmp[tuple(center_of_mass)] = 1.0
+                seed_tmp = binary_dilation(seed_tmp, structure=disk_seed).astype(
+                    np.float32
+                )
+
             # Insert it into dt_out
             bbox = region.bbox
             while dt_tmp.ndim < dt_out.ndim:
                 dt_tmp = dt_tmp[np.newaxis, :]
+                if self.add_seed_channel:
+                    seed_tmp = seed_tmp[np.newaxis, :]
                 m = len(bbox) // 2
                 bbox = tuple([0] + list(bbox[:m]) + [1] + list(bbox[m:]))
             dt_out = insert_subvolume(dt_out, dt_tmp, bbox)
+            if self.add_seed_channel:
+                dt_seeds = insert_subvolume(dt_seeds, seed_tmp, bbox)
 
-        return dt_out
+        if self.add_seed_channel:
+            return np.concatenate((dt_out, dt_seeds), axis=0)
+        else:
+            return dt_out
 
     def __call__(self, data: np.ndarray) -> torch.Tensor:
         """
