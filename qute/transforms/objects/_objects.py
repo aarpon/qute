@@ -12,17 +12,11 @@ from typing import Union
 
 import monai.data
 import numpy as np
+import scipy.ndimage as ndi
 import torch
 from monai.data import MetaTensor
 from monai.transforms import MapTransform, Transform
-from scipy.ndimage import (
-    binary_dilation,
-    binary_erosion,
-    binary_fill_holes,
-    distance_transform_edt,
-    label as ndi_label,
-)
-from skimage.measure import label, regionprops
+from skimage.measure import regionprops
 from skimage.morphology import ball, disk
 from skimage.segmentation import watershed
 
@@ -125,7 +119,7 @@ class LabelToTwoClassMask(Transform):
         unique_labels = torch.unique(data)
         if len(unique_labels) == 2 and torch.all(unique_labels == torch.tensor([0, 1])):
             data_np = data.cpu().detach().numpy()
-            labels_np = label(data_np, background=0).astype(np.int32)
+            labels_np = ndi.label(data_np)[0].astype(np.int32)
             data = torch.from_numpy(labels_np)
 
         # Calculate bounding boxes
@@ -144,7 +138,7 @@ class LabelToTwoClassMask(Transform):
             mask = torch.tensor(cropped_masks == region.label, dtype=torch.int32)
 
             # Perform erosion
-            eroded_mask = binary_erosion(mask, footprint)
+            eroded_mask = ndi.binary_erosion(mask, footprint)
 
             # Crete object and border
             border = mask - eroded_mask
@@ -310,7 +304,7 @@ class TwoClassMaskToLabel(Transform):
         data_mask = data == self.object_class
 
         # Run a connected-component analysis on the mask
-        labels = torch.tensor(label(data_mask, background=0), dtype=torch.int32)
+        labels = torch.tensor(ndi.label(data_mask)[0], dtype=torch.int32)
 
         # Do we need to dilate?
         if self.border_thickness is not None and self.border_thickness > 0:
@@ -354,7 +348,7 @@ class TwoClassMaskToLabel(Transform):
                 cropped_mask = mask[slices]
 
                 # Perform dilation
-                dilated_mask = binary_dilation(cropped_mask, footprint)
+                dilated_mask = ndi.binary_dilation(cropped_mask, footprint)
 
                 # Store in the output
                 labels_dilated[slices][dilated_mask > 0] = lbl
@@ -649,7 +643,7 @@ class NormalizedDistanceTransform(Transform):
             cropped_mask = extract_subvolume(data_label, region.bbox) > 0
 
             # Calculate distance transform
-            dt_tmp = distance_transform_edt(cropped_mask, return_distances=True)
+            dt_tmp = ndi.distance_transform_edt(cropped_mask, return_distances=True)
 
             # Normalize the distance transform in place
             in_mask_indices = dt_tmp > 0.0
@@ -682,7 +676,7 @@ class NormalizedDistanceTransform(Transform):
                 ).astype(int)
                 seed_tmp = np.zeros(cropped_mask.shape, dtype=dt_tmp.dtype)
                 seed_tmp[tuple(center_of_mass)] = 1.0
-                seed_tmp = binary_dilation(seed_tmp, structure=disk_seed).astype(
+                seed_tmp = ndi.binary_dilation(seed_tmp, structure=disk_seed).astype(
                     np.float32
                 )
 
@@ -845,12 +839,12 @@ class WatershedAndLabelTransform(Transform):
         """Process a single image (of a potential batch)."""
 
         # Prepare for the watershed algorithm
-        mask = binary_fill_holes(data_label[0] > 0)
-        dist = distance_transform_edt(mask)
+        mask = ndi.binary_fill_holes(data_label[0] > 0)
+        dist = ndi.distance_transform_edt(mask)
 
         # Label seed points for the watershed?
         if self.use_seed_channel:
-            seed_labels, _ = ndi_label(data_label[1])
+            seed_labels, _ = ndi.label(data_label[1])
         else:
             seed_labels = None
 

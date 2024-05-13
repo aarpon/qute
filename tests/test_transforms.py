@@ -18,9 +18,7 @@ import scipy.ndimage as ndi
 import torch
 from monai.data import MetaTensor
 from monai.transforms import Spacing
-from skimage.measure import label
 from skimage.segmentation import watershed
-from tifffile import imwrite
 
 from qute.transforms.io import CellposeLabelReader, CustomTIFFReader
 from qute.transforms.objects import (
@@ -211,7 +209,7 @@ def test_two_class_mask_to_labels_2d(extract_test_transforms_data):
 
     # Count objects - we should have the same number as in the initial labels image
     two_class_mask = two_class == 1
-    count_labels, num = label(two_class_mask.squeeze(), background=0, return_num=True)
+    count_labels, num = ndi.label(two_class_mask.squeeze())
     assert num == 14, "Unexpected number of labels."
     assert (
         len(np.unique(count_labels)) - 1 == len(np.unique(labels)) - 1
@@ -265,7 +263,7 @@ def test_two_class_mask_to_labels_2d(extract_test_transforms_data):
 
     # Count objects - we should have the same number as in the initial labels image
     two_class_mask = data_two_class["label"] == 1
-    count_labels, num = label(two_class_mask.squeeze(), background=0, return_num=True)
+    count_labels, num = ndi.label(two_class_mask.squeeze())
     assert num == 14, "Unexpected number of labels."
     assert len(np.unique(count_labels)) - 1 == 14, "Unexpected number of labels."
 
@@ -320,7 +318,7 @@ def test_two_class_mask_to_labels_3d(extract_test_transforms_data):
 
     # Count objects - 18 objects are eroded away because they are too flat.
     two_class_mask = two_class == 1
-    count_labels, num = label(two_class_mask.squeeze(), background=0, return_num=True)
+    count_labels, num = ndi.label(two_class_mask.squeeze())
     assert num == 50, "Unexpected number of labels."
     assert len(np.unique(count_labels)) - 1 == 50, "Unexpected number of labels."
 
@@ -373,7 +371,7 @@ def test_two_class_mask_to_labels_3d(extract_test_transforms_data):
 
     # Count objects - 18 objects are eroded away because they are too flat.
     two_class_mask = data_two_class["label"] == 1
-    count_labels, num = label(two_class_mask.squeeze(), background=0, return_num=True)
+    count_labels, num = ndi.label(two_class_mask.squeeze())
     assert num == 50, "Unexpected number of labels."
     assert len(np.unique(count_labels)) - 1 == 50, "Unexpected number of labels."
 
