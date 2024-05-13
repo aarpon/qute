@@ -14,10 +14,13 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import scipy.ndimage as ndi
 import torch
 from monai.data import MetaTensor
 from monai.transforms import Spacing
 from skimage.measure import label
+from skimage.segmentation import watershed
+from tifffile import imwrite
 
 from qute.transforms.io import CellposeLabelReader, CustomTIFFReader
 from qute.transforms.objects import (
@@ -576,7 +579,7 @@ def test_normalized_distance_transform(extract_test_transforms_data):
 
     assert label_out.shape == (1, 26, 300, 300), "Unexpected image shape."
     assert 0.08944272249937057 == pytest.approx(
-        torch.min(data_out["label"][data_out["label"] > 0]).item()
+        torch.min(label_out[label_out > 0]).item()
     ), "Unexpected minimum pixel value."
     assert torch.max(label_out) == 1.0, "Unexpected maximum pixel value."
 
@@ -638,10 +641,10 @@ def test_normalized_distance_transform_with_seeds(extract_test_transforms_data):
 
     assert label_out.shape == (2, 26, 300, 300), "Unexpected image shape."
     assert 0.08944272249937057 == pytest.approx(
-        torch.min(data_out["label"][data_out["label"] > 0]).item()
+        torch.min(label_out[label_out > 0]).item()
     ), "Unexpected minimum pixel value."
-    assert torch.max(data_out["label"][0]) == 1.0, "Unexpected maximum pixel value."
-    assert torch.max(data_out["label"][1]) == 1.0, "Unexpected maximum pixel value."
+    assert torch.max(label_out[0]) == 1.0, "Unexpected maximum pixel value."
+    assert torch.max(label_out[1]) == 1.0, "Unexpected maximum pixel value."
 
     # Compare with the previous result
     assert torch.all(data_out["label"] == label_out), "Unexpected result."
@@ -837,3 +840,96 @@ def test_to_label_batch(tmpdir):
     with pytest.raises(ValueError):
         # 5 batches of 3D images (5, B, C, D, H, W)
         _ = to_label_batch(torch.zeros((5, 3, 3, 10, 60, 60), dtype=torch.int32))
+
+
+def test_watershed(extract_test_transforms_data):
+
+    # Load TIFF file with (dtype=torch.int32)
+    reader = CustomTIFFReader(dtype=torch.int32, as_meta_tensor=True)
+    label = reader(Path(__file__).parent / "data" / "labels.tif")
+    num_labels_before = len(np.unique(label)) - 1
+    assert num_labels_before == 68, "Unexpected number of labels in start image."
+
+    # Transform the image with the INVERSE distance transform
+    i_ndt = NormalizedDistanceTransform(
+        reverse=True, do_not_zero=True, add_seed_channel=True, seed_radius=1
+    )
+    label_out_idt = i_ndt(label)
+
+    assert label_out_idt.shape == (2, 26, 300, 300), "Unexpected image shape."
+
+    # Label seed points for the watershed
+    seed_labels, _ = ndi.label(label_out_idt[1])
+
+    # Run the watershed algorithm
+    mask = ndi.binary_fill_holes(label_out_idt[0] > 0)
+    dist = ndi.distance_transform_edt(mask)
+
+    labels_idt = watershed(-dist, markers=seed_labels, mask=mask, connectivity=1)
+    num_labels_after_idt = len(np.unique(labels_idt)) - 1
+    assert num_labels_after_idt == 66, "Unexpected number of labels in result image."
+
+    # Transform the image with the DIRECT distance transform
+    ndt = NormalizedDistanceTransform(
+        reverse=False, add_seed_channel=True, seed_radius=1
+    )
+    label_out = ndt(label)
+
+    assert label_out.shape == (2, 26, 300, 300), "Unexpected image shape."
+
+    # Label seed points for the watershed
+    seed_labels, _ = ndi.label(label_out[1])
+
+    # Run the watershed algorithm
+    mask = ndi.binary_fill_holes(label_out[0] > 0)
+    dist = ndi.distance_transform_edt(mask)
+
+    labels = watershed(-dist, markers=seed_labels, mask=mask, connectivity=1)
+    num_labels_after = len(np.unique(labels)) - 1
+    assert num_labels_after == 66, "Unexpected number of labels in result image."
+
+    # The direct and the inverse distance transform give the same result in a clean dataset
+    assert (
+        num_labels_after_idt == num_labels_after
+    ), "The number of labels from IDT and DT should match!"
+
+
+def test_watershed_synth(extract_test_transforms_data):
+
+    # Example: Create a 3D volume (substitute this with your actual data)
+    image = np.zeros((100, 100, 100), dtype=np.float32)
+    image[30:70, 30:70, 30:70] = 1  # Simulate an object
+
+    # Generate an inverse distance transform
+    distance = ndi.distance_transform_edt(image)
+    normalized_inverse_distance = distance.copy()
+    in_mask_indices = normalized_inverse_distance > 0.0
+    tmp = normalized_inverse_distance[in_mask_indices]
+    tmp = (tmp.max() + 1) - tmp
+    normalized_inverse_distance[in_mask_indices] = tmp / tmp.max()
+
+    # Define seed points for the watershed
+    # For simplicity, placing a single seed point at the center of the volume
+    seeds = np.zeros_like(image, dtype=bool)
+    seeds[50, 50, 50] = True  # Adjust this according to your known center point
+    seed_labels, _ = ndi.label(seeds)
+
+    # Run the watershed algorithm
+    labels = watershed(
+        -normalized_inverse_distance,
+        markers=seed_labels,
+        mask=distance > 0,
+        connectivity=1,
+    )
+
+    # Test
+    assert distance.max() == 20, "Wrong maximum distance."
+    assert (
+        normalized_inverse_distance[in_mask_indices].min() == 0.05
+    ), "Wrong minimum inverted normalized distance."
+    assert (
+        normalized_inverse_distance[in_mask_indices].max() == 1.00
+    ), "Wrong minimum inverted normalized distance."
+    assert np.all(
+        (image > 0) == (labels > 0)
+    ), "Watershed label must correspond to original label."
