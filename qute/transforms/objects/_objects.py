@@ -15,9 +15,16 @@ import numpy as np
 import torch
 from monai.data import MetaTensor
 from monai.transforms import MapTransform, Transform
-from scipy.ndimage import binary_dilation, binary_erosion, distance_transform_edt
+from scipy.ndimage import (
+    binary_dilation,
+    binary_erosion,
+    binary_fill_holes,
+    distance_transform_edt,
+    label as ndi_label,
+)
 from skimage.measure import label, regionprops
 from skimage.morphology import ball, disk
+from skimage.segmentation import watershed
 
 from qute.transforms.util import (
     extract_subvolume,
@@ -695,6 +702,166 @@ class NormalizedDistanceTransform(Transform):
             return np.concatenate((dt_out, dt_seeds), axis=0)
         else:
             return dt_out
+
+    def __call__(self, data: np.ndarray) -> torch.Tensor:
+        """
+        Calculates and normalizes the distance transform per region of the selected pixel class from a labels image
+        and adds it as an additional plane to the image.
+
+        Returns
+        -------
+
+        data: np.ndarray
+            Updated array with the normalized distance transform added as a new plane.
+        """
+
+        if not type(data) in [torch.Tensor, monai.data.MetaTensor, np.ndarray]:
+            raise TypeError(f"Unsupported input type {type(data)}.")
+
+        # Do we have a 2D or 3D tensor (excluding batch and channel dimensions)?
+        effective_dims = get_tensor_num_spatial_dims(data, self.with_batch_dim)
+
+        if effective_dims not in [2, 3]:
+            raise ValueError("Unsupported geometry.")
+
+        # Do we have a NumPy array?
+        is_np_array = type(data) is np.ndarray
+
+        # Keep track of whether we are working with MONAI MetaTensor
+        is_meta_tensor = False
+        meta = None
+        if not is_np_array:
+            is_meta_tensor = type(data) is monai.data.MetaTensor
+            if is_meta_tensor:
+                meta = data.meta.copy()
+
+        # This Transform works on NumPy arrays
+        if not is_np_array:
+            data_label = np.array(data.cpu())
+        else:
+            data_label = data
+
+        if self.with_batch_dim:
+            dt_final = np.zeros(data_label.shape, dtype=np.float32)
+            for b in range(data_label.shape[0]):
+                dt_final[b] = self._process_single(data_label[b])
+        else:
+            dt_final = self._process_single(data_label)
+
+        # Cast to a tensor
+        dt = torch.from_numpy(dt_final)
+        if is_meta_tensor:
+            dt = MetaTensor(dt, meta=meta)
+
+        # Return the updated data dictionary
+        return dt
+
+
+class WatershedAndLabelTransformd(MapTransform):
+    """Calculates the watershed transform and returns a labeled image.
+
+    The first channel is expected to be a distance transform (either direct or inverse, and optionally normalized).
+    Optionally, the second channel can contain seeds for the watershed transform.
+    """
+
+    def __init__(
+        self,
+        keys: tuple[str, ...] = ("label",),
+        use_seed_channel: bool = True,
+        with_batch_dim: bool = False,
+    ) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+
+        keys: tuple[str, ...]
+            Keys fot the tensor to be transformed. This transform makes sense for label or mask images only.
+
+        use_seed_channel: bool
+            Whether to use a seed channel for the watershed transform. It is expected that the image to
+
+        with_batch_dim: bool (Optional, default is False)
+            Whether the input tensor has a batch dimension or not. This is to distinguish between the
+            2D case (B, C, H, W) and the 3D case (C, D, H, W). All other supported cases are clear.
+        """
+        super().__init__(keys=keys)
+        self.keys = keys
+        self._transform = WatershedAndLabelTransform(
+            use_seed_channel=use_seed_channel, with_batch_dim=with_batch_dim
+        )
+
+    def __call__(self, data: dict) -> dict:
+        """
+        Calculates and normalizes the distance transform per region from the labels image (from an instance segmentation).
+
+        Returns
+        -------
+
+        data: dict
+            Updated dictionary with modified tensors.
+        """
+
+        # Make a copy of the input dictionary
+        d = dict(data)
+
+        for key in self.keys:
+            dt = self._transform(d[key])
+            d[key] = dt
+
+        # Return the updated data dictionary
+        return d
+
+
+class WatershedAndLabelTransform(Transform):
+    """Calculates the watershed transform and returns a labeled image.
+
+    The first channel is expected to be a distance transform (either direct or inverse, and optionally normalized).
+    Optionally, the second channel can contain seeds for the watershed transform.
+    """
+
+    def __init__(
+        self,
+        use_seed_channel: bool = True,
+        with_batch_dim: bool = False,
+    ) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+
+        use_seed_channel: bool
+            Whether to use a seed channel for the watershed transform. It is expected that the image to
+
+        with_batch_dim: bool (Optional, default is False)
+            Whether the input tensor has a batch dimension or not. This is to distinguish between the
+            2D case (B, C, H, W) and the 3D case (C, D, H, W). All other supported cases are clear.
+        """
+        super().__init__()
+        self.use_seed_channel = use_seed_channel
+        self.with_batch_dim = with_batch_dim
+
+    def _process_single(self, data_label):
+        """Process a single image (of a potential batch)."""
+
+        # Prepare for the watershed algorithm
+        mask = binary_fill_holes(data_label[0] > 0)
+        dist = distance_transform_edt(mask)
+
+        # Label seed points for the watershed?
+        if self.use_seed_channel:
+            seed_labels, _ = ndi_label(data_label[1])
+        else:
+            seed_labels = None
+
+        # Run watershed
+        labels = watershed(-dist, markers=seed_labels, mask=mask, connectivity=1)
+
+        # Replace channel 0
+        data_label[0] = labels.astype(np.int32)
+
+        # Return result
+        return data_label
 
     def __call__(self, data: np.ndarray) -> torch.Tensor:
         """

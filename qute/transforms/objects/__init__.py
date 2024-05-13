@@ -18,6 +18,8 @@ from ._objects import (
     OneHotToMaskBatch,
     TwoClassMaskToLabel,
     TwoClassMaskToLabeld,
+    WatershedAndLabelTransform,
+    WatershedAndLabelTransformd,
 )
 
 __doc__ = """Object-related transforms."""
