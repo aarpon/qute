@@ -38,6 +38,7 @@ from qute.transforms.objects import (
     LabelToTwoClassMaskd,
     NormalizedDistanceTransformd,
     OneHotToMaskBatch,
+    WatershedAndLabelTransform,
 )
 
 
@@ -279,7 +280,11 @@ class SegmentationCampaignTransformsIDT(CampaignTransforms):
                 RandGaussianNoised(keys=("image",), prob=0.2),
                 RandGaussianSmoothd(keys=("image",), prob=0.2),
                 NormalizedDistanceTransformd(
-                    keys=("label",), reverse=True, do_not_zero=True
+                    keys=("label",),
+                    reverse=True,
+                    do_not_zero=True,
+                    add_seed_channel=True,
+                    seed_radius=1,
                 ),
                 ToPyTorchLightningOutputd(label_key="label", label_dtype=torch.float32),
             ]
@@ -309,7 +314,11 @@ class SegmentationCampaignTransformsIDT(CampaignTransforms):
                 ),
                 ZNormalized(keys=("image",)),
                 NormalizedDistanceTransformd(
-                    keys=("label",), reverse=True, do_not_zero=True
+                    keys=("label",),
+                    reverse=True,
+                    do_not_zero=True,
+                    add_seed_channel=True,
+                    seed_radius=1,
                 ),
                 ToPyTorchLightningOutputd(),
             ]
@@ -335,8 +344,9 @@ class SegmentationCampaignTransformsIDT(CampaignTransforms):
 
     def get_post_inference_transforms(self):
         """Define post inference transforms to apply after prediction on patch."""
-        # @TODO: Add Distance transforms to labels image
-        post_inference_transforms = Compose([])
+        post_inference_transforms = Compose(
+            [WatershedAndLabelTransform(use_seed_channel=True, with_batch_dim=True)]
+        )
         return post_inference_transforms
 
     def get_post_full_inference_transforms(self):

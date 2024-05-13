@@ -670,7 +670,12 @@ class NormalizedDistanceTransform(Transform):
             seed_tmp = None
             if self.add_seed_channel:
                 if disk_seed is None:
-                    disk_seed = ball(radius=self.seed_radius)
+                    if np.ndim(dt_tmp) == 2:
+                        disk_seed = disk(radius=self.seed_radius)
+                    elif np.ndim(dt_tmp) == 3:
+                        disk_seed = ball(radius=self.seed_radius)
+                    else:
+                        raise ValueError("Unsupported dimensionality")
                 center_of_mass = np.round(
                     np.mean(np.argwhere(dt_tmp > 0), axis=0)
                 ).astype(int)
@@ -851,11 +856,8 @@ class WatershedAndLabelTransform(Transform):
         # Run watershed
         labels = watershed(-dist, markers=seed_labels, mask=mask, connectivity=1)
 
-        # Replace channel 0
-        data_label[0] = labels.astype(np.int32)
-
-        # Return result
-        return data_label
+        # We return only the label image and drop the original image and the seeds
+        return labels.astype(np.int32)
 
     def __call__(self, data: np.ndarray) -> torch.Tensor:
         """
