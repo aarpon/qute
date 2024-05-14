@@ -79,7 +79,9 @@ if __name__ == "__main__":
 
     # Metrics
     metrics = DiceMetric(
-        include_background=INCLUDE_BACKGROUND, reduction="mean", get_not_nans=False
+        include_background=INCLUDE_BACKGROUND,
+        reduction="mean_batch",
+        get_not_nans=False,
     )
 
     # Learning rate scheduler
