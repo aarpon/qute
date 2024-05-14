@@ -29,6 +29,8 @@ from torchmetrics import MeanAbsoluteError
 from qute import device
 from qute.campaigns import SegmentationCampaignTransformsIDT
 from qute.data.demos import CellSegmentationDemoIDT
+from qute.losses._losses import CombinedMSEDiceCELoss
+from qute.metrics._metrics import CombinedMeanAbsoluteErrorBinaryDiceMetric
 from qute.models.unet import UNet
 
 SEED = 2022
@@ -72,10 +74,10 @@ if __name__ == "__main__":
     steps_per_epoch = len(data_module.train_dataloader())
 
     # Loss
-    criterion = MSELoss()
+    criterion = CombinedMSEDiceCELoss()
 
     # Metrics
-    metrics = MeanAbsoluteError()
+    metrics = CombinedMeanAbsoluteErrorBinaryDiceMetric()
 
     # Learning rate scheduler
     lr_scheduler_class = OneCycleLR
@@ -119,6 +121,7 @@ if __name__ == "__main__":
         callbacks=[model_checkpoint, lr_monitor],
         max_epochs=MAX_EPOCHS,
         log_every_n_steps=1,
+        val_check_interval=1.0,  # Run validation every epoch
     )
 
     # Store parameters

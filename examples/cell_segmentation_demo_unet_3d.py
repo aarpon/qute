@@ -143,6 +143,7 @@ if __name__ == "__main__":
         callbacks=[model_checkpoint, lr_monitor],
         max_epochs=MAX_EPOCHS,
         log_every_n_steps=1,
+        val_check_interval=1.0,  # Run validation every epoch
     )
 
     # Store parameters

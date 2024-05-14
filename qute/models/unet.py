@@ -143,11 +143,6 @@ class UNet(pl.LightningModule):
             dropout=dropout,
         )
 
-        # From PyTorch Lightning 2.0, the losses must be stored
-        # explicitly in memory and aggregated explicitly.
-        self.validation_losses = []
-        self.test_losses = []
-
         # Log the hyperparameters
         self.save_hyperparameters(ignore=["criterion"])
 
@@ -168,8 +163,8 @@ class UNet(pl.LightningModule):
         x, y = batch
         y_hat = self.net(x)
         loss = self.criterion(y_hat, y)
-        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
-        return loss
+        self.log("loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        return {"loss": loss}
 
     def validation_step(self, batch, batch_idx):
         """Perform a validation step."""
@@ -177,16 +172,14 @@ class UNet(pl.LightningModule):
         y_hat = self.net(x)
         val_loss = self.criterion(y_hat, y)
 
-        # Append the loss
-        self.validation_losses.append(val_loss.detach())
-
         # Log the loss
         self.log(
             "val_loss",
-            torch.tensor([val_loss]),
+            val_loss,
             on_step=True,
             on_epoch=True,
             prog_bar=True,
+            logger=True,
         )
 
         # Update the metrics if needed
@@ -198,7 +191,7 @@ class UNet(pl.LightningModule):
             else:
                 self.metrics(y_hat, y)
 
-        return val_loss
+        return {"val_loss": val_loss}
 
     def on_validation_epoch_end(self):
         """Compute the final metric at the end of the epoch."""
@@ -219,7 +212,7 @@ class UNet(pl.LightningModule):
                 )
         else:
             self.log(
-                f"val_epoch_metrics",
+                f"val_metrics",
                 torch.tensor([epoch_metrics]),
                 on_step=False,
                 on_epoch=True,
@@ -228,21 +221,14 @@ class UNet(pl.LightningModule):
         # Reset metrics after logging
         self.metrics.reset()
 
-        # Calculate and log the average validation loss
-        avg_loss = torch.stack(self.validation_losses).mean()
-        self.log("val_epoch_loss", avg_loss, on_epoch=True)
-
-        # Clear the list for the next validation epoch
-        self.validation_losses.clear()
-
     def test_step(self, batch, batch_idx):
         """Perform a test step."""
         x, y = batch
         y_hat = self.net(x)
         test_loss = self.criterion(y_hat, y)
 
-        # Append the loss
-        self.test_losses.append(test_loss.detach())
+        # # Append the loss
+        # self.test_losses.append(test_loss.detach())
 
         # Log the loss
         self.log("test_loss", test_loss)
@@ -254,7 +240,7 @@ class UNet(pl.LightningModule):
             else:
                 self.metrics(y_hat, y)
 
-        return test_loss
+        return {"test_loss": test_loss}
 
     def on_test_epoch_end(self):
         """Compute the final metric at the end of the epoch."""
@@ -275,7 +261,7 @@ class UNet(pl.LightningModule):
                 )
         else:
             self.log(
-                f"test_epoch_metrics",
+                f"test_metrics",
                 torch.tensor([epoch_metrics]),
                 on_step=False,
                 on_epoch=True,
@@ -283,13 +269,6 @@ class UNet(pl.LightningModule):
 
         # Reset metrics after logging
         self.metrics.reset()
-
-        # Calculate and log the average test loss
-        avg_loss = torch.stack(self.test_losses).mean()
-        self.log("test_epoch_loss", avg_loss, on_epoch=True)
-
-        # Clear the list for the next test epoch
-        self.test_losses.clear()
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """The predict step creates a label image from the output one-hot tensor."""

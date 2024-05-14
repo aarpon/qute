@@ -95,6 +95,7 @@ def train_fn(config, criterion, metrics, num_epochs=MAX_EPOCHS, num_gpus=1):
         logger=TensorBoardLogger(save_dir=os.getcwd(), name="", version="."),
         max_epochs=num_epochs,
         log_every_n_steps=1,
+        val_check_interval=1.0,  # Run validation every epoch
     )
     trainer.logger._default_hp_metric = False
 
