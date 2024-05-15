@@ -303,3 +303,67 @@ class DebugMinNumVoxelCheckerd(MapTransform):
 
         # Return data
         return d
+
+
+class DebugExtractChannel(Transform):
+    """
+    Extract just one channel from a multi-channel tensor.
+    """
+
+    def __init__(
+        self,
+        channel_num: int,
+        mask: bool = False,
+        mask_threshold: float = 1e-2,
+        to_binary: bool = False,
+    ):
+        """Constructor.
+
+        Parameters
+        ----------
+
+        channel_num: int
+            Index of channel to be extracted.
+
+        mask: bool = False
+            Set to Ture to mask the channel by its binarized version. It
+
+        mask_threshold: float = 1e-3
+            Threshold for the masked image.
+
+        to_binary: bool = False
+            Set to True to convert to binary via sigmoid transform and thresholding. It implies to_binary = True
+            and will ignore the passed argument for it..
+        """
+        super().__init__()
+        self.channel_num = channel_num
+        self.mask = mask
+        self.mask_threshold = mask_threshold
+        self.to_binary = to_binary
+
+    def __call__(self, data):
+        """Call the Transform."""
+
+        # Check the number of dimensions in output tensor to determine if it's 2D or 3D
+        if len(data.shape) not in [4, 5]:
+            raise ValueError(
+                "Unexpected number of dimensions, expected 4 (2D) or 5 (3D)."
+            )
+
+        # Determine if the data is 2D or 3D and adjust indexing accordingly
+        dim_idx = (slice(None),) * (len(data.shape) - 2)
+
+        # Extract the selected channel
+        out = data[:, self.channel_num, None, *dim_idx]
+
+        # Binarize if requested
+        bw = 1.0
+        if self.to_binary or self.mask:
+            bw = torch.sigmoid(out) > 0.5
+
+        # Mask if requested
+        if self.mask:
+            out = bw * out
+            out[out <= self.mask_threshold] = 0
+
+        return out

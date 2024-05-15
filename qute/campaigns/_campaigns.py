@@ -284,7 +284,7 @@ class SegmentationCampaignTransformsIDT(CampaignTransforms):
                     reverse=True,
                     do_not_zero=True,
                     add_seed_channel=True,
-                    seed_radius=1,
+                    seed_radius=2,
                 ),
                 ToPyTorchLightningOutputd(label_key="label", label_dtype=torch.float32),
             ]
@@ -318,7 +318,7 @@ class SegmentationCampaignTransformsIDT(CampaignTransforms):
                     reverse=True,
                     do_not_zero=True,
                     add_seed_channel=True,
-                    seed_radius=1,
+                    seed_radius=2,
                 ),
                 ToPyTorchLightningOutputd(),
             ]
@@ -345,7 +345,11 @@ class SegmentationCampaignTransformsIDT(CampaignTransforms):
     def get_post_inference_transforms(self):
         """Define post inference transforms to apply after prediction on patch."""
         post_inference_transforms = Compose(
-            [WatershedAndLabelTransform(use_seed_channel=True, with_batch_dim=True)]
+            [
+                WatershedAndLabelTransform(
+                    use_seed_channel=True, dt_threshold=0.02, with_batch_dim=True
+                )
+            ]
         )
         return post_inference_transforms
 

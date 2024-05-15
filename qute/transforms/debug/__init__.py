@@ -11,6 +11,7 @@
 
 from ._debug import (
     DebugCheckAndFixAffineDimensions,
+    DebugExtractChannel,
     DebugInformer,
     DebugMinNumVoxelCheckerd,
 )

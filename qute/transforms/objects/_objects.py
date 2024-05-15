@@ -822,6 +822,7 @@ class WatershedAndLabelTransform(Transform):
     def __init__(
         self,
         use_seed_channel: bool = True,
+        dt_threshold: float = 0.02,
         with_batch_dim: bool = False,
     ) -> None:
         """Constructor
@@ -832,24 +833,33 @@ class WatershedAndLabelTransform(Transform):
         use_seed_channel: bool
             Whether to use a seed channel for the watershed transform. It is expected that the image to
 
+        dt_threshold: float = 0.02,
+            Set a threshold for the distance transform to make sure that the background is 0.
+
         with_batch_dim: bool (Optional, default is False)
             Whether the input tensor has a batch dimension or not. This is to distinguish between the
             2D case (B, C, H, W) and the 3D case (C, D, H, W). All other supported cases are clear.
         """
         super().__init__()
         self.use_seed_channel = use_seed_channel
+        self.dt_threshold = dt_threshold
         self.with_batch_dim = with_batch_dim
 
     def _process_single(self, data_label):
         """Process a single image (of a potential batch)."""
 
-        # Prepare for the watershed algorithm
-        mask = ndi.binary_fill_holes(data_label[0] > 0)
-        dist = ndi.distance_transform_edt(mask)
+        # Prepare the distance transform for watershed
+        bw = (torch.sigmoid(torch.tensor(data_label[0])) > 0.5).numpy()
+        dist = bw * data_label[0]
+        dist[dist <= self.dt_threshold] = 0
+
+        # Create a mask
+        mask = ndi.binary_fill_holes(dist > 0)
 
         # Label seed points for the watershed?
         if self.use_seed_channel:
-            seed_labels, _ = ndi.label(data_label[1])
+            p_seed = torch.sigmoid(torch.tensor(data_label[1])) > 0.5
+            seed_labels, _ = ndi.label(p_seed)
         else:
             seed_labels = None
 
@@ -860,9 +870,8 @@ class WatershedAndLabelTransform(Transform):
         return labels.astype(np.int32)
 
     def __call__(self, data: np.ndarray) -> torch.Tensor:
-        """
-        Calculates and normalizes the distance transform per region of the selected pixel class from a labels image
-        and adds it as an additional plane to the image.
+        """Calculates and normalizes the distance transform per region of the selected pixel class
+        from a labels image and adds it as an additional plane to the image.
 
         Returns
         -------
