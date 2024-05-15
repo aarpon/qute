@@ -695,7 +695,7 @@ class NormalizedDistanceTransform(Transform):
                 bbox = tuple([0] + list(bbox[:m]) + [1] + list(bbox[m:]))
             dt_out = insert_subvolume(dt_out, dt_tmp, bbox)
             if self.add_seed_channel:
-                dt_seeds = insert_subvolume(dt_seeds, seed_tmp, bbox)
+                dt_seeds = insert_subvolume(dt_seeds, seed_tmp, bbox, masked=True)
 
         if self.add_seed_channel:
             return np.concatenate((dt_out, dt_seeds), axis=0)
