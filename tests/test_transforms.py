@@ -847,15 +847,15 @@ def test_watershed(extract_test_transforms_data):
 
     # Load TIFF file with (dtype=torch.int32)
     reader = CustomTIFFReader(dtype=torch.int32, as_meta_tensor=True)
-    label = reader(Path(__file__).parent / "data" / "labels.tif")
-    num_labels_before = len(np.unique(label)) - 1
+    labels_orig = reader(Path(__file__).parent / "data" / "labels.tif")
+    num_labels_before = len(np.unique(labels_orig)) - 1
     assert num_labels_before == 68, "Unexpected number of labels in start image."
 
     # Transform the image with the INVERSE distance transform
     i_ndt = NormalizedDistanceTransform(
         reverse=True, do_not_zero=True, add_seed_channel=True, seed_radius=1
     )
-    label_out_idt = i_ndt(label)
+    label_out_idt = i_ndt(labels_orig)
 
     assert label_out_idt.shape == (2, 26, 300, 300), "Unexpected image shape."
 
@@ -868,13 +868,13 @@ def test_watershed(extract_test_transforms_data):
 
     labels_idt = watershed(-dist, markers=seed_labels, mask=mask, connectivity=1)
     num_labels_after_idt = len(np.unique(labels_idt)) - 1
-    assert num_labels_after_idt == 66, "Unexpected number of labels in result image."
+    assert num_labels_after_idt == 68, "Unexpected number of labels in result image."
 
     # Transform the image with the DIRECT distance transform
     ndt = NormalizedDistanceTransform(
         reverse=False, add_seed_channel=True, seed_radius=1
     )
-    label_out = ndt(label)
+    label_out = ndt(labels_orig)
 
     assert label_out.shape == (2, 26, 300, 300), "Unexpected image shape."
 
@@ -887,12 +887,22 @@ def test_watershed(extract_test_transforms_data):
 
     labels = watershed(-dist, markers=seed_labels, mask=mask, connectivity=1)
     num_labels_after = len(np.unique(labels)) - 1
-    assert num_labels_after == 66, "Unexpected number of labels in result image."
+    assert num_labels_after == 68, "Unexpected number of labels in result image."
 
     # The direct and the inverse distance transform give the same result in a clean dataset
     assert (
         num_labels_after_idt == num_labels_after
     ), "The number of labels from IDT and DT should match!"
+
+    iou_tr = np.sum(np.logical_and(labels_idt > 0, labels > 0)) / np.sum(
+        np.logical_or(labels_idt > 0, labels > 0)
+    )
+    assert iou_tr == 1.0, "The number of labels from IDT and DT should match!"
+
+    iou = np.sum(np.logical_and(labels_idt > 0, labels_orig.numpy() > 0)) / np.sum(
+        np.logical_or(labels_idt > 0, labels_orig > 0)
+    )
+    assert iou > 0.99998, "The reconstruction should be close enough!"
 
 
 def test_watershed_synth(extract_test_transforms_data):
@@ -959,17 +969,17 @@ def test_watershed_and_label(extract_test_transforms_data):
     wlt = WatershedAndLabelTransform(use_seed_channel=True, with_batch_dim=False)
     i_labels = wlt(i_ndt_out)
 
-    i_num_labels_after = len(np.unique(i_labels[0])) - 1
-    assert i_labels.shape == (2, 26, 300, 300), "Unexpected image shape."
-    assert i_num_labels_after == 66, "Unexpected number of labels in result image."
+    i_num_labels_after = len(np.unique(i_labels)) - 1
+    assert i_labels.shape == (26, 300, 300), "Unexpected image shape."
+    assert i_num_labels_after == 68, "Unexpected number of labels in result image."
 
     # Now do not use the seeds
     ns_wlt = WatershedAndLabelTransform(use_seed_channel=False, with_batch_dim=False)
     i_ns_labels = ns_wlt(i_ndt_out)
 
-    i_ns_num_labels_after = len(np.unique(i_ns_labels[0])) - 1
-    assert i_ns_labels.shape == (2, 26, 300, 300), "Unexpected image shape."
-    assert i_ns_num_labels_after == 138, "Unexpected number of labels in result image."
+    i_ns_num_labels_after = len(np.unique(i_ns_labels)) - 1
+    assert i_ns_labels.shape == (26, 300, 300), "Unexpected image shape."
+    assert i_ns_num_labels_after == 79, "Unexpected number of labels in result image."
 
     #
     # DIRECT DISTANCE TRANSFORM
@@ -987,14 +997,14 @@ def test_watershed_and_label(extract_test_transforms_data):
     labels = wlt(dt_out)
 
     num_labels_after = len(np.unique(labels)) - 1
-    assert num_labels_after == 66, "Unexpected number of labels in result image."
+    assert num_labels_after == 68, "Unexpected number of labels in result image."
 
     # Now do not use the seeds
     labels_ns = ns_wlt(dt_out)
 
-    ns_num_labels_after = len(np.unique(labels_ns[0])) - 1
-    assert labels_ns.shape == (2, 26, 300, 300), "Unexpected image shape."
-    assert ns_num_labels_after == 138, "Unexpected number of labels in result image."
+    ns_num_labels_after = len(np.unique(labels_ns)) - 1
+    assert labels_ns.shape == (26, 300, 300), "Unexpected image shape."
+    assert ns_num_labels_after == 79, "Unexpected number of labels in result image."
 
     # The direct and the inverse distance transform give the same result in a clean dataset.
     # The difference is made by the presence or absence of seeds.
@@ -1041,9 +1051,9 @@ def test_watershed_and_label_dict_3d(extract_test_transforms_data):
     )
     i_labels = wlt(i_ndt_out)
 
-    i_num_labels_after = len(np.unique(i_labels["label"][0])) - 1
-    assert i_labels["label"].shape == (2, 26, 300, 300), "Unexpected image shape."
-    assert i_num_labels_after == 66, "Unexpected number of labels in result image."
+    i_num_labels_after = len(np.unique(i_labels["label"])) - 1
+    assert i_labels["label"].shape == (26, 300, 300), "Unexpected image shape."
+    assert i_num_labels_after == 68, "Unexpected number of labels in result image."
 
     # Now do not use the seeds
     ns_wlt = WatershedAndLabelTransformd(
@@ -1051,9 +1061,9 @@ def test_watershed_and_label_dict_3d(extract_test_transforms_data):
     )
     i_ns_labels = ns_wlt(i_ndt_out)
 
-    i_ns_num_labels_after = len(np.unique(i_ns_labels["label"][0])) - 1
-    assert i_ns_labels["label"].shape == (2, 26, 300, 300), "Unexpected image shape."
-    assert i_ns_num_labels_after == 138, "Unexpected number of labels in result image."
+    i_ns_num_labels_after = len(np.unique(i_ns_labels["label"])) - 1
+    assert i_ns_labels["label"].shape == (26, 300, 300), "Unexpected image shape."
+    assert i_ns_num_labels_after == 79, "Unexpected number of labels in result image."
 
     #
     # DIRECT DISTANCE TRANSFORM
@@ -1071,14 +1081,14 @@ def test_watershed_and_label_dict_3d(extract_test_transforms_data):
     labels = wlt(dt_out)
 
     num_labels_after = len(np.unique(labels["label"])) - 1
-    assert num_labels_after == 66, "Unexpected number of labels in result image."
+    assert num_labels_after == 68, "Unexpected number of labels in result image."
 
     # Now do not use the seeds
     labels_ns = ns_wlt(dt_out)
 
-    ns_num_labels_after = len(np.unique(labels_ns["label"][0])) - 1
-    assert labels_ns["label"].shape == (2, 26, 300, 300), "Unexpected image shape."
-    assert ns_num_labels_after == 138, "Unexpected number of labels in result image."
+    ns_num_labels_after = len(np.unique(labels_ns["label"])) - 1
+    assert labels_ns["label"].shape == (26, 300, 300), "Unexpected image shape."
+    assert ns_num_labels_after == 79, "Unexpected number of labels in result image."
 
     # The direct and the inverse distance transform give the same result in a clean dataset.
     # The difference is made by the presence or absence of seeds.
@@ -1119,9 +1129,15 @@ def test_watershed_and_label_dict_2d(extract_test_transforms_data):
     i_ndt_out = i_ndt(data)
     assert i_ndt_out["label"].shape == (2, 100, 100), "Unexpected image shape."
 
+    # Make sure we have the same number of labels and seeds
+    assert len(np.unique(ndi.label(i_ndt_out["label"][1])[0])) - 1 == num_labels_before
+
     # Apply watershed transform with seeds and labelling
     wlt = WatershedAndLabelTransformd(
-        keys=("label",), use_seed_channel=True, with_batch_dim=False
+        keys=("label",),
+        use_seed_channel=True,
+        use_random_walker=True,
+        with_batch_dim=False,
     )
     i_labels = wlt(i_ndt_out)
 
@@ -1131,13 +1147,31 @@ def test_watershed_and_label_dict_2d(extract_test_transforms_data):
 
     # Now do not use the seeds
     ns_wlt = WatershedAndLabelTransformd(
-        keys=("label",), use_seed_channel=False, with_batch_dim=False
+        keys=("label",),
+        use_seed_channel=False,
+        use_random_walker=True,
+        with_batch_dim=False,
     )
     i_ns_labels = ns_wlt(i_ndt_out)
 
     i_ns_num_labels_after = len(np.unique(i_ns_labels["label"])) - 1
     assert i_ns_labels["label"].shape == (100, 100), "Unexpected image shape."
-    assert i_ns_num_labels_after == 28, "Unexpected number of labels in result image."
+    assert i_ns_num_labels_after == 13, "Unexpected number of labels in result image."
+
+    # Now do not use the seeds and use watershed
+    ns_ws_wlt = WatershedAndLabelTransformd(
+        keys=("label",),
+        use_seed_channel=False,
+        use_random_walker=False,
+        with_batch_dim=False,
+    )
+    i_ns_ws_labels = ns_ws_wlt(i_ndt_out)
+
+    i_ns_ws_num_labels_after = len(np.unique(i_ns_ws_labels["label"])) - 1
+    assert i_ns_ws_labels["label"].shape == (100, 100), "Unexpected image shape."
+    assert (
+        i_ns_ws_num_labels_after == 13
+    ), "Unexpected number of labels in result image."
 
     #
     # DIRECT DISTANCE TRANSFORM
@@ -1162,7 +1196,14 @@ def test_watershed_and_label_dict_2d(extract_test_transforms_data):
 
     ns_num_labels_after = len(np.unique(labels_ns["label"])) - 1
     assert labels_ns["label"].shape == (100, 100), "Unexpected image shape."
-    assert ns_num_labels_after == 28, "Unexpected number of labels in result image."
+    assert ns_num_labels_after == 13, "Unexpected number of labels in result image."
+
+    # Now do not use the seeds and use watershed
+    ns_ws_labels = ns_ws_wlt(dt_out)
+
+    ns_ws_num_labels_after = len(np.unique(ns_ws_labels["label"])) - 1
+    assert ns_ws_labels["label"].shape == (100, 100), "Unexpected image shape."
+    assert ns_ws_num_labels_after == 13, "Unexpected number of labels in result image."
 
     # The direct and the inverse distance transform give the same result in a clean dataset.
     # The difference is made by the presence or absence of seeds.
@@ -1171,4 +1212,7 @@ def test_watershed_and_label_dict_2d(extract_test_transforms_data):
     ), "The number of labels from IDT and DT should match!"
     assert (
         i_num_labels_after == num_labels_after
+    ), "The number of labels from IDT and DT should match!"
+    assert (
+        i_ns_ws_num_labels_after == ns_ws_num_labels_after
     ), "The number of labels from IDT and DT should match!"

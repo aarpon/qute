@@ -16,9 +16,10 @@ import scipy.ndimage as ndi
 import torch
 from monai.data import MetaTensor
 from monai.transforms import MapTransform, Transform
+from scipy.ndimage import gaussian_filter
 from skimage.measure import regionprops
 from skimage.morphology import ball, disk
-from skimage.segmentation import watershed
+from skimage.segmentation import random_walker, watershed
 
 from qute.transforms.util import (
     extract_subvolume,
@@ -767,6 +768,7 @@ class WatershedAndLabelTransformd(MapTransform):
         self,
         keys: tuple[str, ...] = ("label",),
         use_seed_channel: bool = True,
+        use_random_walker: bool = False,
         with_batch_dim: bool = False,
     ) -> None:
         """Constructor
@@ -780,6 +782,11 @@ class WatershedAndLabelTransformd(MapTransform):
         use_seed_channel: bool
             Whether to use a seed channel for the watershed transform. It is expected that the image to
 
+        use_random_walker: bool = False
+            Use random walker algorithm to separate objects instead of watershed. The results are better,
+            but it is extremely slow for 3D data! If use_seed_channel is False, the watershed algorithm will
+            be used even if use_random_walker is set to True.
+
         with_batch_dim: bool (Optional, default is False)
             Whether the input tensor has a batch dimension or not. This is to distinguish between the
             2D case (B, C, H, W) and the 3D case (C, D, H, W). All other supported cases are clear.
@@ -787,7 +794,9 @@ class WatershedAndLabelTransformd(MapTransform):
         super().__init__(keys=keys)
         self.keys = keys
         self._transform = WatershedAndLabelTransform(
-            use_seed_channel=use_seed_channel, with_batch_dim=with_batch_dim
+            use_seed_channel=use_seed_channel,
+            use_random_walker=use_random_walker,
+            with_batch_dim=with_batch_dim,
         )
 
     def __call__(self, data: dict) -> dict:
@@ -823,6 +832,7 @@ class WatershedAndLabelTransform(Transform):
         self,
         use_seed_channel: bool = True,
         dt_threshold: float = 0.02,
+        use_random_walker: bool = False,
         with_batch_dim: bool = False,
     ) -> None:
         """Constructor
@@ -836,6 +846,11 @@ class WatershedAndLabelTransform(Transform):
         dt_threshold: float = 0.02,
             Set a threshold for the distance transform to make sure that the background is 0.
 
+        use_random_walker: bool = False
+            Use random walker algorithm to separate objects instead of watershed. The results are better,
+            but it is extremely slow for 3D data! If use_seed_channel is False, the watershed algorithm will
+            be used even if use_random_walker is set to True.
+
         with_batch_dim: bool (Optional, default is False)
             Whether the input tensor has a batch dimension or not. This is to distinguish between the
             2D case (B, C, H, W) and the 3D case (C, D, H, W). All other supported cases are clear.
@@ -843,6 +858,7 @@ class WatershedAndLabelTransform(Transform):
         super().__init__()
         self.use_seed_channel = use_seed_channel
         self.dt_threshold = dt_threshold
+        self.use_random_walker = use_random_walker
         self.with_batch_dim = with_batch_dim
 
     def _process_single(self, data_label):
@@ -861,10 +877,28 @@ class WatershedAndLabelTransform(Transform):
             p_seed = torch.sigmoid(torch.tensor(data_label[1])) > 0.5
             seed_labels, _ = ndi.label(p_seed)
         else:
-            seed_labels = None
+            # Calculate distance transform from the mask
+            distance = ndi.distance_transform_edt(mask)
 
-        # Run watershed
-        labels = watershed(-dist, markers=seed_labels, mask=mask, connectivity=1)
+            # Apply Gaussian filter to smooth the distance transform
+            smoothed_distance = gaussian_filter(distance, sigma=1)
+
+            # Non-Maximum Suppression
+            local_max = smoothed_distance == ndi.maximum_filter(
+                smoothed_distance, size=5
+            )
+
+            # Remove background from local_max
+            local_max = local_max & mask
+
+            # Label the local maxima to create markers
+            seed_labels, _ = ndi.label(local_max)
+
+        if self.use_random_walker and seed_labels is not None:
+            labels = random_walker(-dist, labels=seed_labels, beta=10, mode="cg_j")
+            labels = mask * labels
+        else:
+            labels = watershed(-dist, markers=seed_labels, mask=mask, connectivity=1)
 
         # We return only the label image and drop the original image and the seeds
         return labels.astype(np.int32)
