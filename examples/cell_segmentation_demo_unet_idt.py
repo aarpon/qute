@@ -22,15 +22,13 @@ from pytorch_lightning.callbacks import (
     LearningRateMonitor,
     ModelCheckpoint,
 )
-from torch.nn import MSELoss
 from torch.optim.lr_scheduler import OneCycleLR
-from torchmetrics import MeanAbsoluteError
 
 from qute import device
-from qute.campaigns import SegmentationCampaignTransformsIDT
+from qute.campaigns import SegmentationCampaignTransformsIDT2D
 from qute.data.demos import CellSegmentationDemoIDT
-from qute.losses._losses import CombinedMSEDiceCELoss
-from qute.metrics._metrics import CombinedMeanAbsoluteErrorBinaryDiceMetric
+from qute.losses import CombinedMSEDiceCELoss
+from qute.metrics import CombinedMeanAbsoluteErrorBinaryDiceMetric
 from qute.models.unet import UNet
 
 SEED = 2022
@@ -44,7 +42,7 @@ try:
     PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
 except AssertionError:
     PRECISION = 32
-MAX_EPOCHS = 5000
+MAX_EPOCHS = 2000
 EXP_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
 MODEL_DIR = Path(userpaths.get_my_documents()) / "qute" / "models" / EXP_NAME
 RESULTS_DIR = Path(userpaths.get_my_documents()) / "qute" / "results" / EXP_NAME
@@ -53,8 +51,8 @@ if __name__ == "__main__":
     # Seeding
     seed_everything(SEED, workers=True)
 
-    # Initialize default, example Segmentation Campaign Transform
-    campaign_transforms = SegmentationCampaignTransformsIDT(
+    # Initialize default, example Segmentation Campaign IDT Transforms
+    campaign_transforms = SegmentationCampaignTransformsIDT2D(
         patch_size=PATCH_SIZE, num_patches=NUM_PATCHES
     )
 
@@ -154,6 +152,7 @@ if __name__ == "__main__":
         roi_size=PATCH_SIZE,
         batch_size=INFERENCE_BATCH_SIZE,
         transpose=False,
+        output_dtype="int32",
     )
 
     sys.exit(0)

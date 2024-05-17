@@ -290,7 +290,7 @@ class UNet(pl.LightningModule):
         batch_size: int,
         overlap: float = 0.25,
         transpose: bool = True,
-        output_dtype: Optional[np.dtype] = None,
+        output_dtype: Optional[Union[str, np.dtype]] = None,
         prefix: str = "pred_",
     ):
         """Run inference on full images using given model.
@@ -421,7 +421,7 @@ class UNet(pl.LightningModule):
         overlap: float = 0.25,
         transpose: bool = True,
         save_individual_preds: bool = False,
-        output_dtype: Optional[np.dtype] = None,
+        output_dtype: Optional[Union[str, np.dtype]] = None,
         prefix: str = "pred_",
         ensemble_prefix: str = "ensemble_",
     ):

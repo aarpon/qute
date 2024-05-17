@@ -11,14 +11,14 @@
 
 import pytest
 
-from qute.campaigns import SegmentationCampaignTransforms
+from qute.campaigns import SegmentationCampaignTransforms2D
 from qute.data.demos import CellSegmentationDemo
 
 
 def test_k_folds():
 
     # Initialize default, example Segmentation Campaign Transform
-    campaign_transforms = SegmentationCampaignTransforms()
+    campaign_transforms = SegmentationCampaignTransforms2D()
 
     # Initialize data module
     data_module = CellSegmentationDemo(campaign_transforms=campaign_transforms)
@@ -42,7 +42,7 @@ def test_k_folds():
 def test_setup():
 
     # Initialize default, example Segmentation Campaign Transform
-    campaign_transforms = SegmentationCampaignTransforms()
+    campaign_transforms = SegmentationCampaignTransforms2D()
 
     # Initialize data module (no k-fold cross-validation)
     data_module = CellSegmentationDemo(campaign_transforms=campaign_transforms)

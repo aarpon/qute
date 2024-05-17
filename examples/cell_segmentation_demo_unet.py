@@ -27,7 +27,7 @@ from pytorch_lightning.callbacks import (
 from torch.optim.lr_scheduler import OneCycleLR
 
 from qute import device
-from qute.campaigns import SegmentationCampaignTransforms
+from qute.campaigns import SegmentationCampaignTransforms2D
 from qute.data.demos import CellSegmentationDemo
 from qute.models.unet import UNet
 
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     seed_everything(SEED, workers=True)
 
     # Initialize default, example Segmentation Campaign Transform
-    campaign_transforms = SegmentationCampaignTransforms(
+    campaign_transforms = SegmentationCampaignTransforms2D(
         num_classes=3, patch_size=PATCH_SIZE, num_patches=NUM_PATCHES
     )
 

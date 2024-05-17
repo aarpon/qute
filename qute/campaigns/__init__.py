@@ -12,9 +12,10 @@
 from ._campaigns import (
     CampaignTransforms,
     RestorationCampaignTransforms,
-    SegmentationCampaignTransforms,
+    SegmentationCampaignTransforms2D,
     SegmentationCampaignTransforms3D,
-    SegmentationCampaignTransformsIDT,
+    SegmentationCampaignTransformsIDT2D,
+    SegmentationCampaignTransformsIDT3D,
 )
 
 __doc__ = """Full training campaign definitions."""

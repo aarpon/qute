@@ -23,7 +23,7 @@ from ray.tune import CLIReporter
 from ray.tune.integration.pytorch_lightning import TuneReportCheckpointCallback
 from ray.tune.schedulers import ASHAScheduler
 
-from qute.campaigns import SegmentationCampaignTransforms
+from qute.campaigns import SegmentationCampaignTransforms2D
 from qute.data.demos import CellSegmentationDemo
 from qute.models.unet import UNet
 
@@ -53,7 +53,7 @@ def train_fn(config, criterion, metrics, num_epochs=MAX_EPOCHS, num_gpus=1):
     batch_size = config["batch_size"]
 
     # Initialize default, example Segmentation Campaign Transform
-    campaign_transforms = SegmentationCampaignTransforms(
+    campaign_transforms = SegmentationCampaignTransforms2D(
         num_classes=3, patch_size=PATCH_SIZE, num_patches=num_patches
     )
 

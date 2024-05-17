@@ -941,7 +941,11 @@ class WatershedAndLabelTransform(Transform):
             data_label = data
 
         if self.with_batch_dim:
-            dt_final = np.zeros(data_label.shape, dtype=np.float32)
+            # Output is with one channel only
+            input_shape = list(data_label.shape)
+            input_shape[1] = 1
+            output_shape = tuple(input_shape)
+            dt_final = np.zeros(output_shape, dtype=np.float32)
             for b in range(data_label.shape[0]):
                 dt_final[b] = self._process_single(data_label[b])
         else:
