@@ -33,41 +33,43 @@ from qute.campaigns import RestorationCampaignTransforms
 from qute.data.demos import CellRestorationDemo
 from qute.models.unet import UNet
 
-SEED = 2022
-BATCH_SIZE = 8
-INFERENCE_BATCH_SIZE = 4
-NUM_PATCHES = 1
-PATCH_SIZE = (640, 640)
-LEARNING_RATE = 0.001
-try:
-    PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
-except AssertionError:
-    PRECISION = 32
-MAX_EPOCHS = 2000
-EXP_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
-MODEL_DIR = Path(userpaths.get_my_documents()) / "qute" / "models" / EXP_NAME
-RESULTS_DIR = Path(userpaths.get_my_documents()) / "qute" / "results" / EXP_NAME
+# Configuration
+exp_name = datetime.now().strftime("%Y%m%d_%H%M%S")
+CONFIG = {
+    "seed": 2022,
+    "batch_size": 8,
+    "inference_batch_size": 4,
+    "num_patches": 1,
+    "patch_size": (640, 640),
+    "learning_rate": 0.001,
+    "include_background": True,
+    "class_names": ["background", "cell", "membrane"],
+    "max_epochs": 2000,
+    "precision": 16 if torch.cuda.is_bf16_supported() else 32,
+    "model_dir": Path(userpaths.get_my_documents()) / "qute" / "models" / exp_name,
+    "results_dir": Path(userpaths.get_my_documents()) / "qute" / "results" / exp_name,
+}
 
 if __name__ == "__main__":
     # Seeding
-    seed_everything(SEED, workers=True)
+    seed_everything(CONFIG["seed"], workers=True)
 
     # Initialize default, example Restoration Campaign Transform
     campaign_transforms = RestorationCampaignTransforms(
         min_intensity=0,
         max_intensity=15472,
-        patch_size=PATCH_SIZE,
-        num_patches=NUM_PATCHES,
+        patch_size=CONFIG["patch_size"],
+        num_patches=CONFIG["num_patches"],
     )
 
     # Data module
     data_module = CellRestorationDemo(
         campaign_transforms=campaign_transforms,
-        seed=SEED,
-        batch_size=BATCH_SIZE,
-        patch_size=PATCH_SIZE,
-        num_patches=NUM_PATCHES,
-        inference_batch_size=INFERENCE_BATCH_SIZE,
+        seed=CONFIG["seed"],
+        batch_size=CONFIG["batch_size"],
+        patch_size=CONFIG["patch_size"],
+        num_patches=CONFIG["num_patches"],
+        inference_batch_size=CONFIG["inference_batch_size"],
         labels_sub_folder="targets",
     )
 
@@ -80,9 +82,9 @@ if __name__ == "__main__":
     # Learning rate scheduler
     lr_scheduler_class = OneCycleLR
     lr_scheduler_parameters = {
-        "total_steps": 8 * MAX_EPOCHS,  # Steps per epoch in this case is 8.
+        "total_steps": 8 * CONFIG["max_epochs"],  # Steps per epoch in this case is 8.
         "div_factor": 5.0,
-        "max_lr": LEARNING_RATE,
+        "max_lr": CONFIG["leaning_rate"],
         "pct_start": 0.5,  # Fraction of total_steps at which the learning rate starts decaying after reaching max_lr
         "anneal_strategy": "cos",
     }
@@ -97,7 +99,7 @@ if __name__ == "__main__":
         channels=(16, 32, 64, 128),
         strides=(2, 2, 2),
         metrics=metrics,
-        learning_rate=LEARNING_RATE,
+        learning_rate=CONFIG["leaning_rate"],
         lr_scheduler_class=lr_scheduler_class,
         lr_scheduler_parameters=lr_scheduler_parameters,
     )
@@ -106,18 +108,18 @@ if __name__ == "__main__":
     early_stopping = EarlyStopping(
         monitor="val_loss", patience=10, mode="min"
     )  # Issues with Lightning's ES
-    model_checkpoint = ModelCheckpoint(dirpath=MODEL_DIR, monitor="val_loss")
+    model_checkpoint = ModelCheckpoint(dirpath=CONFIG["model_dir"], monitor="val_loss")
     lr_monitor = LearningRateMonitor(logging_interval="step")
 
     # Instantiate the Trainer
     trainer = pl.Trainer(
-        default_root_dir=RESULTS_DIR,
+        default_root_dir=CONFIG["results_dir"],
         accelerator=device.get_accelerator(),
         devices=1,
-        precision=PRECISION,
+        precision=CONFIG["precision"],
         # callbacks=[model_checkpoint, early_stopping, lr_monitor],
         callbacks=[model_checkpoint, lr_monitor],
-        max_epochs=MAX_EPOCHS,
+        max_epochs=CONFIG["max_epochs"],
         log_every_n_steps=1,
         val_check_interval=1.0,  # Run validation every epoch
     )
@@ -146,9 +148,9 @@ if __name__ == "__main__":
     # Save the full predictions (on the test set)
     model.full_inference(
         data_loader=data_module.inference_dataloader(data_module.data_dir / "images/"),
-        target_folder=RESULTS_DIR / "full_predictions",
-        roi_size=PATCH_SIZE,
-        batch_size=INFERENCE_BATCH_SIZE,
+        target_folder=CONFIG["results_dir"] / "full_predictions",
+        roi_size=CONFIG["patch_size"],
+        batch_size=CONFIG["inference_batch_size"],
         transpose=False,
         output_dtype=np.uint16,
     )

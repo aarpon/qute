@@ -34,15 +34,17 @@ from qute.models.unet import UNet
 # Tune search algorithms: https://docs.ray.io/en/latest/tune/api/suggestion.html
 #
 
-SEED = 2022
-BATCH_SIZE = 32
-INFERENCE_BATCH_SIZE = 4
-PATCH_SIZE = (512, 512)
-PRECISION = 16 if torch.cuda.is_bf16_supported() else 32
-MAX_EPOCHS = 2000
+# Configuration
+CONFIG = {
+    "seed": 2022,
+    "inference_batch_size": 4,
+    "patch_size": (640, 640),
+    "max_epochs": 2000,
+    "precision": 16 if torch.cuda.is_bf16_supported() else 32,
+}
 
 
-def train_fn(config, criterion, metrics, num_epochs=MAX_EPOCHS, num_gpus=1):
+def train_fn(config, criterion, metrics, num_epochs=CONFIG["max_epochs"], num_gpus=1):
     # Get current configuration parameters
     num_res_units = config["num_res_units"]
     learning_rate = config["learning_rate"]
@@ -54,17 +56,17 @@ def train_fn(config, criterion, metrics, num_epochs=MAX_EPOCHS, num_gpus=1):
 
     # Initialize default, example Segmentation Campaign Transform
     campaign_transforms = SegmentationCampaignTransforms2D(
-        num_classes=3, patch_size=PATCH_SIZE, num_patches=num_patches
+        num_classes=3, patch_size=patch_size, num_patches=num_patches
     )
 
     # Instantiate data module
     data_module = CellSegmentationDemo(
         campaign_transforms=campaign_transforms,
-        seed=SEED,
+        seed=CONFIG["seed"],
         batch_size=batch_size,
         patch_size=patch_size,
         num_patches=num_patches,
-        inference_batch_size=INFERENCE_BATCH_SIZE,
+        inference_batch_size=CONFIG["inference_batch_size"],
     )
 
     # Instantiate the model
@@ -90,7 +92,7 @@ def train_fn(config, criterion, metrics, num_epochs=MAX_EPOCHS, num_gpus=1):
     trainer = pl.Trainer(
         accelerator="gpu",
         devices=num_gpus,
-        precision=PRECISION,
+        precision=CONFIG["precision"],
         callbacks=[report_callback],
         logger=TensorBoardLogger(save_dir=os.getcwd(), name="", version="."),
         max_epochs=num_epochs,
@@ -102,7 +104,7 @@ def train_fn(config, criterion, metrics, num_epochs=MAX_EPOCHS, num_gpus=1):
     trainer.fit(model, datamodule=data_module)
 
 
-def tune_fn(criterion, metrics, num_samples=10, num_epochs=MAX_EPOCHS):
+def tune_fn(criterion, metrics, num_samples=10, num_epochs=CONFIG["max_epochs"]):
     config = {
         "num_res_units": tune.choice([0, 1, 2, 3, 4]),
         "learning_rate": tune.loguniform(0.0005, 0.5),
@@ -158,7 +160,7 @@ def tune_fn(criterion, metrics, num_samples=10, num_epochs=MAX_EPOCHS):
 
 if __name__ == "__main__":
     # Seeding
-    seed_everything(SEED, workers=True)
+    seed_everything(CONFIG["seed"], workers=True)
 
     # Loss
     criterion = DiceCELoss(include_background=True, to_onehot_y=False, softmax=True)
@@ -167,7 +169,9 @@ if __name__ == "__main__":
     metrics = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
 
     # Run the optimization
-    results = tune_fn(criterion, metrics, num_samples=25, num_epochs=MAX_EPOCHS)
+    results = tune_fn(
+        criterion, metrics, num_samples=25, num_epochs=CONFIG["max_epochs"]
+    )
 
     # Report
     print(f"Best hyper-parameters found: {results.get_best_result().config}")

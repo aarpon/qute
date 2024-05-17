@@ -16,8 +16,6 @@ from pathlib import Path
 import pytorch_lightning as pl
 import torch
 import userpaths
-from monai.losses import DiceCELoss
-from monai.metrics import DiceMetric
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import (
     EarlyStopping,
@@ -27,8 +25,10 @@ from pytorch_lightning.callbacks import (
 from torch.optim.lr_scheduler import OneCycleLR
 
 from qute import device
-from qute.campaigns import SegmentationCampaignTransforms3D
+from qute.campaigns import SegmentationCampaignTransformsIDT3D
 from qute.data.dataloaders import SegmentationDataModuleLocalFolder
+from qute.losses import CombinedMSEDiceCELoss
+from qute.metrics import CombinedMeanAbsoluteErrorBinaryDiceMetric
 from qute.models.unet import UNet
 
 # Configuration
@@ -38,13 +38,11 @@ CONFIG = {
     "batch_size": 32,
     "inference_batch_size": 1,  # Set to 1 if the various images have different dimensions
     "num_patches": 2,
-    "patch_size": (16, 192, 192),  # Patch size used for training
+    "patch_size": (16, 192, 192),
     "voxel_size": (1.0, 0.241, 0.241),  # Input voxel size
     "to_isotropic": True,  # Resample data
     "up_scale_z": True,  # Upscale z to xy resolution
     "learning_rate": 0.001,
-    "include_background": False,
-    "class_names": ["background", "cell", "membrane"],
     "max_epochs": 2000,
     "precision": 16 if torch.cuda.is_bf16_supported() else 32,
     "model_dir": Path(userpaths.get_my_documents()) / "qute" / "models" / exp_name,
@@ -57,8 +55,7 @@ if __name__ == "__main__":
     seed_everything(CONFIG["seed"], workers=True)
 
     # Initialize default, example Segmentation Campaign Transform
-    campaign_transforms = SegmentationCampaignTransforms3D(
-        num_classes=3,
+    campaign_transforms = SegmentationCampaignTransformsIDT3D(
         patch_size=CONFIG["patch_size"],
         num_patches=CONFIG["num_patches"],
         voxel_size=CONFIG["voxel_size"],
@@ -85,16 +82,10 @@ if __name__ == "__main__":
     steps_per_epoch = len(data_module.train_dataloader())
 
     # Loss
-    criterion = DiceCELoss(
-        include_background=CONFIG["include_background"], to_onehot_y=False, softmax=True
-    )
+    criterion = CombinedMSEDiceCELoss()
 
     # Metrics
-    metrics = DiceMetric(
-        include_background=CONFIG["include_background"],
-        reduction="mean_batch",
-        get_not_nans=False,
-    )
+    metrics = CombinedMeanAbsoluteErrorBinaryDiceMetric()
 
     # Learning rate scheduler
     lr_scheduler_class = OneCycleLR
@@ -110,9 +101,8 @@ if __name__ == "__main__":
     model = UNet(
         campaign_transforms=campaign_transforms,
         in_channels=1,
-        out_channels=3,
+        out_channels=2,
         spatial_dims=3,
-        class_names=CONFIG["class_names"],
         num_res_units=4,
         criterion=criterion,
         channels=(16, 32, 64, 128),
@@ -156,7 +146,9 @@ if __name__ == "__main__":
     # Load weights from best model
     # For more flexibility, see:
     # https://lightning.ai/docs/pytorch/stable/common/checkpointing_basic.html#initialize-with-other-parameters
-    model = UNet.load_from_checkpoint(model_checkpoint.best_model_path)
+    model = UNet.load_from_checkpoint(
+        model_checkpoint.best_model_path, criterion=criterion, metrics=metrics
+    )
 
     # Test
     trainer.test(model, dataloaders=data_module.test_dataloader())
@@ -164,13 +156,14 @@ if __name__ == "__main__":
     # Predict on the test dataset
     predictions = trainer.predict(model, dataloaders=data_module.test_dataloader())
 
-    # Save the full predictions (on the test set)
+    # Save the full predictions
     model.full_inference(
         data_loader=data_module.inference_dataloader(data_module.data_dir / "images"),
         target_folder=CONFIG["results_dir"] / "full_predictions",
         roi_size=CONFIG["patch_size"],
         batch_size=CONFIG["inference_batch_size"],
         transpose=False,
+        output_dtype="int32",
     )
 
     sys.exit(0)
