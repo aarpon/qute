@@ -9,6 +9,6 @@
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
 
-from ._metrics import CombinedMeanAbsoluteErrorBinaryDiceMetric
+from ._metrics import CombinedInvExpMeanAbsoluteErrorBinaryDiceMetric
 
 __doc__ = """Custom metrics."""
