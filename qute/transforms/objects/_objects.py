@@ -742,7 +742,9 @@ class NormalizedDistanceTransform(Transform):
             data_label = data
 
         if self.with_batch_dim:
-            dt_final = np.zeros(data_label.shape, dtype=np.float32)
+            out_shape = list(data_label.shape)
+            out_shape[1] = 2
+            dt_final = np.zeros(tuple(out_shape), dtype=np.float32)
             for b in range(data_label.shape[0]):
                 dt_final[b] = self._process_single(data_label[b])
         else:
@@ -830,6 +832,7 @@ class WatershedAndLabelTransform(Transform):
 
     def __init__(
         self,
+        is_idt: bool = True,
         use_seed_channel: bool = True,
         dt_threshold: float = 0.02,
         use_random_walker: bool = False,
@@ -839,6 +842,9 @@ class WatershedAndLabelTransform(Transform):
 
         Parameters
         ----------
+
+        is_idt: bool = True
+            Whether the predicted distance transform is inverted or not.
 
         use_seed_channel: bool
             Whether to use a seed channel for the watershed transform. It is expected that the image to
@@ -856,6 +862,7 @@ class WatershedAndLabelTransform(Transform):
             2D case (B, C, H, W) and the 3D case (C, D, H, W). All other supported cases are clear.
         """
         super().__init__()
+        self.is_idt = is_idt
         self.use_seed_channel = use_seed_channel
         self.dt_threshold = dt_threshold
         self.use_random_walker = use_random_walker
@@ -864,13 +871,15 @@ class WatershedAndLabelTransform(Transform):
     def _process_single(self, data_label):
         """Process a single image (of a potential batch)."""
 
-        # Prepare the distance transform for watershed
-        bw = (torch.sigmoid(torch.tensor(data_label[0])) > 0.5).numpy()
-        dist = bw * data_label[0]
-        dist[dist <= self.dt_threshold] = 0
-
         # Create a mask
-        mask = ndi.binary_fill_holes(dist > 0)
+        mask = np.abs(data_label[0]) > self.dt_threshold
+        mask = ndi.binary_fill_holes(mask > 0)
+
+        # Is the predicted distance transform inverted?
+        if self.is_idt:
+            dist = data_label[0]
+        else:
+            dist = -1 * data_label[0]
 
         # Label seed points for the watershed?
         if self.use_seed_channel:
@@ -885,7 +894,7 @@ class WatershedAndLabelTransform(Transform):
 
             # Non-Maximum Suppression
             local_max = smoothed_distance == ndi.maximum_filter(
-                smoothed_distance, size=5
+                smoothed_distance, size=3
             )
 
             # Remove background from local_max
@@ -894,11 +903,12 @@ class WatershedAndLabelTransform(Transform):
             # Label the local maxima to create markers
             seed_labels, _ = ndi.label(local_max)
 
+        # The distance transform has minima (ideally) in the center of objects
         if self.use_random_walker and seed_labels is not None:
-            labels = random_walker(-dist, labels=seed_labels, beta=10, mode="cg_j")
+            labels = random_walker(dist, labels=seed_labels, beta=10, mode="cg_j")
             labels = mask * labels
         else:
-            labels = watershed(-dist, markers=seed_labels, mask=mask, connectivity=1)
+            labels = watershed(dist, markers=seed_labels, mask=mask, connectivity=1)
 
         # We return only the label image and drop the original image and the seeds
         return labels.astype(np.int32)

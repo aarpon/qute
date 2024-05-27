@@ -40,7 +40,7 @@ class CombinedInvExpMeanAbsoluteErrorBinaryDiceMetric(torchmetrics.Metric, ABC):
         regression_channel: int = 0,
         classification_channel: int = 1,
         foreground_class: int = 1,
-        with_batch_dim: bool = False,
+        with_batch_dim: bool = True,
         dist_sync_on_step=False,
     ):
         """Constructor.
@@ -63,7 +63,7 @@ class CombinedInvExpMeanAbsoluteErrorBinaryDiceMetric(torchmetrics.Metric, ABC):
         foreground_class: int = 1
             Class corresponding to the foreground in the classification (usually, background is 0 and foreground is 1).
 
-        with_batch_dim: bool (Optional, default is False)
+        with_batch_dim: bool (Optional, default is True)
             Whether the input tensor has a batch dimension or not. This is to distinguish between the
             2D case (B, C, H, W) and the 3D case (C, D, H, W). All other supported cases are clear.
 
@@ -134,34 +134,29 @@ class CombinedInvExpMeanAbsoluteErrorBinaryDiceMetric(torchmetrics.Metric, ABC):
         # Calculate the MAE metric
         mae_metric = torch.exp(
             -self.beta
-            * torch.stack(
-                [
-                    self.mae_metric(
-                        output[i, self.regression_channel],
-                        target[i, self.regression_channel],
-                    )
-                    for i in range(output.size(0))
-                ]
+            * self.mae_metric(
+                output[:, self.regression_channel, ...].unsqueeze(1),
+                target[:, self.regression_channel, ...].unsqueeze(1),
             )
-        ).ravel()
+        )
 
         # Calculate the DICE metric (ignore the background)
         dice_metric = self.dice_metric(
-            self._as_discrete(output[:, self.regression_channel]),
-            self._as_discrete(target[:, self.regression_channel]),
+            self._as_discrete(output[:, self.classification_channel, ...].unsqueeze(1)),
+            self._as_discrete(target[:, self.classification_channel, ...].unsqueeze(1)),
         )
-        dice_metric = dice_metric[:, self.foreground_class].ravel()
+        dice_metric = dice_metric[:, self.foreground_class].mean()
 
         # Combine them linearly
-        num_updates = len(dice_metric)
+        num_updates = 1
         combined_metric = self.alpha * mae_metric + (1 - self.alpha) * dice_metric
 
         # Accumulate the metric
-        self.total_metric += combined_metric.sum()
+        self.total_metric += combined_metric
         self.num_updates += num_updates
 
         # Return the combined metric
-        return combined_metric.sum() / num_updates
+        return combined_metric
 
     def forward(self, output, target):
         """Update the state of the metric with new predictions and targets."""
@@ -185,7 +180,7 @@ class CombinedInvExpMeanAbsoluteErrorBinaryDiceMetric(torchmetrics.Metric, ABC):
     def _as_discrete(logits):
         """Convert logits to classes and then convert to one-hot format."""
 
-        if logits.dim() != 4:
+        if logits.dim() != 5:
             raise ValueError("Unsupported geometry.")
 
         # Apply sigmoid to convert logits to probabilities
@@ -199,6 +194,6 @@ class CombinedInvExpMeanAbsoluteErrorBinaryDiceMetric(torchmetrics.Metric, ABC):
         one_hot = torch.nn.functional.one_hot(class_indices, num_classes=2)
 
         # Reshape the one-hot tensor to bring the channel dimension in the right position
-        one_hot = one_hot.permute(0, 4, 1, 2, 3).float()
+        one_hot = one_hot.permute(0, 5, 2, 3, 4, 1).squeeze(-1).float()
 
         return one_hot

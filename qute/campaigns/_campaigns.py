@@ -25,6 +25,7 @@ from monai.transforms import (
 )
 
 from qute.transforms import ToPyTorchLightningOutputd
+from qute.transforms.debug import DebugExtractChannel
 from qute.transforms.geom import CustomResampler, CustomResamplerd
 from qute.transforms.io import CustomTIFFReader, CustomTIFFReaderd
 from qute.transforms.norm import (
@@ -556,8 +557,13 @@ class SegmentationCampaignTransformsIDT3D(CampaignTransforms):
         if self.to_isotropic:
             post_full_inference_transforms = Compose(
                 [
+                    # DebugExtractChannel(
+                    #     channel_num=0,
+                    #     mask=False,
+                    #     to_binary=False
+                    # ),
                     WatershedAndLabelTransform(
-                        use_seed_channel=True, dt_threshold=0.05, with_batch_dim=True
+                        use_seed_channel=True, dt_threshold=0.02, with_batch_dim=True
                     ),
                     CustomResampler(
                         target_voxel_size=self.voxel_size,
@@ -571,7 +577,7 @@ class SegmentationCampaignTransformsIDT3D(CampaignTransforms):
             post_full_inference_transforms = Compose(
                 [
                     WatershedAndLabelTransform(
-                        use_seed_channel=True, dt_threshold=0.05, with_batch_dim=True
+                        use_seed_channel=True, dt_threshold=0.02, with_batch_dim=True
                     )
                 ]
             )
