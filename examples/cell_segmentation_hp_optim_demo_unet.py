@@ -38,6 +38,7 @@ from qute.models.unet import UNet
 CONFIG = {
     "seed": 2022,
     "inference_batch_size": 4,
+    "num_classes": 3,
     "patch_size": (640, 640),
     "max_epochs": 2000,
     "precision": 16 if torch.cuda.is_bf16_supported() else 32,
@@ -56,7 +57,9 @@ def train_fn(config, criterion, metrics, num_epochs=CONFIG["max_epochs"], num_gp
 
     # Initialize default, example Segmentation Campaign Transform
     campaign_transforms = SegmentationCampaignTransforms2D(
-        num_classes=3, patch_size=patch_size, num_patches=num_patches
+        num_classes=CONFIG["num_classes"],
+        patch_size=patch_size,
+        num_patches=num_patches,
     )
 
     # Instantiate data module
@@ -73,7 +76,7 @@ def train_fn(config, criterion, metrics, num_epochs=CONFIG["max_epochs"], num_gp
     model = UNet(
         campaign_transforms=campaign_transforms,
         in_channels=1,
-        out_channels=3,
+        out_channels=CONFIG["num_classes"],
         num_res_units=num_res_units,
         criterion=criterion,
         channels=channels,

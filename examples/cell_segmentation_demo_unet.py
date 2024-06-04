@@ -37,6 +37,7 @@ CONFIG = {
     "seed": 2022,
     "batch_size": 8,
     "inference_batch_size": 4,
+    "num_classes": 3,
     "num_patches": 1,
     "patch_size": (640, 640),
     "learning_rate": 0.001,
@@ -44,8 +45,8 @@ CONFIG = {
     "class_names": ["background", "cell", "membrane"],
     "max_epochs": 2000,
     "precision": 16 if torch.cuda.is_bf16_supported() else 32,
-    "model_dir": Path(userpaths.get_my_documents()) / "qute" / "models" / exp_name,
-    "results_dir": Path(userpaths.get_my_documents()) / "qute" / "results" / exp_name,
+    "model_dir": Path(userpaths.get_my_documents()) / "qute" / exp_name / "models",
+    "results_dir": Path(userpaths.get_my_documents()) / "qute" / exp_name / "results",
 }
 
 if __name__ == "__main__":
@@ -54,7 +55,7 @@ if __name__ == "__main__":
 
     # Initialize default, example Segmentation Campaign Transform
     campaign_transforms = SegmentationCampaignTransforms2D(
-        num_classes=3,
+        num_classes=CONFIG["num_classes"],
         patch_size=CONFIG["patch_size"],
         num_patches=CONFIG["num_patches"],
     )
@@ -100,7 +101,7 @@ if __name__ == "__main__":
     model = UNet(
         campaign_transforms=campaign_transforms,
         in_channels=1,
-        out_channels=3,
+        out_channels=CONFIG["num_classes"],
         class_names=CONFIG["class_names"],
         num_res_units=4,
         criterion=criterion,

@@ -144,7 +144,7 @@ class UNet(pl.LightningModule):
         )
 
         # Log the hyperparameters
-        self.save_hyperparameters(ignore=["criterion"])
+        self.save_hyperparameters(ignore=["criterion", "metrics"])
 
     def configure_optimizers(self):
         """Configure and return the optimizer and scheduler."""

@@ -14,6 +14,7 @@ import numpy as np
 import torch
 from monai.data import MetaTensor
 from monai.transforms import MapTransform, Transform
+from typing_extensions import Unpack
 
 
 class DebugCheckAndFixAffineDimensions(Transform):
@@ -354,7 +355,7 @@ class DebugExtractChannel(Transform):
         dim_idx = (slice(None),) * (len(data.shape) - 2)
 
         # Extract the selected channel
-        out = data[:, self.channel_num, None, *dim_idx]
+        out = data[:, self.channel_num, None, Unpack[dim_idx]]
 
         # Binarize if requested
         bw = 1.0
