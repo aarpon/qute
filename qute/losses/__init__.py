@@ -9,6 +9,6 @@
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
 
-from ._losses import CombinedExpMSEDiceCELoss
+from ._losses import CombinedMSEBinaryDiceCELoss
 
 __doc__ = """Custom loss functions."""

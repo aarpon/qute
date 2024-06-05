@@ -9,24 +9,24 @@
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
 import torch
-from monai.losses import DiceCELoss
+from monai.losses import DiceLoss
 from torch.nn import MSELoss
 
 from qute.transforms.util import get_tensor_num_spatial_dims
 
 
-class CombinedExpMSEDiceCELoss(torch.nn.Module):
+class CombinedMSEBinaryDiceCELoss(torch.nn.Module):
     """
-    Combined exponential MSE and Dice Cross-Entropy Loss to handle the output of
-    qute.transforms.objects.WatershedAndLabelTransform(). The input prediction
-    and ground truth are expected to have one regression and one classification
-    channel (e.g., inverse distance transform and seed points).
+    Combined MSE and Dice Loss to handle the output of
+    qute.transforms.objects.WatershedAndLabelTransform().
+
+    The input prediction and ground truth are expected to have one regression and
+    one classification channel (e.g., inverse distance transform and seed points).
     """
 
     def __init__(
         self,
         alpha: float = 0.5,
-        beta: float = 0.1,
         regression_channel: int = 0,
         classification_channel: int = 1,
         include_background: bool = True,
@@ -37,10 +37,7 @@ class CombinedExpMSEDiceCELoss(torch.nn.Module):
         """Constructor.
 
         alpha: float
-            Fraction of the MSELoss() to be combined with the corresponding (1 - alpha) fraction of the DiceCELoss.
-
-        beta: float
-            Exponential scaling factor for MAE normalization.
+            Fraction of the MSELoss() to be combined with the corresponding (1 - alpha) fraction of the DiceLoss.
 
         regression_channel: int = 0
             Regression channel (e.g., inverse distance transform), on which to apply the Mean Absolute Error metric.
@@ -49,22 +46,23 @@ class CombinedExpMSEDiceCELoss(torch.nn.Module):
             Classification channel (e.g., watershed seeds), on which to apply the Dice metric.
 
         include_background: bool = True
-            Whether to include the background channel in the calculation of the DiceCeLoss.
+            Whether to include the background channel in the calculation of the DiceLoss.
 
         with_batch_dim: bool (Optional, default is True)
             Whether the input tensor has a batch dimension or not. This is to distinguish between the
             2D case (B, C, H, W) and the 3D case (C, D, H, W). All other supported cases are clear.
         """
         super().__init__(*args, **kwargs)
+        if alpha < 0.0 or alpha > 1.0:
+            raise ValueError("alpha must be between 0.0 and 1.0")
         self.alpha = alpha
-        self.beta = beta
         self.regression_channel = regression_channel
         self.classification_channel = classification_channel
         self.include_background = include_background
         self.with_batch_dim = with_batch_dim
         self.mse_loss = MSELoss()
-        self.dice_ce_loss = DiceCELoss(
-            include_background=self.include_background, to_onehot_y=True, softmax=True
+        self.dice_loss = DiceLoss(
+            include_background=self.include_background, to_onehot_y=False, softmax=True
         )
 
     def forward(self, output, target):
@@ -114,22 +112,19 @@ class CombinedExpMSEDiceCELoss(torch.nn.Module):
             raise ValueError("Unsupported geometry.")
 
         # Calculate the MSE loss
-        mse_loss = 1.0 - torch.exp(
-            -self.beta
-            * self.mse_loss(
-                output[:, self.regression_channel, ...].unsqueeze(1),
-                target[:, self.regression_channel, ...].unsqueeze(1),
-            )
+        mse_loss = self.mse_loss(
+            output[:, self.regression_channel, ...].unsqueeze(1),
+            target[:, self.regression_channel, ...].unsqueeze(1),
         )
 
         # Calculate Dice CE loss (the one-hot conversion is done automatically)
-        dice_ce_loss = self.dice_ce_loss(
+        dice_loss = self.dice_loss(
             output[:, self.classification_channel, ...].unsqueeze(1),
             target[:, self.classification_channel, ...].unsqueeze(1),
         )
 
         # Combine them linearly
-        combined_loss = self.alpha * mse_loss + (1 - self.alpha) * dice_ce_loss
+        combined_loss = self.alpha * mse_loss + (1 - self.alpha) * dice_loss
 
         # Return combined loss
         return combined_loss

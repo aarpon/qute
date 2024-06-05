@@ -27,8 +27,8 @@ from torch.optim.lr_scheduler import OneCycleLR
 from qute import device
 from qute.campaigns import SegmentationCampaignTransformsIDT3D
 from qute.data.dataloaders import SegmentationDataModuleLocalFolder
-from qute.losses import CombinedExpMSEDiceCELoss
-from qute.metrics import CombinedInvExpMeanAbsoluteErrorBinaryDiceMetric
+from qute.losses import CombinedMSEBinaryDiceCELoss
+from qute.metrics import CombinedInvMeanAbsoluteErrorBinaryDiceMetric
 from qute.models.unet import UNet
 
 # Configuration
@@ -83,10 +83,10 @@ if __name__ == "__main__":
     steps_per_epoch = len(data_module.train_dataloader())
 
     # Loss
-    criterion = CombinedExpMSEDiceCELoss()
+    criterion = CombinedMSEBinaryDiceCELoss()
 
     # Metrics
-    metrics = CombinedInvExpMeanAbsoluteErrorBinaryDiceMetric()
+    metrics = CombinedInvMeanAbsoluteErrorBinaryDiceMetric()
 
     # Learning rate scheduler
     lr_scheduler_class = OneCycleLR

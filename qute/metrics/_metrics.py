@@ -18,7 +18,7 @@ from torchmetrics import MeanAbsoluteError
 from qute.transforms.util import get_tensor_num_spatial_dims
 
 
-class CombinedInvExpMeanAbsoluteErrorBinaryDiceMetric(torchmetrics.Metric, ABC):
+class CombinedInvMeanAbsoluteErrorBinaryDiceMetric(torchmetrics.Metric, ABC):
     """
     Combined Inverse Exponential Mean Absolute Error and Dice Metric to handle the output of
     qute.transforms.objects.WatershedAndLabelTransform(). The input prediction
@@ -36,7 +36,7 @@ class CombinedInvExpMeanAbsoluteErrorBinaryDiceMetric(torchmetrics.Metric, ABC):
     def __init__(
         self,
         alpha: float = 0.5,
-        beta: float = 0.1,
+        max_mae_value: float = 1.0,
         regression_channel: int = 0,
         classification_channel: int = 1,
         foreground_class: int = 1,
@@ -51,8 +51,8 @@ class CombinedInvExpMeanAbsoluteErrorBinaryDiceMetric(torchmetrics.Metric, ABC):
         alpha: float
             Fraction of the MeanAbsoluteError() to be combined with the corresponding (1 - alpha) fraction of the DiceMetric.
 
-        beta: float
-            Exponential scaling factor for MAE normalization.
+        max_mae_value: float
+            Maximum possible value for normalizing the MAE. This should be chosen based on the range of the regression target.
 
         regression_channel: int = 0
             Regression channel (e.g., inverse distance transform), on which to apply the Mean Absolute Error metric.
@@ -72,8 +72,13 @@ class CombinedInvExpMeanAbsoluteErrorBinaryDiceMetric(torchmetrics.Metric, ABC):
             training step (if True) or at the end of the epoch (if False). It can be left on False in most cases.
         """
         super().__init__(dist_sync_on_step=dist_sync_on_step)
+        if alpha < 0.0 or alpha > 1.0:
+            raise ValueError("alpha must be between 0.0 and 1.0")
+        if max_mae_value <= 0.0:
+            raise ValueError("max_mae_value must a positive number (larger than zero).")
+
         self.alpha = alpha
-        self.beta = beta
+        self.max_mae_value = max_mae_value
         self.mae_metric = MeanAbsoluteError()
         self.dice_metric = DiceMetric(
             include_background=True, reduction="mean", get_not_nans=False
@@ -132,13 +137,13 @@ class CombinedInvExpMeanAbsoluteErrorBinaryDiceMetric(torchmetrics.Metric, ABC):
             raise ValueError("Unsupported geometry.")
 
         # Calculate the MAE metric
-        mae_metric = torch.exp(
-            -self.beta
-            * self.mae_metric(
-                output[:, self.regression_channel, ...].unsqueeze(1),
-                target[:, self.regression_channel, ...].unsqueeze(1),
-            )
+        mae_value = self.mae_metric(
+            output[:, self.regression_channel, ...].unsqueeze(1),
+            target[:, self.regression_channel, ...].unsqueeze(1),
         )
+
+        # Normalize and invert MAE
+        inv_norm_mae = 1 - (mae_value / self.max_mae_value)
 
         # Calculate the DICE metric (ignore the background)
         dice_metric = self.dice_metric(
@@ -149,7 +154,7 @@ class CombinedInvExpMeanAbsoluteErrorBinaryDiceMetric(torchmetrics.Metric, ABC):
 
         # Combine them linearly
         num_updates = 1
-        combined_metric = self.alpha * mae_metric + (1 - self.alpha) * dice_metric
+        combined_metric = self.alpha * inv_norm_mae + (1 - self.alpha) * dice_metric
 
         # Accumulate the metric
         self.total_metric += combined_metric
