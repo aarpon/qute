@@ -334,6 +334,9 @@ class UNet(pl.LightningModule):
 
         # Retrieve file names from the dataloader
         input_file_names = data_loader.dataset.dataset.data
+        if len(input_file_names) == 0:
+            print("No input files provided to process. Quitting.")
+            return
 
         # Device
         device = get_device()
@@ -504,6 +507,9 @@ class UNet(pl.LightningModule):
 
         # Retrieve file names from the dataloader
         input_file_names = data_loader.dataset.dataset.data
+        if len(input_file_names) == 0:
+            print("No input files provided to process. Quitting.")
+            return
 
         # If needed, create the sub-folders for the individual predictions
         if save_individual_preds:
