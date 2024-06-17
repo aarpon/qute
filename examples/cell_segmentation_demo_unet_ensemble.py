@@ -46,7 +46,7 @@ CONFIG = {
     "class_names": ["background", "cell", "membrane"],
     "max_epochs": 2000,
     "precision": 16 if torch.cuda.is_bf16_supported() else 32,
-    "model_dir": Path(userpaths.get_my_documents()) / "qute" / exp_name / "models",
+    "models_dir": Path(userpaths.get_my_documents()) / "qute" / exp_name / "models",
     "results_dir": Path(userpaths.get_my_documents()) / "qute" / exp_name / "results",
 }
 
@@ -129,7 +129,7 @@ if __name__ == "__main__":
             monitor="val_loss", patience=10, mode="min"
         )  # Issues with Lightning's ES
         model_checkpoint = ModelCheckpoint(
-            dirpath=CONFIG["model_dir"] / f"fold_{fold}", monitor="val_loss"
+            dirpath=CONFIG["models_dir"] / f"fold_{fold}", monitor="val_loss"
         )
         lr_monitor = LearningRateMonitor(logging_interval="step")
 
@@ -163,7 +163,7 @@ if __name__ == "__main__":
     for fold in range(CONFIG["num_folds"]):
 
         # Look for the model for current fold
-        found = list(CONFIG["model_dir"].glob(f"fold_{fold}/*.ckpt"))
+        found = list(CONFIG["models_dir"].glob(f"fold_{fold}/*.ckpt"))
         if len(found) == 0:
             print(f"Could not find trained model for fold {fold}!")
             continue
