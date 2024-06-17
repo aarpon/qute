@@ -8,6 +8,10 @@
 # Contributors:
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
-from ._preprocess import extract_fft_stats, extract_intensity_stats
+from ._preprocess import (
+    extract_fft_stats,
+    extract_intensity_stats,
+    extract_median_object_size,
+)
 
 __doc__ = """Preprocessing functions."""

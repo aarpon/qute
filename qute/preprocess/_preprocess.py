@@ -14,14 +14,15 @@ from typing import Optional
 
 import numpy as np
 from scipy.fft import fft2
+from skimage.measure import regionprops
 from tifffile import imread
 from tqdm import tqdm
 
 
 def extract_intensity_stats(
     image_list: list,
-    label_list: list,
-    fg_classes: Optional[list],
+    mask_list: list,
+    fg_classes: Optional[list] = None,
     low_perc: float = 0.5,
     high_perc: float = 99.5,
 ) -> tuple:
@@ -32,8 +33,8 @@ def extract_intensity_stats(
     image_list: list
         List of paths for the intensity TIFF images.
 
-    label_list: list
-        List of paths for the label TIFF images. Importantly, label image at index i must
+    mask_list: list
+        List of paths for the mask TIFF images. Importantly, label image at index i must
         correspond to intensity image at index i.
 
     fg_classes: Optional[list[int]]
@@ -59,8 +60,8 @@ def extract_intensity_stats(
     """
 
     # Check the arguments
-    if len(image_list) != len(label_list):
-        raise ValueError("Image and label lists must have the same lengths.")
+    if len(image_list) != len(mask_list):
+        raise ValueError("Image and mask lists must have the same lengths.")
 
     # Check the percentiles
     if low_perc < 0 or low_perc > high_perc or low_perc >= 100.0:
@@ -76,21 +77,24 @@ def extract_intensity_stats(
     all_foreground_intensities = None
 
     # Process all images
-    for image_name, label_name in tqdm(
-        zip(image_list, label_list), total=len(image_list)
+    for image_name, mask_name in tqdm(
+        zip(image_list, mask_list), total=len(image_list)
     ):
 
         # Read images
         image = imread(image_name)
-        label = imread(label_name)
+        mask = imread(mask_name)
 
         # Create a mask using the requested foreground classes
-        mask = np.zeros(label.shape, dtype=bool)
-        for c in fg_classes:
-            mask = np.logical_or(mask, label == c)
+        bw = np.zeros(mask.shape, dtype=bool)
+        if fg_classes is not None:
+            for c in fg_classes:
+                bw = np.logical_or(bw, mask == c)
+        else:
+            bw = mask > 0
 
         # Extract the intensities over the foreground masks
-        intensities = image[mask]
+        intensities = image[bw]
 
         # Append to all_foreground_intensities
         if all_foreground_intensities is None:
@@ -107,6 +111,46 @@ def extract_intensity_stats(
 
     # Return the extracted statistics
     return mean, std, p_low, p_high
+
+
+def extract_median_object_size(label_list: list) -> float:
+    """Returns the median size of all labels.
+
+    Parameters
+    ----------
+
+    label_list: list
+        List of paths for the label TIFF images.
+
+    Returns
+    -------
+
+    mn: float
+        Min size of all objects.
+
+    med: float
+        Median size of all labels.
+
+    mx: float
+        Max size of all labels.
+    """
+
+    all_sizes = []
+
+    # Process all images
+    for label_name in tqdm(label_list):
+
+        # Read images
+        label_img = imread(label_name)
+
+        # Process all labels
+        props = regionprops(label_img)
+
+        for prop in props:
+            all_sizes.append(prop.feret_diameter_max)
+
+    # Return the median of all sizes
+    return np.min(all_sizes), np.median(all_sizes), np.max(all_sizes)
 
 
 def extract_fft_stats(
