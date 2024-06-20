@@ -703,7 +703,9 @@ class NormalizedDistanceTransform(Transform):
         else:
             return dt_out
 
-    def __call__(self, data: np.ndarray) -> torch.Tensor:
+    def __call__(
+        self, data: Union[torch.Tensor, monai.data.MetaTensor, np.ndarray]
+    ) -> torch.Tensor:
         """
         Calculates and normalizes the distance transform per region of the selected pixel class from a labels image
         and adds it as an additional plane to the image.
@@ -711,8 +713,8 @@ class NormalizedDistanceTransform(Transform):
         Returns
         -------
 
-        data: np.ndarray
-            Updated array with the normalized distance transform added as a new plane.
+        data: Union[torch.Tensor, monai.data.MetaTensor, np.ndarray]
+            Updated array (as Tensor) with the normalized distance transform added as a new plane.
         """
 
         if not type(data) in [torch.Tensor, monai.data.MetaTensor, np.ndarray]:
@@ -913,15 +915,17 @@ class WatershedAndLabelTransform(Transform):
         # We return only the label image and drop the original image and the seeds
         return labels.astype(np.int32)
 
-    def __call__(self, data: np.ndarray) -> torch.Tensor:
+    def __call__(
+        self, data: Union[torch.Tensor, monai.data.MetaTensor, np.ndarray]
+    ) -> torch.Tensor:
         """Calculates and normalizes the distance transform per region of the selected pixel class
         from a labels image and adds it as an additional plane to the image.
 
         Returns
         -------
 
-        data: np.ndarray
-            Updated array with the normalized distance transform added as a new plane.
+        data: Union[torch.Tensor, monai.data.MetaTensor]
+            Updated array (as a Tensor) with the normalized distance transform added as a new plane.
         """
 
         if not type(data) in [torch.Tensor, monai.data.MetaTensor, np.ndarray]:

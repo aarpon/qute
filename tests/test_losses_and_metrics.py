@@ -16,8 +16,6 @@ import numpy as np
 import pytest
 import torch
 from monai.data import MetaTensor
-from monai.losses import DiceLoss
-from torch import nn
 
 from qute.losses import CombinedMSEBinaryDiceCELoss
 from qute.metrics import CombinedInvMeanAbsoluteErrorBinaryDiceMetric
