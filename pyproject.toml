@@ -45,9 +45,10 @@ known_third_party = ["imio", "monai", "natsort", "nd2reader", "numpy", "pytest",
 
 [tool.poetry.dependencies]
 python = ">=3.9,<=3.12"
+numpy = "^1.26.0"
 tifffile = ">=2023.2.3"
 natsort = ">=8.2.0"
-torch = ">=2.2.0"
+torch = ">=2.2.0,<=2.4.0"
 torchvision = ">=0.15"
 pytorch-lightning = ">=2.1.0"
 tensorboard = ">=2.11.2"
