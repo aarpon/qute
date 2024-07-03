@@ -34,16 +34,36 @@ class Config:
         return True
 
     @property
-    def root_data_dir(self):
-        return Path(self._config["settings"]["root_data_dir"])
+    def project_dir(self):
+        return Path(self._config["settings"]["project_dir"])
 
     @property
     def project_name(self):
-        return self._config["settings"]["project_name"]
+        return Path(self.project_dir).name
 
     @property
-    def data_sub_dir(self):
-        return self._config["settings"]["data_sub_dir"]
+    def data_dir(self):
+        data_dir = self._config["settings"]["data_dir"]
+        if Path(data_dir).is_absolute():
+            return Path(data_dir)
+        else:
+            return self.project_dir / data_dir
+
+    @property
+    def in_channels(self):
+        return int(self._config["settings"]["in_channels"])
+
+    @property
+    def out_channels(self):
+        return int(self._config["settings"]["out_channels"])
+
+    @property
+    def min_intensity(self):
+        return int(self._config["settings"]["min_intensity"])
+
+    @property
+    def max_intensity(self):
+        return int(self._config["settings"]["max_intensity"])
 
     @property
     def source_for_prediction(self):
@@ -122,6 +142,28 @@ class Config:
         for i, element in enumerate(patch_size):
             patch_size[i] = int(element)
         return tuple(patch_size)
+
+    @property
+    def channels(self):
+        channels_str = self._config["settings"]["channels"]
+        channels = re.sub(r"\s+", "", channels_str).split(",")
+        for i, element in enumerate(channels):
+            channels[i] = int(element)
+        return tuple(channels)
+
+    @property
+    def strides(self):
+        strides_str = self._config["settings"]["strides"]
+        if strides_str == "":
+            return None
+        strides = re.sub(r"\s+", "", strides_str).split(",")
+        for i, element in enumerate(strides):
+            strides[i] = int(element)
+        return tuple(strides)
+
+    @property
+    def num_res_units(self):
+        return int(self._config["settings"]["num_res_units"])
 
     @property
     def learning_rate(self):

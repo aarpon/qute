@@ -18,7 +18,7 @@ from qute.config import Config
 class Project:
     """Sets up Project directory structure."""
 
-    def __init__(self, config: Config, clean: bool = True):
+    def __init__(self, config: Config, clean: bool = False):
         """
 
         Parameters
@@ -27,7 +27,7 @@ class Project:
         config: qute.config.Config
             Configuration for current project.
 
-        clean: bool = True
+        clean: bool = False
             Set to True to clean the project directory from failed or incomplete runs.
         """
 
@@ -35,13 +35,9 @@ class Project:
         self._config = config
 
         # Internal properties
-        self._project_dir: Path = self._config.root_data_dir / self._config.project_name
+        self._project_dir: Path = self._config.project_dir
         self._runs_dir: Path = self._project_dir / "runs"
-        data_dir = self._config.data_sub_dir
-        if Path(data_dir).is_absolute():
-            self._data_dir: Path = Path(data_dir)
-        else:
-            self._data_dir: Path = self._project_dir / data_dir
+        self._data_dir: Path = self._config.data_dir
         self._selected_model_path: Union[None, Path, str] = None
         self._target_for_prediction_path = self._config.target_for_prediction
         self._source_for_prediction_path = self._config.source_for_prediction
