@@ -24,14 +24,13 @@ from sklearn.model_selection import KFold
 from qute.campaigns import CampaignTransforms
 
 
-class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
-    """DataLoader for local folder containing 'images' and 'labels' sub-folders for a segmentation task."""
+class DataModuleLocalFolder(pl.LightningDataModule):
+    """DataLoader for local folder containing source and target image sub-folders."""
 
     def __init__(
         self,
         campaign_transforms: CampaignTransforms,
         data_dir: Union[Path, str] = Path(),
-        num_classes: int = 3,
         num_folds: int = 1,
         train_fraction: float = 0.7,
         val_fraction: float = 0.2,
@@ -40,8 +39,10 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
         num_patches: int = 1,
-        images_sub_folder: str = "images",
-        labels_sub_folder: str = "labels",
+        source_images_sub_folder: str = "images",
+        target_images_sub_folder: str = "labels",
+        source_images_label: str = "image",
+        target_images_label: str = "label",
         seed: int = 42,
         num_workers: Optional[int] = os.cpu_count() - 1,
         num_inference_workers: Optional[int] = os.cpu_count() - 1,
@@ -58,10 +59,8 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
             @see `qute.transforms.CampaignTransforms` for documentation.
 
         data_dir: Path | str = Path()
-            Data directory, containing two sub-folders "images" and "labels". The subfolder names can be overwritten.
-
-        num_classes: int = 3
-            Number of output classes (labels).
+            Data directory, containing two source and target image sub-folders. The subfolder names
+            and labels can be overwritten.
 
         num_folds: int = 1
             Set to a number larger than one to set up k-fold cross-validation. All images
@@ -94,11 +93,17 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         num_patches: int = 1
             Number of patches per image to be extracted (and collated in the batch).
 
-        images_sub_folder: str = "images"
-            Name of the images sub-folder. It can be used to override the default "images".
+        source_images_sub_folder: str = "images"
+            Name of the source images sub-folder. It can be used to override the default "images".
 
-        labels_sub_folder: str = "labels"
-            Name of the labels sub-folder. It can be used to override the default "labels".
+        target_images_sub_folder: str = "labels"
+            Name of the target images sub-folder. It can be used to override the default "labels".
+
+        source_images_label: str = "image"
+            Label for the source images to be used by the Transforms. It can be used to override the default "image".
+
+        target_images_label: str = "label"
+            Label for the target images to be used by the Transforms. It can be used to override the default "label".
 
         seed: int = 42
             Seed for all random number generators.
@@ -125,11 +130,11 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         self.num_inference_workers = num_inference_workers
         self.pin_memory = pin_memory
 
-        self.num_classes = num_classes
-
-        # Set the sub-folder names
-        self.images_sub_folder = images_sub_folder
-        self.labels_sub_folder = labels_sub_folder
+        # Set the sub-folder names and labels
+        self.source_images_sub_folder = source_images_sub_folder
+        self.target_images_sub_folder = target_images_sub_folder
+        self.source_images_label = source_images_label
+        self.target_images_label = target_images_label
 
         # Set the seed
         if seed is None:
@@ -173,10 +178,14 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
 
         # Scan the "images" and "labels" folders
         self._all_images = np.array(
-            natsorted(list((self.data_dir / self.images_sub_folder).glob("*.tif")))
+            natsorted(
+                list((self.data_dir / self.source_images_sub_folder).glob("*.tif"))
+            )
         )
         self._all_labels = np.array(
-            natsorted(list((self.data_dir / self.labels_sub_folder).glob("*.tif")))
+            natsorted(
+                list((self.data_dir / self.target_images_sub_folder).glob("*.tif"))
+            )
         )
 
         # Check that we found some images
@@ -254,7 +263,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
         """Create datasets based on current splits."""
         # Create the training dataset
         train_files = [
-            {"image": image, "label": label}
+            {self.source_images_label: image, self.target_images_label: label}
             for image, label in zip(
                 self._all_images[self._train_indices],
                 self._all_labels[self._train_indices],
@@ -266,7 +275,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
 
         # Create the validation dataset
         val_files = [
-            {"image": image, "label": label}
+            {self.source_images_label: image, self.target_images_label: label}
             for image, label in zip(
                 self._all_images[self._val_indices], self._all_labels[self._val_indices]
             )
@@ -277,7 +286,7 @@ class SegmentationDataModuleLocalFolder(pl.LightningDataModule):
 
         # Create the testing dataset
         test_files = [
-            {"image": image, "label": label}
+            {self.source_images_label: image, self.target_images_label: label}
             for image, label in zip(
                 self._all_images[self._test_indices],
                 self._all_labels[self._test_indices],

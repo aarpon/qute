@@ -87,12 +87,12 @@ class Config:
         return Path(source_model_path)
 
     @property
-    def images_sub_folder(self):
-        return self._config["settings"]["images_sub_folder"]
+    def source_images_sub_folder(self):
+        return self._config["settings"]["source_images_sub_folder"]
 
     @property
-    def labels_sub_folder(self):
-        return self._config["settings"]["labels_sub_folder"]
+    def target_images_sub_folder(self):
+        return self._config["settings"]["target_images_sub_folder"]
 
     @property
     def train_fraction(self):

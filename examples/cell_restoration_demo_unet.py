@@ -70,7 +70,7 @@ if __name__ == "__main__":
         patch_size=CONFIG["patch_size"],
         num_patches=CONFIG["num_patches"],
         inference_batch_size=CONFIG["inference_batch_size"],
-        labels_sub_folder="targets",
+        target_images_sub_folder="targets",
     )
 
     # Loss

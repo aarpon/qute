@@ -26,7 +26,7 @@ from torch.optim.lr_scheduler import OneCycleLR
 
 from qute import device
 from qute.campaigns import SegmentationCampaignTransformsIDT3D
-from qute.data.dataloaders import SegmentationDataModuleLocalFolder
+from qute.data.dataloaders import DataModuleLocalFolder
 from qute.losses import CombinedMSEBinaryDiceCELoss
 from qute.metrics import CombinedInvMeanAbsoluteErrorBinaryDiceMetric
 from qute.models.unet import UNet
@@ -65,15 +65,15 @@ if __name__ == "__main__":
     )
 
     # Data module
-    data_module = SegmentationDataModuleLocalFolder(
+    data_module = DataModuleLocalFolder(
         campaign_transforms=campaign_transforms,
         data_dir=Path("data").resolve(),  # Point to the root of the data directory
         seed=CONFIG["seed"],
         batch_size=CONFIG["batch_size"],
         patch_size=CONFIG["patch_size"],
         num_patches=CONFIG["num_patches"],
-        images_sub_folder="images",
-        labels_sub_folder="masks",
+        source_images_sub_folder="images",
+        target_images_sub_folder="masks",
         inference_batch_size=CONFIG["inference_batch_size"],
     )
 

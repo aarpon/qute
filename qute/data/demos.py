@@ -16,7 +16,7 @@ from typing import Optional, Union
 import userpaths
 
 from qute.campaigns import CampaignTransforms
-from qute.data.dataloaders import SegmentationDataModuleLocalFolder
+from qute.data.dataloaders import DataModuleLocalFolder
 from qute.data.io import (
     get_cell_restoration_demo_dataset,
     get_cell_segmentation_demo_dataset,
@@ -24,7 +24,7 @@ from qute.data.io import (
 )
 
 
-class CellSegmentationDemo(SegmentationDataModuleLocalFolder):
+class CellSegmentationDemo(DataModuleLocalFolder):
     """DataLoader for the Cell Segmentation Demo."""
 
     def __init__(
@@ -40,8 +40,8 @@ class CellSegmentationDemo(SegmentationDataModuleLocalFolder):
         inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
         num_patches: int = 1,
-        images_sub_folder: str = "images",
-        labels_sub_folder: str = "labels",
+        source_images_sub_folder: str = "images",
+        target_images_sub_folder: str = "labels",
         seed: int = 42,
         num_workers: Optional[int] = os.cpu_count() - 1,
         num_inference_workers: Optional[int] = os.cpu_count() - 1,
@@ -91,10 +91,10 @@ class CellSegmentationDemo(SegmentationDataModuleLocalFolder):
         num_patches: int = 1
             Number of patches per image to be extracted (and collated in the batch).
 
-        images_sub_folder: str = "images"
+        source_images_sub_folder: str = "images"
             Name of the images sub-folder. It can be used to override the default "images".
 
-        labels_sub_folder: str = "labels"
+        target_images_sub_folder: str = "labels"
             Name of the labels sub-folder. It can be used to override the default "labels".
 
         seed: int = 42
@@ -129,7 +129,6 @@ class CellSegmentationDemo(SegmentationDataModuleLocalFolder):
         super().__init__(
             campaign_transforms=campaign_transforms,
             data_dir=data_dir,
-            num_classes=self.num_classes,
             num_folds=num_folds,
             train_fraction=train_fraction,
             val_fraction=val_fraction,
@@ -138,8 +137,8 @@ class CellSegmentationDemo(SegmentationDataModuleLocalFolder):
             inference_batch_size=inference_batch_size,
             patch_size=patch_size,
             num_patches=num_patches,
-            images_sub_folder=images_sub_folder,
-            labels_sub_folder=labels_sub_folder,
+            source_images_sub_folder=source_images_sub_folder,
+            target_images_sub_folder=target_images_sub_folder,
             seed=seed,
             num_workers=num_workers,
             num_inference_workers=num_inference_workers,
@@ -160,7 +159,7 @@ class CellSegmentationDemo(SegmentationDataModuleLocalFolder):
         return super().setup(stage)
 
 
-class CellSegmentationDemoIDT(SegmentationDataModuleLocalFolder):
+class CellSegmentationDemoIDT(DataModuleLocalFolder):
     """DataLoader for the Cell Segmentation Demo (Inverse Distance Transform)."""
 
     def __init__(
@@ -175,8 +174,8 @@ class CellSegmentationDemoIDT(SegmentationDataModuleLocalFolder):
         inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
         num_patches: int = 1,
-        images_sub_folder: str = "images",
-        labels_sub_folder: str = "labels",
+        source_images_sub_folder: str = "images",
+        target_images_sub_folder: str = "labels",
         seed: int = 42,
         num_workers: Optional[int] = os.cpu_count() - 1,
         num_inference_workers: Optional[int] = os.cpu_count() - 1,
@@ -223,10 +222,10 @@ class CellSegmentationDemoIDT(SegmentationDataModuleLocalFolder):
         num_patches: int = 1
             Number of patches per image to be extracted (and collated in the batch).
 
-        images_sub_folder: str = "images"
+        source_images_sub_folder: str = "images"
             Name of the images sub-folder. It can be used to override the default "images".
 
-        labels_sub_folder: str = "labels"
+        target_images_sub_folder: str = "labels"
             Name of the labels sub-folder. It can be used to override the default "labels".
 
         seed: int = 42
@@ -262,8 +261,8 @@ class CellSegmentationDemoIDT(SegmentationDataModuleLocalFolder):
             inference_batch_size=inference_batch_size,
             patch_size=patch_size,
             num_patches=num_patches,
-            images_sub_folder=images_sub_folder,
-            labels_sub_folder=labels_sub_folder,
+            source_images_sub_folder=source_images_sub_folder,
+            target_images_sub_folder=target_images_sub_folder,
             seed=seed,
             num_workers=num_workers,
             num_inference_workers=num_inference_workers,
@@ -282,7 +281,7 @@ class CellSegmentationDemoIDT(SegmentationDataModuleLocalFolder):
         return super().setup(stage)
 
 
-class CellRestorationDemo(SegmentationDataModuleLocalFolder):
+class CellRestorationDemo(DataModuleLocalFolder):
     """DataLoader for the Cell Restoration Demo."""
 
     def __init__(
@@ -297,8 +296,8 @@ class CellRestorationDemo(SegmentationDataModuleLocalFolder):
         inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
         num_patches: int = 1,
-        images_sub_folder: str = "images",
-        labels_sub_folder: str = "targets",
+        source_images_sub_folder: str = "images",
+        target_images_sub_folder: str = "targets",
         seed: int = 42,
         num_workers: Optional[int] = os.cpu_count() - 1,
         num_inference_workers: Optional[int] = os.cpu_count() - 1,
@@ -345,10 +344,10 @@ class CellRestorationDemo(SegmentationDataModuleLocalFolder):
         num_patches: int = 1
             Number of patches per image to be extracted (and collated in the batch).
 
-        images_sub_folder: str = "images"
+        source_images_sub_folder: str = "images"
             Name of the images sub-folder. It can be used to override the default "images".
 
-        labels_sub_folder: str = "labels"
+        target_images_sub_folder: str = "labels"
             Name of the labels sub-folder. It can be used to override the default "labels".
 
         seed: int = 42
@@ -386,8 +385,8 @@ class CellRestorationDemo(SegmentationDataModuleLocalFolder):
             inference_batch_size=inference_batch_size,
             patch_size=patch_size,
             num_patches=num_patches,
-            images_sub_folder=images_sub_folder,
-            labels_sub_folder=labels_sub_folder,
+            source_images_sub_folder=source_images_sub_folder,
+            target_images_sub_folder=target_images_sub_folder,
             seed=seed,
             num_workers=num_workers,
             num_inference_workers=num_inference_workers,
