@@ -185,101 +185,87 @@ class UNet(pl.LightningModule):
         # Update the metrics if needed
         if self.metrics is not None:
             if self.campaign_transforms.get_val_metrics_transforms() is not None:
-                self.metrics(
+                val_metrics = self.metrics(
                     self.campaign_transforms.get_val_metrics_transforms()(y_hat), y
                 )
             else:
-                self.metrics(y_hat, y)
+                val_metrics = self.metrics(y_hat, y)
 
-        return {"val_loss": val_loss}
+            # Compute and log the mean metrics score per class
+            mean_val_per_class = val_metrics.nanmean(dim=0)
 
-    def on_validation_epoch_end(self):
-        """Compute the final metric at the end of the epoch."""
+            # Do we have more than one output classes?
+            if len(self.class_names) > 1:
 
-        # Aggregate the validation metrics
-        epoch_metrics = self.metrics.aggregate()
+                # Make sure to log the correct class name in case the background is not
+                # considered in the calculation
+                start = len(self.class_names) - val_metrics.shape[1]
 
-        # Make sure to log the correct class name in case the background is not
-        # considered in the calculation
-        if epoch_metrics.ndim > 0:
-            start = len(self.class_names) - len(epoch_metrics)
-            for i, val_score in enumerate(epoch_metrics):
+                for i, val_score in enumerate(mean_val_per_class):
+                    self.log(
+                        f"val_metrics_{self.class_names[start + i]}",
+                        torch.tensor([val_score]),
+                        on_step=False,
+                        on_epoch=True,
+                    )
+            else:
                 self.log(
-                    f"val_metrics_{self.class_names[start + i]}",
-                    torch.tensor([val_score]),
+                    "val_metrics",
+                    torch.tensor([mean_val_per_class]),
                     on_step=False,
                     on_epoch=True,
                 )
-        else:
-            self.log(
-                f"val_metrics",
-                torch.tensor([epoch_metrics]),
-                on_step=False,
-                on_epoch=True,
-            )
 
-        # Reset metrics after logging
-        self.metrics.reset()
+        return {"val_loss": val_loss}
 
     def test_step(self, batch, batch_idx):
         """Perform a test step."""
         x, y = batch
         y_hat = self.net(x)
         test_loss = self.criterion(y_hat, y)
-
-        # # Append the loss
-        # self.test_losses.append(test_loss.detach())
-
-        # Log the loss
         self.log("test_loss", test_loss)
         if self.metrics is not None:
             if self.campaign_transforms.get_test_metrics_transforms() is not None:
-                self.metrics(
+                test_metrics = self.metrics(
                     self.campaign_transforms.get_test_metrics_transforms()(y_hat), y
                 )
             else:
-                self.metrics(y_hat, y)
+                test_metrics = self.metrics(y_hat, y)
 
-        return {"test_loss": test_loss}
+            # Compute and log the mean metrics score per class
+            mean_test_per_class = test_metrics.nanmean(dim=0)
 
-    def on_test_epoch_end(self):
-        """Compute the final metric at the end of the epoch."""
+            # Do we have more than one output classes?
+            if len(self.class_names) > 1:
 
-        # Aggregate the validation metrics
-        epoch_metrics = self.metrics.aggregate()
-
-        # Make sure to log the correct class name in case the background is not
-        # considered in the calculation
-        if epoch_metrics.ndim > 0:
-            start = len(self.class_names) - len(epoch_metrics)
-            for i, val_score in enumerate(epoch_metrics):
+                # Make sure to log the correct class name in case the background is not
+                # considered in the calculation
+                start = len(self.class_names) - test_metrics.shape[1]
+                for i, test_score in enumerate(mean_test_per_class):
+                    self.log(
+                        f"test_metrics_{self.class_names[start + i]}",
+                        torch.tensor([test_score]),
+                        on_step=False,
+                        on_epoch=True,
+                    )
+            else:
                 self.log(
-                    f"test_metrics_{self.class_names[start + i]}",
-                    torch.tensor([val_score]),
+                    "test_metrics",
+                    torch.tensor([mean_test_per_class]),
                     on_step=False,
                     on_epoch=True,
                 )
-        else:
-            self.log(
-                f"test_metrics",
-                torch.tensor([epoch_metrics]),
-                on_step=False,
-                on_epoch=True,
-            )
 
-        # Reset metrics after logging
-        self.metrics.reset()
+        return {"test_loss": test_loss}
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """The predict step creates a label image from the output one-hot tensor."""
         x, _ = batch
         y_hat = self.net(x)
         if self.campaign_transforms.get_post_inference_transforms() is not None:
-            label = self.campaign_transforms.get_post_inference_transforms()(
-                y_hat
-            ).argmax(axis=1)
+            label = self.campaign_transforms.get_post_inference_transforms()(y_hat)
         else:
-            label = y_hat.argmax(axis=1)
+            label = y_hat
         return label
 
     def full_inference(

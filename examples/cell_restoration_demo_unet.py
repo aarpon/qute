@@ -84,7 +84,7 @@ if __name__ == "__main__":
     lr_scheduler_parameters = {
         "total_steps": 8 * CONFIG["max_epochs"],  # Steps per epoch in this case is 8.
         "div_factor": 5.0,
-        "max_lr": CONFIG["leaning_rate"],
+        "max_lr": CONFIG["learning_rate"],
         "pct_start": 0.5,  # Fraction of total_steps at which the learning rate starts decaying after reaching max_lr
         "anneal_strategy": "cos",
     }
@@ -99,7 +99,7 @@ if __name__ == "__main__":
         channels=(16, 32, 64, 128),
         strides=(2, 2, 2),
         metrics=metrics,
-        learning_rate=CONFIG["leaning_rate"],
+        learning_rate=CONFIG["learning_rate"],
         lr_scheduler_class=lr_scheduler_class,
         lr_scheduler_parameters=lr_scheduler_parameters,
     )

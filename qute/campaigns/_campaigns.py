@@ -909,7 +909,7 @@ class RestorationCampaignTransforms(CampaignTransforms):
 
     def get_post_full_inference_transforms(self):
         """Define post full-inference transforms to apply after reconstructed prediction on whole image."""
-        return self.get_post_full_inference_transforms()
+        return self.get_post_inference_transforms()
 
     def get_val_metrics_transforms(self):
         """Define default transforms for validation metric calculation (patch)."""
