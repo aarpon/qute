@@ -245,7 +245,7 @@ def qute_to_msd_format(
 
     def target_name(convert: bool, name: str, stem: str, suffix: str = ""):
         """Rename the target image to fit the nnUNetv2 expected pattern."""
-        numbers = re.findall("(\d+).tif$", Path(name).name)
+        numbers = re.findall(r"(\d+).tif$", Path(name).name)
         if len(numbers) != 1:
             return name
         if convert:

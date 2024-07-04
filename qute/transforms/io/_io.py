@@ -376,7 +376,7 @@ class CustomND2Readerd(MapTransform):
 
         for key in self.keys:
             # Get arguments
-            image_path = str(Path(d[key]).resolve())
+            image_path = str(Path(str(d[key])).resolve())
 
             # Use the single tensor reader
             out = self.tensor_reader(image_path)
@@ -545,7 +545,7 @@ class CustomTIFFReaderd(MapTransform):
 
         for key in self.keys:
             # Get arguments
-            image_path = str(Path(d[key]).resolve())
+            image_path = str(Path(str(d[key])).resolve())
 
             # Use the single tensor reader
             out = self.tensor_reader(image_path)

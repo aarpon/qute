@@ -450,7 +450,7 @@ class OneHotToMask(Transform):
             # Either 2D data: (C, H, W) or 3D data: (C, D, H, W).
             # The alternative possibility of 2D batch data (B, C, H, W) is not supported
             # (but can't be distinguished) and will result in unexpected labels.
-            return data.argmax(axis=0, keepdim=True).type(self.dtype)
+            return data.argmax(dim=0, keepdim=True).type(self.dtype)
         elif data.ndim == 5:
             # Unsupported >=3D batch data: (B, C, Z, H, W)
             raise ValueError(
@@ -485,7 +485,7 @@ class OneHotToMaskBatch(Transform):
             # The alternative possibility of single 3D data (C, D, H, W) can't robustly
             # be distinguished from batched 2D (B, C, H, W) data and will result in unexpected
             # labels.
-            return data.argmax(axis=1, keepdim=True).type(self.dtype)
+            return data.argmax(dim=1, keepdim=True).type(self.dtype)
         else:
             # Unclear dimensionality
             raise ValueError(

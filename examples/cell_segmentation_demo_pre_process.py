@@ -53,7 +53,8 @@ print(f"Saved intensity stats to {stats_filename}")
 
 # Print the stats
 print(
-    f"Dataset intensity stats: mean = {mean}, std = {std}, {LOW_PERC} percentile = {p_low}, {HIGH_PERC} percentile = {p_high}."
+    f"Dataset intensity stats: mean = {mean}, std = {std}, {LOW_PERC} percentile = {p_low}, "
+    f"{HIGH_PERC} percentile = {p_high}."
 )
 
 # Extract FFT stats
@@ -73,5 +74,6 @@ print(f"Saved FFT stats to {fft_filename}")
 
 # Print the stats
 print(
-    f"Dataset FFT stats: mean_real = {mean_real}, std_real = {std_real}, mean_imag = {mean_imag}, std_imag = {std_imag}."
+    f"Dataset FFT stats: mean_real = {mean_real}, std_real = {std_real}, "
+    f"mean_imag = {mean_imag}, std_imag = {std_imag}."
 )

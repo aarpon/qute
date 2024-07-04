@@ -30,7 +30,7 @@ def get_cell_segmentation_demo_dataset(
     download_dir: Path | str = Path()
         Directory where the cell segmentation datasets will be downloaded and extracted.
 
-    three_classes = bool
+    three_classes: bool
         If True, the segmentation demo with three classes (Background, Object, Border) will be downloaded;
         if False, the segmentation demo with two classes (Background, Object).
 

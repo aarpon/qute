@@ -77,7 +77,7 @@ def num_levels_for_object_size(
     # Determine the number of levels needed for a receptive field of at least 72
     num_levels = 1
     while True:
-        receptive_field = calculate_receptive_field(num_levels)
+        receptive_field = calculate_receptive_field(num_levels, kernel_size, pool_size)
         if receptive_field >= object_size:
             break
         num_levels += 1

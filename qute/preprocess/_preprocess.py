@@ -113,7 +113,7 @@ def extract_intensity_stats(
     return mean, std, p_low, p_high
 
 
-def extract_median_object_size(label_list: list) -> float:
+def extract_median_object_size(label_list: list) -> tuple[float, float, float]:
     """Returns the median size of all labels.
 
     Parameters

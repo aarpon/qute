@@ -49,10 +49,12 @@ class CombinedInvMeanAbsoluteErrorBinaryDiceMetric(torchmetrics.Metric, ABC):
             Number of classes for the Dice Metric calculation.
 
         alpha: float
-            Fraction of the MeanAbsoluteError() to be combined with the corresponding (1 - alpha) fraction of the DiceMetric.
+            Fraction of the MeanAbsoluteError() to be combined with the corresponding (1 - alpha) fraction
+            of the DiceMetric.
 
         max_mae_value: float
-            Maximum possible value for normalizing the MAE. This should be chosen based on the range of the regression target.
+            Maximum possible value for normalizing the MAE. This should be chosen based on the range of the
+            regression target.
 
         regression_channel: int = 0
             Regression channel (e.g., inverse distance transform), on which to apply the Mean Absolute Error metric.

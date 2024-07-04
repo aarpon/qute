@@ -451,7 +451,8 @@ class UNet(pl.LightningModule):
             Fraction of overlap between rois.
 
         transpose: bool
-            Whether the transpose the image before saving, to compensate for the default behavior of monai.transforms.LoadImage().
+            Whether the transpose the image before saving, to compensate for the default behavior of
+            monai.transforms.LoadImage().
 
         save_individual_preds: bool
             Whether to save the individual predictions of each model.

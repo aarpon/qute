@@ -138,7 +138,7 @@ class Config:
     @property
     def patch_size(self):
         patch_size_str = self._config["settings"]["patch_size"]
-        patch_size = re.sub(r"\s+", "", patch_size_str).split(",")
+        patch_size = list(re.sub(r"\s+", "", patch_size_str).split(","))
         for i, element in enumerate(patch_size):
             patch_size[i] = int(element)
         return tuple(patch_size)
@@ -146,7 +146,7 @@ class Config:
     @property
     def channels(self):
         channels_str = self._config["settings"]["channels"]
-        channels = re.sub(r"\s+", "", channels_str).split(",")
+        channels = list(re.sub(r"\s+", "", channels_str).split(","))
         for i, element in enumerate(channels):
             channels[i] = int(element)
         return tuple(channels)
@@ -156,7 +156,7 @@ class Config:
         strides_str = self._config["settings"]["strides"]
         if strides_str == "":
             return None
-        strides = re.sub(r"\s+", "", strides_str).split(",")
+        strides = list(re.sub(r"\s+", "", strides_str).split(","))
         for i, element in enumerate(strides):
             strides[i] = int(element)
         return tuple(strides)
