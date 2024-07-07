@@ -31,6 +31,8 @@ from qute.campaigns import SegmentationCampaignTransforms3D
 from qute.data.dataloaders import DataModuleLocalFolder
 from qute.models.unet import UNet
 
+torch.set_float32_matmul_precision("medium")
+
 # Configuration
 exp_name = datetime.now().strftime("%Y%m%d_%H%M%S")
 CONFIG = {
@@ -47,7 +49,7 @@ CONFIG = {
     "include_background": False,
     "class_names": ["background", "cell", "membrane"],
     "max_epochs": 2000,
-    "precision": 16 if torch.cuda.is_bf16_supported() else 32,
+    "precision": "16-mixed",
     "models_dir": Path(userpaths.get_my_documents()) / "qute" / exp_name / "models",
     "results_dir": Path(userpaths.get_my_documents()) / "qute" / exp_name / "results",
 }

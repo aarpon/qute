@@ -34,14 +34,15 @@ from qute.models.unet import UNet
 # Tune search algorithms: https://docs.ray.io/en/latest/tune/api/suggestion.html
 #
 
+torch.set_float32_matmul_precision("medium")
+
 # Configuration
 CONFIG = {
     "seed": 2022,
     "inference_batch_size": 4,
     "num_classes": 3,
-    "patch_size": (640, 640),
     "max_epochs": 2000,
-    "precision": 16 if torch.cuda.is_bf16_supported() else 32,
+    "precision": "16-mixed",
 }
 
 
