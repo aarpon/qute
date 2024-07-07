@@ -21,11 +21,13 @@ from monai.transforms import (
     RandGaussianNoised,
     RandGaussianSmoothd,
     RandRotate90d,
+    RandRotated,
     RandSpatialCropd,
 )
 
 from qute.transforms import ToPyTorchLightningOutputd
-from qute.transforms.debug import DebugExtractChannel
+
+# from qute.transforms.debug import DebugExtractChannel
 from qute.transforms.geom import CustomResampler, CustomResamplerd
 from qute.transforms.io import CustomTIFFReader, CustomTIFFReaderd
 from qute.transforms.norm import (
@@ -152,6 +154,13 @@ class SegmentationCampaignTransforms2D(CampaignTransforms):
                     keys=("image", "label"),
                     ensure_channel_first=True,
                     dtype=torch.float32,
+                ),
+                RandRotated(
+                    keys=("image", "label"),
+                    prob=0.75,
+                    range_x=0.4,
+                    mode=["bilinear", "nearest"],
+                    padding_mode="reflection",
                 ),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
