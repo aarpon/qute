@@ -136,7 +136,7 @@ class LabelToTwoClassMask(Transform):
             cropped_masks = extract_subvolume(data, region.bbox)
 
             # Select object
-            mask = torch.tensor(cropped_masks == region.label, dtype=torch.int32)
+            mask = (cropped_masks == region.label).to(torch.int32)
 
             # Perform erosion
             eroded_mask = ndi.binary_erosion(mask, footprint)
@@ -326,7 +326,7 @@ class TwoClassMaskToLabel(Transform):
                     continue
 
                 # Select object
-                mask = torch.tensor(labels == lbl, dtype=torch.int32)
+                mask = (labels == lbl).to(torch.int32)
 
                 # Find the indices of the non-zero elements
                 positions = np.where(mask > 0)

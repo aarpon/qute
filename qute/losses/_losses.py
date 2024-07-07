@@ -62,7 +62,7 @@ class CombinedMSEBinaryDiceCELoss(torch.nn.Module):
         self.with_batch_dim = with_batch_dim
         self.mse_loss = MSELoss()
         self.dice_loss = DiceLoss(
-            include_background=self.include_background, to_onehot_y=False, softmax=True
+            include_background=self.include_background, to_onehot_y=False
         )
 
     def forward(self, output, target):
