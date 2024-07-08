@@ -16,7 +16,6 @@ target_for_prediction =
 source_model_path =
 min_intensity = 0
 max_intensity = 65535
-source_model_path =
 seed = 2022
 batch_size = 8
 inference_batch_size = 8
