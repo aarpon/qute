@@ -32,6 +32,22 @@ On Windows, PyTorch with CUDA acceleration has to be explicitly installed:
 $ python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 ```
 
+### Test if GPU acceleration is available
+
+* Linux and Windows:
+
+```bash
+$ python -c "import torch; print(torch.cuda.is_available())"
+True
+```
+
+* macOS M1:
+
+```bash
+$ python -c "import torch; print(torch.backends.mps.is_available())"
+True
+```
+
 ## First steps
 
 To get started, try:
@@ -41,4 +57,3 @@ $ python qute/examples/cell_segmentation_demo_unet.py
 ```
 
 For an example on how to use `ray[tune]` to optimize hyper-parameters, see `qute/examples/cell_segmentation_hp_optim_demo_unet.py`.
-
