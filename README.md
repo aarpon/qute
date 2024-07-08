@@ -8,12 +8,28 @@ Framework to support deep-learning based computer-vision research in microscopy 
 
 ## Installation
 
+### Install prerequisites
+
+* Install Miniconda from: https://docs.anaconda.com/miniconda/ (for Linux, macOS, and Windows)
+* Install CUDA:
+  * Linux: https://developer.nvidia.com/cuda-downloads?target_os=Linux&target_arch=x86_64
+  * Windows: https://developer.nvidia.com/cuda-downloads?target_os=Windows&target_arch=x86_64
+  * macOS does not support CUDA; qute will use `mps` on M1 processors.
+
+### Install qute
+
 ```bash
 $ git clone https://github.com/aarpon/qute
 $ cd qute
 $ conda create -n qute-env python
 $ conda activate qute-env
 $ pip install -e .
+```
+
+On Windows, PyTorch with CUDA acceleration has to be explicitly installed:
+
+```bash
+$ python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 ```
 
 ## First steps
