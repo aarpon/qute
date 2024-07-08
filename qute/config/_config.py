@@ -95,6 +95,14 @@ class Config:
         return self._config["settings"]["target_images_sub_folder"]
 
     @property
+    def source_images_label(self):
+        return self._config["settings"]["source_images_label"]
+
+    @property
+    def target_images_label(self):
+        return self._config["settings"]["target_images_label"]
+
+    @property
     def train_fraction(self):
         train_fraction = self._config["settings"]["train_fraction"]
         if train_fraction == "":
@@ -176,9 +184,12 @@ class Config:
 
     @property
     def class_names(self):
-        class_names = self._config["settings"]["class_names"]
-        class_names = re.sub(r"\s+", "", class_names).split(",")
-        return tuple(class_names)
+        if "class_names" in self._config["settings"]:
+            class_names = self._config["settings"]["class_names"]
+            class_names = re.sub(r"\s+", "", class_names).split(",")
+            return list(class_names)
+        else:
+            return []
 
     @property
     def max_epochs(self):

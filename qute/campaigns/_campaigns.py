@@ -850,7 +850,9 @@ class RestorationCampaignTransforms(CampaignTransforms):
                     random_size=False,
                 ),
                 MinMaxNormalized(
-                    keys=("image", "label"), min_intensity=0.0, max_intensity=15472.0
+                    keys=("image", "label"),
+                    min_intensity=self.min_intensity,
+                    max_intensity=self.max_intensity,
                 ),
                 ToPyTorchLightningOutputd(
                     image_dtype=torch.float32,
@@ -875,7 +877,9 @@ class RestorationCampaignTransforms(CampaignTransforms):
                     random_size=False,
                 ),
                 MinMaxNormalized(
-                    keys=("image", "label"), min_intensity=0.0, max_intensity=15472.0
+                    keys=("image", "label"),
+                    min_intensity=self.min_intensity,
+                    max_intensity=self.max_intensity,
                 ),
                 ToPyTorchLightningOutputd(
                     image_dtype=torch.float32,
@@ -900,6 +904,134 @@ class RestorationCampaignTransforms(CampaignTransforms):
                 MinMaxNormalize(
                     min_intensity=self.min_intensity, max_intensity=self.max_intensity
                 ),
+            ]
+        )
+        return inference_transforms
+
+    def get_post_inference_transforms(self):
+        """Define post inference transforms to apply after prediction on patch."""
+        post_inference_transforms = Compose(
+            [
+                Scale(
+                    factor=self.max_intensity,
+                    dtype=torch.int32,
+                )
+            ]
+        )
+        return post_inference_transforms
+
+    def get_post_full_inference_transforms(self):
+        """Define post full-inference transforms to apply after reconstructed prediction on whole image."""
+        return self.get_post_inference_transforms()
+
+    def get_val_metrics_transforms(self):
+        """Define default transforms for validation metric calculation (patch)."""
+        val_metrics_transforms = Compose([])
+        return val_metrics_transforms
+
+    def get_test_metrics_transforms(self):
+        """Define default transforms for testing metric calculation (patch)."""
+        return self.get_val_metrics_transforms()
+
+
+class SelfSupervisedRestorationCampaignTransforms(CampaignTransforms):
+    """Example self-supervised restoration campaign transforms."""
+
+    def __init__(
+        self,
+        min_intensity: int = 0,
+        max_intensity: int = 65535,
+        patch_size: tuple = (640, 640),
+        num_patches: int = 1,
+    ):
+        """Constructor.
+
+        By default, these transforms apply to a single-channel input image to
+        predict a single-channel output.
+        """
+        super().__init__()
+
+        self.min_intensity = min_intensity
+        self.max_intensity = max_intensity
+        self.patch_size = patch_size
+        self.num_patches = num_patches
+
+    def get_train_transforms(self):
+        """Return a composition of Transforms needed to train (patch)."""
+        train_transforms = Compose(
+            [
+                CustomTIFFReaderd(
+                    keys=("image", "target"),
+                    ensure_channel_first=True,
+                    dtype=torch.float32,
+                ),
+                RandGaussianNoised(keys=("image",), prob=1.0, mean=0.0, std=0.1),
+                RandSpatialCropd(
+                    keys=("image", "target"),
+                    roi_size=self.patch_size,
+                    random_size=False,
+                ),
+                MinMaxNormalized(
+                    keys=("image", "target"),
+                    min_intensity=self.min_intensity,
+                    max_intensity=self.max_intensity,
+                ),
+                ToPyTorchLightningOutputd(
+                    image_key="image",
+                    label_key="target",
+                    image_dtype=torch.float32,
+                    label_dtype=torch.float32,
+                ),
+            ]
+        )
+        return train_transforms
+
+    def get_valid_transforms(self):
+        """Return a composition of Transforms needed to validate (patch)."""
+        val_transforms = Compose(
+            [
+                CustomTIFFReaderd(
+                    keys=("image", "target"),
+                    ensure_channel_first=True,
+                    dtype=torch.float32,
+                ),
+                MinMaxNormalized(
+                    keys=("image", "target"),
+                    min_intensity=self.min_intensity,
+                    max_intensity=self.max_intensity,
+                ),
+                RandGaussianNoised(keys=("image",), prob=1.0, mean=0.0, std=0.1),
+                RandSpatialCropd(
+                    keys=("image", "target"),
+                    roi_size=self.patch_size,
+                    random_size=False,
+                ),
+                ToPyTorchLightningOutputd(
+                    image_key="image",
+                    label_key="target",
+                    image_dtype=torch.float32,
+                    label_dtype=torch.float32,
+                ),
+            ]
+        )
+        return val_transforms
+
+    def get_test_transforms(self):
+        """Return a composition of Transforms needed to test (patch)."""
+        return self.get_valid_transforms()
+
+    def get_inference_transforms(self):
+        """Define inference transforms to predict (patch)."""
+        inference_transforms = Compose(
+            [
+                CustomTIFFReader(
+                    ensure_channel_first=True,
+                    dtype=torch.float32,
+                ),
+                MinMaxNormalize(
+                    min_intensity=self.min_intensity, max_intensity=self.max_intensity
+                ),
+                RandGaussianNoised(keys=("image",), prob=1.0, mean=0.0, std=0.1),
             ]
         )
         return inference_transforms
