@@ -57,3 +57,11 @@ $ python qute/examples/cell_segmentation_demo_unet.py
 ```
 
 For an example on how to use `ray[tune]` to optimize hyper-parameters, see `qute/examples/cell_segmentation_hp_optim_demo_unet.py`.
+
+To follow the training progress in [Tensorboard](https://www.tensorflow.org/tensorboard), run:
+
+```bash
+$ tensorboard --logdir ${HOME}/Documents/qute/
+```
+
+and then open TensorBoard on http://localhost:6006/.
