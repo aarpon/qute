@@ -18,10 +18,12 @@ from monai.transforms import (
     AsDiscreted,
     Compose,
     RandCropByPosNegLabeld,
+    RandGaussianNoise,
     RandGaussianNoised,
     RandGaussianSmoothd,
     RandRotate90d,
     RandRotated,
+    RandSpatialCrop,
     RandSpatialCropd,
 )
 
@@ -225,6 +227,10 @@ class SegmentationCampaignTransforms2D(CampaignTransforms):
                     dtype=torch.float32,
                 ),
                 ZNormalize(),
+                RandSpatialCrop(
+                    roi_size=self.patch_size,
+                    random_size=False,
+                ),
             ]
         )
         return inference_transforms
@@ -348,6 +354,10 @@ class SegmentationCampaignTransformsIDT2D(CampaignTransforms):
                     dtype=torch.float32,
                 ),
                 ZNormalize(),
+                RandSpatialCrop(
+                    roi_size=self.patch_size,
+                    random_size=False,
+                ),
             ]
         )
         return inference_transforms
@@ -546,6 +556,10 @@ class SegmentationCampaignTransformsIDT3D(CampaignTransforms):
                     mode="trilinear",
                 ),
                 ZNormalize(),
+                RandSpatialCrop(
+                    roi_size=self.patch_size,
+                    random_size=False,
+                ),
             ]
         )
         return inference_transforms
@@ -766,6 +780,10 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     mode="trilinear",
                 ),
                 ZNormalize(),
+                RandSpatialCrop(
+                    roi_size=self.patch_size,
+                    random_size=False,
+                ),
             ]
         )
         return inference_transforms
@@ -904,6 +922,10 @@ class RestorationCampaignTransforms(CampaignTransforms):
                 MinMaxNormalize(
                     min_intensity=self.min_intensity, max_intensity=self.max_intensity
                 ),
+                RandSpatialCrop(
+                    roi_size=self.patch_size,
+                    random_size=False,
+                ),
             ]
         )
         return inference_transforms
@@ -939,8 +961,6 @@ class SelfSupervisedRestorationCampaignTransforms(CampaignTransforms):
 
     def __init__(
         self,
-        min_intensity: int = 0,
-        max_intensity: int = 65535,
         patch_size: tuple = (640, 640),
         num_patches: int = 1,
     ):
@@ -951,8 +971,6 @@ class SelfSupervisedRestorationCampaignTransforms(CampaignTransforms):
         """
         super().__init__()
 
-        self.min_intensity = min_intensity
-        self.max_intensity = max_intensity
         self.patch_size = patch_size
         self.num_patches = num_patches
 
@@ -965,16 +983,26 @@ class SelfSupervisedRestorationCampaignTransforms(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
-                RandGaussianNoised(keys=("image",), prob=1.0, mean=0.0, std=0.1),
+                RandRotated(
+                    keys=("image", "target"),
+                    prob=0.75,
+                    range_x=0.4,
+                    mode=["bilinear", "bilinear"],
+                    padding_mode="reflection",
+                ),
+                ZNormalized(
+                    keys=("image", "target"),
+                ),
+                RandGaussianNoised(
+                    keys=("image",),
+                    prob=1.0,
+                    mean=0.0,
+                    std=0.5,
+                ),
                 RandSpatialCropd(
                     keys=("image", "target"),
                     roi_size=self.patch_size,
                     random_size=False,
-                ),
-                MinMaxNormalized(
-                    keys=("image", "target"),
-                    min_intensity=self.min_intensity,
-                    max_intensity=self.max_intensity,
                 ),
                 ToPyTorchLightningOutputd(
                     image_key="image",
@@ -995,12 +1023,15 @@ class SelfSupervisedRestorationCampaignTransforms(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
-                MinMaxNormalized(
+                ZNormalized(
                     keys=("image", "target"),
-                    min_intensity=self.min_intensity,
-                    max_intensity=self.max_intensity,
                 ),
-                RandGaussianNoised(keys=("image",), prob=1.0, mean=0.0, std=0.1),
+                RandGaussianNoised(
+                    keys=("image",),
+                    prob=1.0,
+                    mean=0.0,
+                    std=0.5,
+                ),
                 RandSpatialCropd(
                     keys=("image", "target"),
                     roi_size=self.patch_size,
@@ -1028,24 +1059,23 @@ class SelfSupervisedRestorationCampaignTransforms(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
-                MinMaxNormalize(
-                    min_intensity=self.min_intensity, max_intensity=self.max_intensity
+                ZNormalize(),
+                RandGaussianNoise(
+                    prob=1.0,
+                    mean=0.0,
+                    std=0.5,
                 ),
-                RandGaussianNoised(keys=("image",), prob=1.0, mean=0.0, std=0.1),
+                RandSpatialCrop(
+                    roi_size=self.patch_size,
+                    random_size=False,
+                ),
             ]
         )
         return inference_transforms
 
     def get_post_inference_transforms(self):
         """Define post inference transforms to apply after prediction on patch."""
-        post_inference_transforms = Compose(
-            [
-                Scale(
-                    factor=self.max_intensity,
-                    dtype=torch.int32,
-                )
-            ]
-        )
+        post_inference_transforms = Compose()
         return post_inference_transforms
 
     def get_post_full_inference_transforms(self):

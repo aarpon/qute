@@ -174,7 +174,7 @@ class Scaled(MapTransform):
 
     def __init__(
         self,
-        keys: tuple[str] = ("image", "label"),
+        keys: tuple[str, ...] = ("image", "label"),
         factor: float = 65535.0,
         dtype: torch.dtype = torch.int32,
     ) -> None:
@@ -249,7 +249,7 @@ class ZNormalize(Transform):
 class ZNormalized(MapTransform):
     """Standardize the "image" tensor by subtracting the mean and dividing by the standard deviation."""
 
-    def __init__(self, keys: tuple[str]) -> None:
+    def __init__(self, keys: tuple[str, ...] = ("image", "label")) -> None:
         """Constructor"""
         super().__init__(keys=keys)
         self.keys = keys
