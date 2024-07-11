@@ -227,10 +227,6 @@ class SegmentationCampaignTransforms2D(CampaignTransforms):
                     dtype=torch.float32,
                 ),
                 ZNormalize(),
-                RandSpatialCrop(
-                    roi_size=self.patch_size,
-                    random_size=False,
-                ),
             ]
         )
         return inference_transforms
@@ -354,10 +350,6 @@ class SegmentationCampaignTransformsIDT2D(CampaignTransforms):
                     dtype=torch.float32,
                 ),
                 ZNormalize(),
-                RandSpatialCrop(
-                    roi_size=self.patch_size,
-                    random_size=False,
-                ),
             ]
         )
         return inference_transforms
@@ -556,10 +548,6 @@ class SegmentationCampaignTransformsIDT3D(CampaignTransforms):
                     mode="trilinear",
                 ),
                 ZNormalize(),
-                RandSpatialCrop(
-                    roi_size=self.patch_size,
-                    random_size=False,
-                ),
             ]
         )
         return inference_transforms
@@ -780,10 +768,6 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     mode="trilinear",
                 ),
                 ZNormalize(),
-                RandSpatialCrop(
-                    roi_size=self.patch_size,
-                    random_size=False,
-                ),
             ]
         )
         return inference_transforms
@@ -921,10 +905,6 @@ class RestorationCampaignTransforms(CampaignTransforms):
                 ),
                 MinMaxNormalize(
                     min_intensity=self.min_intensity, max_intensity=self.max_intensity
-                ),
-                RandSpatialCrop(
-                    roi_size=self.patch_size,
-                    random_size=False,
                 ),
             ]
         )
@@ -1064,10 +1044,6 @@ class SelfSupervisedRestorationCampaignTransforms(CampaignTransforms):
                     prob=1.0,
                     mean=0.0,
                     std=0.5,
-                ),
-                RandSpatialCrop(
-                    roi_size=self.patch_size,
-                    random_size=False,
                 ),
             ]
         )
