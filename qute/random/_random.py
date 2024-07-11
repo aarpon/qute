@@ -17,11 +17,14 @@ import torch
 from monai.utils import set_determinism
 
 
-def set_global_rng_seed(seed: Union[int, None]):
+def set_global_rng_seed(seed: Union[int, None], workers: bool = False):
     """Set a global random number generator seed for NumPy, PyTorch, PyTorch Lightning and MONAI.
 
     seed: int|None
         Seed for random number generators. Set to None to disable determinism.
+
+    workers: bool
+        Whether to set the seed also for the worker processes (of PyTorch Lightning).
     """
 
     # Set the global random number generator seed for reproducibility
@@ -35,4 +38,4 @@ def set_global_rng_seed(seed: Union[int, None]):
     torch.cuda.manual_seed_all(seed)
 
     # Explicitly set the seed for PyTorch Lightning
-    pl.seed_everything(seed)
+    pl.seed_everything(seed, workers=workers)
