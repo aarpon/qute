@@ -8,6 +8,7 @@
 #  Contributors:
 #    Aaron Ponti - initial API and implementation
 #  ******************************************************************************
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Union
@@ -101,6 +102,14 @@ class Project:
     def results_dir(self, results_dir: Union[Path, str]):
         raise RuntimeError("Cannot override results_dir!")
 
+    @property
+    def run_dir(self) -> Path:
+        return self._run_dir
+
+    @run_dir.setter
+    def run_dir(self, run_dir: Union[Path, str]):
+        raise RuntimeError("Cannot override run_dir!")
+
     def new_run(self):
         """Create a new run with model and results subfolders."""
         name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -151,7 +160,7 @@ class Project:
         return True
 
     def clean(self):
-        """Clean incomplete runs and predictions. For now, it renames them by prepending __ to their names."""
+        """Clean incomplete runs and predictions."""
 
         # Check runs
         for run in self._runs_dir.iterdir():
@@ -185,11 +194,9 @@ class Project:
                     to_clean = True
 
             if to_clean:
-                # For now, just rename
+                # Remove folder recursively
                 try:
-                    src = self._runs_dir / run.name
-                    dst = self._runs_dir / f"__{run.name}"
-                    src.rename(dst)
+                    shutil.rmtree(self._runs_dir / run.name)
                 except Exception as e:
                     print(e)
 
@@ -215,10 +222,8 @@ class Project:
                 to_clean = True
 
             if to_clean:
-                # For now, just rename
+                # Remove folder recursively
                 try:
-                    src = root_predictions / pred.name
-                    dst = root_predictions / f"__{pred.name}"
-                    src.rename(dst)
+                    shutil.rmtree(root_predictions / pred.name)
                 except Exception as e:
                     print(e)
