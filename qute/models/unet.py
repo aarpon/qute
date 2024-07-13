@@ -27,7 +27,6 @@ from monai.networks.nets import UNet as MonaiUNet
 from monai.transforms import Transform
 from monai.utils import BlendMode
 from tifffile import TiffWriter
-from torch import nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import PolynomialLR
 
@@ -144,10 +143,6 @@ class UNet(pl.LightningModule):
             dropout=dropout,
         )
 
-        # Additional, optional output layer to use when fine-tuning a self-supervised network
-        # that had a different number of output channels.
-        self.additional_output_layer = None
-
         # Log the hyperparameters
         self.save_hyperparameters(ignore=["criterion", "metrics"])
 
@@ -166,10 +161,7 @@ class UNet(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         """Perform a training step."""
         x, y = batch
-        if self.additional_output_layer is not None:
-            y_hat = self.additional_output_layer(self.net(x))
-        else:
-            y_hat = self.net(x)
+        y_hat = self.net(x)
         loss = self.criterion(y_hat, y)
         self.log("loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         return {"loss": loss}
@@ -177,10 +169,7 @@ class UNet(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         """Perform a validation step."""
         x, y = batch
-        if self.additional_output_layer is not None:
-            y_hat = self.additional_output_layer(self.net(x))
-        else:
-            y_hat = self.net(x)
+        y_hat = self.net(x)
         val_loss = self.criterion(y_hat, y)
 
         # Log the loss
@@ -232,10 +221,7 @@ class UNet(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         """Perform a test step."""
         x, y = batch
-        if self.additional_output_layer is not None:
-            y_hat = self.additional_output_layer(self.net(x))
-        else:
-            y_hat = self.net(x)
+        y_hat = self.net(x)
         test_loss = self.criterion(y_hat, y)
         self.log("test_loss", test_loss)
         if self.metrics is not None:
@@ -275,10 +261,7 @@ class UNet(pl.LightningModule):
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """The predict step creates a label image from the output one-hot tensor."""
         x, _ = batch
-        if self.additional_output_layer is not None:
-            y_hat = self.additional_output_layer(self.net(x))
-        else:
-            y_hat = self.net(x)
+        y_hat = self.net(x)
         if self.campaign_transforms.get_post_inference_transforms() is not None:
             label = self.campaign_transforms.get_post_inference_transforms()(y_hat)
         else:
@@ -671,51 +654,3 @@ class UNet(pl.LightningModule):
 
         # Return success
         return True
-
-    @classmethod
-    def load_from_checkpoint_add_new_output_layer(
-        cls,
-        checkpoint_path: Union[Path, str],
-        out_channels: int,
-        class_names: Optional[Tuple[str]] = None,
-    ):
-        """Initialize model from checkpoint while changing number of output channels and re-initializing output layers.
-
-        Parameters
-        ----------
-
-        checkpoint_path: Union[Path, str]
-            Full path to the checkpoint to load.
-
-        out_channels: int
-            New number of output channels.
-
-        class_names: Optional[Tuple[str]]
-            Override class names.
-
-        Returns
-        -------
-
-        model: UNet
-            Loaded UNet model with reinitialized output channels.
-        """
-
-        # Load the model from checkpoint
-        model = UNet.load_from_checkpoint(checkpoint_path, map_location=None)
-
-        # Add the additional layer
-        model.additional_output_layer = nn.Conv2d(
-            1, out_channels, kernel_size=3, padding=1
-        )
-
-        # Initialize the additional layer
-        nn.init.kaiming_normal_(model.additional_output_layer.weight)
-        if model.additional_output_layer.bias is not None:
-            nn.init.constant_(model.additional_output_layer.bias, 0)
-
-        # If class names are passed, override them
-        if class_names is not None:
-            model.class_names = class_names
-
-        # Return the loaded, modified model
-        return model
