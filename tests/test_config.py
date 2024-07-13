@@ -30,6 +30,9 @@ def test_reading_classification_conf():
     assert config.out_channels == 2, "Wrong number of outout channels."
     assert config.source_for_prediction is None, "Wrong source for prediction."
     assert config.target_for_prediction is None, "Wrong source for prediction."
+    assert (
+        not config.fine_tune_from_self_supervised
+    ), "Wrong value for fine_tune_from_self_supervised."
     assert config.source_model_path is None, "Wrong source for prediction."
     assert config.source_images_sub_folder == "images", "Wrong source images subfolder."
     assert config.target_images_sub_folder == "labels", "Wrong target images subfolder."
