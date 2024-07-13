@@ -14,14 +14,14 @@ Framework to support deep-learning based computer-vision research in microscopy 
 * Install CUDA:
   * Linux: https://developer.nvidia.com/cuda-downloads?target_os=Linux&target_arch=x86_64
   * Windows: https://developer.nvidia.com/cuda-downloads?target_os=Windows&target_arch=x86_64
-  * macOS does not support CUDA; qute will use `mps` on M1 processors.
+  * macOS does not support CUDA; PyTorch will use `mps` on M1 processors.
 
 ### Install qute
 
 ```bash
 $ git clone https://github.com/aarpon/qute
 $ cd qute
-$ conda create -n qute-env python
+$ conda create -n qute-env python  # Minimum support version is 3.11
 $ conda activate qute-env
 $ pip install -e .
 ```

@@ -1,29 +1,80 @@
 # This is a configuration template for a REGRESSION (restoration) study.
 [settings]
+
+# Trainer mode: one of `train`, `resume`, `predict`
+trainer_mode = train
+
+# Root project directory
 project_dir = /path/to/project
+
+# Root of data directory: either absolute path, or relative to `project_dir`
 data_dir = ground_truth
+
+# Subfolder for the source images for training/validation/testing
 source_images_sub_folder = images
+
+# Subfolder for the target images for training/validation/testing
 target_images_sub_folder = targets
+
+# Label for the source images for training/validation/testing
 source_images_label = image
+
+# Label for the target images for training/validation/testing
 target_images_label = target
+
+# Number of input channels (e.g., 1 for a gray-scale image)
 in_channels = 1
+
+# Number of output channels (e.g., 1 for a gray-scale image)
 out_channels = 1
+
+# Fraction of source images to be used for training (0.0 - 1.0): omit for default
 train_fraction =
+
+# Fraction of source images to be used for validation (0.0 - 1.0): omit for default
 val_fraction =
+
+# Fraction of source images to be used for testing (0.0 - 1.0): omit for default
 test_fraction =
+
+# Full path to the images to be used for prediction: must be specified if trainer_mode is `predict`
 source_for_prediction =
+
+# Full path to the folder where the predicted images will be stored: omit for default target
 target_for_prediction =
+
+# Full path to an existing model for `resume` or `predict`: ignored if trainer_mode is `train`
 source_model_path =
-min_intensity = 0
-max_intensity = 65535
+
+# Seed for random number generation initialization
 seed = 2022
+
+# Batch size for training
 batch_size = 8
+
+# Batch size for interference
 inference_batch_size = 8
+
+# Number of patches per image: total batch size will be `batch_size` * `num_patches`
 num_patches = 4
+
+# Number of residual units for the U-Net
 num_res_units = 4
+
+# Number of layers and corresponding filters in the U-Net encoder (contracting path)
 channels = 16, 32, 64
+
+# Kernel strides: must be one entry shorter than `channels` (omit to use defaults)
 strides = 2, 2
+
+# Size of one patch
 patch_size = 1024, 1024
+
+# Initial learning rate
 learning_rate = 0.001
+
+# Maximum number of training epochs
 max_epochs = 2000
+
+# Precision used by PyTorch for calculations
 precision = 16-mixed

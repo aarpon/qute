@@ -9,4 +9,4 @@
 #    Aaron Ponti - initial API and implementation
 #  ******************************************************************************
 
-from ._random import set_global_rng_seed
+from ._seed import set_global_rng_seed

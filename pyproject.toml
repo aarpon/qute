@@ -44,7 +44,7 @@ combine_as_imports = true
 known_third_party = ["imio", "monai", "natsort", "nd2reader", "numpy", "pytest", "pytorch_lightning", "ray", "requests", "scipy", "skimage", "sklearn", "tifffile", "torch", "torchmetrics", "tqdm", "typing_extensions", "userpaths"]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<=3.12"
+python = ">=3.11,<=3.12"
 numpy = "^1.26.0"
 tifffile = "^2024.7.2"
 natsort = "^8.4.0"

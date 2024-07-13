@@ -12,6 +12,8 @@ import configparser
 import re
 from pathlib import Path
 
+from qute.mode import TrainerMode
+
 
 class Config:
     def __init__(self, config_file):
@@ -32,6 +34,10 @@ class Config:
         except:
             return False
         return True
+
+    @property
+    def trainer_mode(self):
+        return TrainerMode(self._config["settings"]["trainer_mode"])
 
     @property
     def project_dir(self):
@@ -56,14 +62,6 @@ class Config:
     @property
     def out_channels(self):
         return int(self._config["settings"]["out_channels"])
-
-    @property
-    def min_intensity(self):
-        return int(self._config["settings"]["min_intensity"])
-
-    @property
-    def max_intensity(self):
-        return int(self._config["settings"]["max_intensity"])
 
     @property
     def source_for_prediction(self):
@@ -136,10 +134,6 @@ class Config:
         return int(self._config["settings"]["inference_batch_size"])
 
     @property
-    def num_classes(self):
-        return int(self._config["settings"]["num_classes"])
-
-    @property
     def num_patches(self):
         return int(self._config["settings"]["num_patches"])
 
@@ -187,7 +181,7 @@ class Config:
         if "class_names" in self._config["settings"]:
             class_names = self._config["settings"]["class_names"]
             class_names = re.sub(r"\s+", "", class_names).split(",")
-            return list(class_names)
+            return tuple(class_names)
         else:
             return []
 

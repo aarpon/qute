@@ -9,10 +9,10 @@
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
 
-from enum import Enum
+from enum import StrEnum
 
 
-class TrainerMode(Enum):
-    TRAIN = 1
-    RETRAIN = 2
-    PREDICT = 3
+class TrainerMode(StrEnum):
+    TRAIN = "train"
+    RESUME = "resume"
+    PREDICT = "predict"
