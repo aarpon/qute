@@ -27,6 +27,7 @@ from monai.networks.nets import UNet as MonaiUNet
 from monai.transforms import Transform
 from monai.utils import BlendMode
 from tifffile import TiffWriter
+from torch import nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import PolynomialLR
 
@@ -654,3 +655,115 @@ class UNet(pl.LightningModule):
 
         # Return success
         return True
+
+    @staticmethod
+    def load_from_checkpoint_and_swap_output_layer(
+        checkpoint_path: Union[Path, str],
+        new_out_channels: int,
+        previous_out_channels: int = 1,
+        strict: bool = True,
+        verbose: bool = False,
+        map_location: Optional[torch.device] = None,
+    ):
+        """Load a model from a checkpoint and modify it by replacing the last Conv2d layer
+        with a new Conv2d layer that has a specified number of output channels.
+
+        Parameters
+        ----------
+
+        checkpoint_path: Union[Path, str]
+            Full path to the checkpoint file to load the model from.
+
+        new_out_channels: int
+            The number of output channels for the new Conv2d layer.
+
+        previous_out_channels: int = 1
+            Number of output channels in the last convolutional layer of the loaded model.
+            Since this method expects a regression model, previous_out_channels defaults to 1,
+            but it should work also for a different number of output channels.
+
+        strict: bool: True
+            Set to True for strict loading of the model (all modules and parameters must match).
+
+        verbose: bool = False
+            Set to True for verbose info when scanning the model. Use this if something goes wrong and
+            you want to report an issue.
+
+        map_location: Optional[torch.device]
+            The device to map the model's weights to when loading the checkpoint. Default is None, which
+            means the model is loaded to the current device.
+
+        Returns
+        -------
+
+        model: The model with the last Conv2d layer replaced by a new Conv2d layer with the specified number of output channels.
+        """
+
+        # Load the model from checkpoint
+        model = UNet.load_from_checkpoint(
+            checkpoint_path, map_location=map_location, strict=strict
+        )
+
+        # List to store all matching Conv2d layers
+        matching_layers = []
+
+        # Helper function to collect all matching Conv2d layers
+        def collect_matching_conv2d_layers(
+            module: nn.Module, previous_out_channels: int, depth: int = 0
+        ):
+            # If requested, print verbose information
+            if verbose:
+                indent = "  " * depth
+            for name, child in module.named_children():
+                if isinstance(child, nn.Conv2d):
+                    if verbose:
+                        print(
+                            f"{indent}Found Conv2d layer ('{name}') with {child.out_channels} output channel(s)"
+                        )
+                    if child.out_channels == previous_out_channels:
+                        matching_layers.append((module, name, child))
+                else:
+                    if verbose:
+                        print(f"{indent}Entering module: {name}")
+                    collect_matching_conv2d_layers(
+                        child, previous_out_channels, depth + 1
+                    )
+
+        # Collect all matching Conv2d layers
+        collect_matching_conv2d_layers(model.net, previous_out_channels)
+
+        # Ensure we found at least one matching layer
+        if not matching_layers:
+            raise ValueError(
+                f"No Conv2d layer with {previous_out_channels} channel(s) found."
+            )
+
+        # Get the last matching layer
+        parent_module, name, last_conv_layer = matching_layers[-1]
+        in_channels = last_conv_layer.in_channels
+        out_channels = last_conv_layer.out_channels
+
+        # Print the identified last Conv2d layer if needed
+        if verbose:
+            print(
+                f"Found {len(matching_layers)} module(s) with {in_channels} output channel(s)."
+            )
+            print(
+                f"Replacing last Conv2d layer ('{name}') with {in_channels} input channel(s) and {out_channels} channel(s)."
+            )
+
+        # Assert that the last Conv2d's output channels match the expected previous_out_channels
+        assert (
+            out_channels == previous_out_channels
+        ), f"Expected last Conv2d output channels to be {previous_out_channels}, but got {out_channels}"
+
+        # Create the new Conv2d layer and initialize its weights
+        new_conv = nn.Conv2d(in_channels, new_out_channels, kernel_size=3, padding=1)
+        nn.init.kaiming_normal_(new_conv.weight)
+        if new_conv.bias is not None:
+            nn.init.constant_(new_conv.bias, 0)
+
+        # Replace the last Conv2d layer
+        setattr(parent_module, name, new_conv)
+
+        return model
