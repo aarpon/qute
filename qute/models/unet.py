@@ -660,6 +660,7 @@ class UNet(pl.LightningModule):
     def load_from_checkpoint_and_swap_output_layer(
         checkpoint_path: Union[Path, str],
         new_out_channels: int,
+        class_names: tuple[str, ...],
         previous_out_channels: int = 1,
         strict: bool = True,
         verbose: bool = False,
@@ -676,6 +677,9 @@ class UNet(pl.LightningModule):
 
         new_out_channels: int
             The number of output channels for the new Conv2d layer.
+
+        class_names: tuple[str, ...]
+            Class names for the new outputs.
 
         previous_out_channels: int = 1
             Number of output channels in the last convolutional layer of the loaded model.
@@ -698,6 +702,12 @@ class UNet(pl.LightningModule):
 
         model: The model with the last Conv2d layer replaced by a new Conv2d layer with the specified number of output channels.
         """
+
+        # Check inputs
+        if new_out_channels != len(class_names):
+            raise ValueError(
+                f"Please provide a valid number of class names ({new_out_channels})."
+            )
 
         # Load the model from checkpoint
         model = UNet.load_from_checkpoint(
@@ -766,4 +776,8 @@ class UNet(pl.LightningModule):
         # Replace the last Conv2d layer
         setattr(parent_module, name, new_conv)
 
+        # Set the new class names
+        model.class_names = class_names
+
+        # Return the loaded and modified model
         return model
