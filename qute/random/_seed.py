@@ -35,7 +35,8 @@ def set_global_rng_seed(seed: Union[int, None], workers: bool = False):
 
     # Explicitly set the seed for PyTorch (though it's already handled by monai.utils.set_determinism)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
     # Explicitly set the seed for PyTorch Lightning
     pl.seed_everything(seed, workers=workers)
