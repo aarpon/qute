@@ -172,7 +172,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             print("No images in the training, validation and test sets.")
             return
 
-        print(f"Training set ({len(self._train_indices)} images):")
+        print(f"Training set ({len(self._train_indices)} image pairs):")
         for i in range(len(self._train_indices)):
             print(
                 f"{i:5}: "
@@ -180,7 +180,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                 f"{self.target_images_label}: {self._all_labels[self._train_indices[i]].name})"
             )
 
-        print(f"\nValidation set ({len(self._val_indices)} images):")
+        print(f"\nValidation set ({len(self._val_indices)} image pairs):")
         for i in range(len(self._val_indices)):
             print(
                 f"{i:5}: "
@@ -188,7 +188,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                 f"{self.target_images_label}: {self._all_labels[self._val_indices[i]].name})"
             )
 
-        print(f"\nTest set ({len(self._test_indices)} images):")
+        print(f"\nTest set ({len(self._test_indices)} image pairs):")
         for i in range(len(self._test_indices)):
             print(
                 f"{i:5}: "
