@@ -165,6 +165,37 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         self.val_dataset = None
         self.test_dataset = None
 
+    def print_sets(self):
+        """Print the list of images/labels in the training, validation and test sets."""
+
+        if len(self._train_indices) == 0:
+            print("No images in the training, validation and test sets.")
+            return
+
+        print(f"Training set ({len(self._train_indices)} images):")
+        for i in range(len(self._train_indices)):
+            print(
+                f"{i:5}: "
+                f"({self.source_images_label}: {self._all_images[self._train_indices[i]].name}, "
+                f"{self.target_images_label}: {self._all_labels[self._train_indices[i]].name})"
+            )
+
+        print(f"\nValidation set ({len(self._val_indices)} images):")
+        for i in range(len(self._val_indices)):
+            print(
+                f"{i:5}: "
+                f"({self.source_images_label}: {self._all_images[self._val_indices[i]].name}, "
+                f"{self.target_images_label}: {self._all_labels[self._val_indices[i]].name})"
+            )
+
+        print(f"\nTest set ({len(self._test_indices)} images):")
+        for i in range(len(self._test_indices)):
+            print(
+                f"{i:5}: "
+                f"({self.source_images_label}: {self._all_images[self._test_indices[i]].name}, "
+                f"{self.target_images_label}: {self._all_labels[self._test_indices[i]].name})"
+            )
+
     def setup(self, stage):
         """Prepare the data once."""
 

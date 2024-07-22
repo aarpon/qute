@@ -118,6 +118,8 @@ class Project:
         self._models_dir.mkdir(parents=True)
         self._results_dir = self._run_dir / "results"
         self._results_dir.mkdir(parents=True)
+        logs_dir = self._results_dir / "lightning_logs"
+        logs_dir.mkdir(parents=True)
         if self._target_for_prediction_path is None:
             self._target_for_prediction_path = self._project_dir / "predictions" / name
             self._target_for_prediction_path.mkdir(exist_ok=True, parents=True)
