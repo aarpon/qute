@@ -8,7 +8,14 @@
 #  Contributors:
 #    Aaron Ponti - initial API and implementation
 #  ******************************************************************************
+import os
+import platform
+import random
+import string
+from contextlib import contextmanager
 from pathlib import Path
+
+import pytest
 
 from qute.config import Config
 from qute.mode import TrainerMode
@@ -93,3 +100,82 @@ def test_reading_regression_conf():
     assert config.learning_rate == 0.001, "Wrong learning rate."
     assert config.max_epochs == 2000, "Wrong maximum number of eposchs."
     assert config.precision == "16-mixed", "Wrong precision."
+
+
+def test_process_path():
+    @contextmanager
+    def set_temp_env_var(key, value):
+        # Save the original value of the environment variable, if it exists
+        original_value = os.environ.get(key)
+
+        # Set the new value for the environment variable
+        os.environ[key] = value
+        try:
+            # Yield control back to the caller
+            yield
+        finally:
+            # Restore the original value of the environment variable, if it existed
+            if original_value is None:
+                del os.environ[key]
+            else:
+                os.environ[key] = original_value
+
+    path = "C:\\Users\\Username\\Documents\\"
+    assert Config.process_path(path) == Path(
+        "C:/Users/Username/Documents/"
+    ), "Failed processing path."
+
+    path = r"C:\Users\Username\Documents"
+    assert Config.process_path(path) == Path(
+        "C:/Users/Username/Documents/"
+    ), "Failed processing path."
+
+    path = "/home/Users/Username/Documents/"
+    assert Config.process_path(path) == Path(
+        "/home/Users/Username/Documents/"
+    ), "Failed processing path."
+
+    with set_temp_env_var("TEST_ENV", "test_subdir"):
+        # Perform operations that require the temporary environment variable
+
+        os_name = platform.system()
+        if os_name == "Windows":
+
+            path = r"${HOME}\Documents\${TEST_ENV}"
+            username = os.getenv("USERNAME")
+            assert Config.process_path(path) == Path(
+                f"C:/Users/{username}/Documents/test_subdir"
+            ), "Failed processing path."
+
+        elif os_name == "Linux":
+
+            path = "${HOME}/Documents/${TEST_ENV}"
+            username = os.getenv("USER")
+            assert Config.process_path(path) == Path(
+                f"/home/{username}/Documents/test_subdir"
+            ), "Failed processing path."
+
+        elif os_name == "Darwin":
+
+            path = "${HOME}/Documents/${TEST_ENV}"
+            username = os.getenv("USER")
+            assert Config.process_path(path) == Path(
+                f"/Users/{username}/Documents/test_subdir"
+            ), "Failed processing path."
+
+        else:
+            pass
+
+    def generate_random_alphanumeric_string(length=24):
+        # Define the characters to choose from (alphanumeric)
+        characters = string.ascii_letters + string.digits
+
+        # Generate a random string of the specified length
+        random_string = "".join(random.choices(characters, k=length))
+
+        return random_string
+
+    # Check that a random 24-character string does not exist as environment variable
+    with pytest.raises(ValueError):
+        path = "${HOME}/Documents/${" + generate_random_alphanumeric_string() + "}"
+        _ = Config.process_path(path)

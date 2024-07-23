@@ -9,8 +9,12 @@
 #    Aaron Ponti - initial API and implementation
 #  ******************************************************************************
 import configparser
+import os
 import re
 from pathlib import Path
+from typing import Union
+
+import userpaths
 
 from qute.mode import TrainerMode
 
@@ -41,7 +45,7 @@ class Config:
 
     @property
     def project_dir(self):
-        return Path(self._config["settings"]["project_dir"])
+        return Config.process_path(Path(self._config["settings"]["project_dir"]))
 
     @property
     def project_name(self):
@@ -51,9 +55,10 @@ class Config:
     def data_dir(self):
         data_dir = self._config["settings"]["data_dir"]
         if Path(data_dir).is_absolute():
-            return Path(data_dir)
+            data_dir = Path(data_dir)
         else:
-            return self.project_dir / data_dir
+            data_dir = self.project_dir / data_dir
+        return Config.process_path(data_dir)
 
     @property
     def in_channels(self):
@@ -68,14 +73,14 @@ class Config:
         source_for_prediction = self._config["settings"]["source_for_prediction"]
         if source_for_prediction == "":
             return None
-        return Path(source_for_prediction)
+        return Config.process_path(Path(source_for_prediction))
 
     @property
     def target_for_prediction(self):
         target_for_prediction = self._config["settings"]["target_for_prediction"]
         if target_for_prediction == "":
             return None
-        return Path(target_for_prediction)
+        return Config.process_path(Path(target_for_prediction))
 
     @property
     def fine_tune_from_self_supervised(self):
@@ -89,7 +94,7 @@ class Config:
         source_model_path = self._config["settings"]["source_model_path"]
         if source_model_path == "":
             return None
-        return Path(source_model_path)
+        return Config.process_path(Path(source_model_path))
 
     @property
     def source_images_sub_folder(self):
@@ -199,3 +204,60 @@ class Config:
     @property
     def precision(self):
         return self._config["settings"]["precision"]
+
+    @staticmethod
+    def process_path(path: Union[Path, str, None]) -> Union[Path, None]:
+        """Process a path string with optional environmental variables.
+
+        Parameters
+        ----------
+
+        path: Union[Path, str, None]
+            Full path that can optionally contain environment variables in the
+            for ${ENV_VAR}. For instance:
+                ${HOME}/Documents/qute
+            If path is None, None is returned.
+
+        Please notice that ${HOME} will be considered to point to the user path
+        also in Windows, where it is not defined as an environment variable. All
+        other variables, must be defined in os.environ.
+
+        Returns
+        -------
+
+        path: Union[Path, None]
+            Path with expanded environment variables (if present), or None.
+        """
+
+        # Find environment variables of the form ${ENV_VAR} in the string
+        pattern = r"\$\{.+?\}"
+
+        # Make sure to work with a string version of the absolute path
+        # with forward slashes only
+        path_str = str(Path(path))
+        path_str = path_str.replace("\\", "/")
+
+        # Find all substrings
+        matches = re.findall(pattern, path_str)
+
+        # Process matches
+        for match in matches:
+
+            # We treat $HOME specially
+            if match == "${HOME}":
+                match_rep = userpaths.get_profile()
+            else:
+                match_rep = os.getenv(match[2:-1], None)
+                if match_rep is None:
+                    raise ValueError(f"Undefined environment variable {match}.")
+            index = path_str.find(match)
+            if index == -1:
+                raise ValueError(f"Could not find {match} in {path_str}.")
+            path_str = f"{path_str[:index]}{match_rep}{path_str[index + len(match):]}"
+
+        # Make sure to remove double forward slashes potentially introduced
+        # by the substitution
+        path_str = re.sub(r"/+", "/", path_str)
+
+        # Now cast to a pathlib.Path() and return
+        return Path(path_str)

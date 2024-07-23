@@ -176,7 +176,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         for i in range(len(self._train_indices)):
             print(
                 f"{i:5}: "
-                f"({self.source_images_label}: {self._all_images[self._train_indices[i]].name}, "
+                f"({self.source_images_label}: {self._all_images[self._train_indices[i]].name}, \t"
                 f"{self.target_images_label}: {self._all_labels[self._train_indices[i]].name})"
             )
 
@@ -184,7 +184,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         for i in range(len(self._val_indices)):
             print(
                 f"{i:5}: "
-                f"({self.source_images_label}: {self._all_images[self._val_indices[i]].name}, "
+                f"({self.source_images_label}: {self._all_images[self._val_indices[i]].name}, \t"
                 f"{self.target_images_label}: {self._all_labels[self._val_indices[i]].name})"
             )
 
@@ -192,7 +192,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         for i in range(len(self._test_indices)):
             print(
                 f"{i:5}: "
-                f"({self.source_images_label}: {self._all_images[self._test_indices[i]].name}, "
+                f"({self.source_images_label}: {self._all_images[self._test_indices[i]].name}, \t"
                 f"{self.target_images_label}: {self._all_labels[self._test_indices[i]].name})"
             )
 

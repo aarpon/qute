@@ -11,7 +11,7 @@
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Union
 
 from qute.config import Config
 
