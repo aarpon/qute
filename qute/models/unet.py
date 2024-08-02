@@ -660,6 +660,9 @@ class UNet(pl.LightningModule):
     def load_from_checkpoint_and_swap_output_layer(
         checkpoint_path: Union[Path, str],
         new_out_channels: int,
+        new_campaign_transforms: CampaignTransforms,
+        new_criterion,
+        new_metrics,
         class_names: tuple[str, ...],
         previous_out_channels: int = 1,
         strict: bool = True,
@@ -671,12 +674,20 @@ class UNet(pl.LightningModule):
 
         Parameters
         ----------
-
         checkpoint_path: Union[Path, str]
             Full path to the checkpoint file to load the model from.
 
         new_out_channels: int
             The number of output channels for the new Conv2d layer.
+
+        new_campaign_transforms: CampaignTransforms,
+            New CampaignTransform for the loaded model.
+
+        new_criterion: loss function
+            New criterion for the loaded model.
+
+        new_metrics: metrics
+            New metrics for the loaded model.
 
         class_names: tuple[str, ...]
             Class names for the new outputs.
@@ -699,10 +710,8 @@ class UNet(pl.LightningModule):
 
         Returns
         -------
-
         model: The model with the last Conv2d layer replaced by a new Conv2d layer with the specified number of output channels.
         """
-
         # Check inputs
         if new_out_channels != len(class_names):
             raise ValueError(
@@ -711,36 +720,49 @@ class UNet(pl.LightningModule):
 
         # Load the model from checkpoint
         model = UNet.load_from_checkpoint(
-            checkpoint_path, map_location=map_location, strict=strict
+            checkpoint_path=checkpoint_path,
+            map_location=map_location,
+            strict=strict,
+            campaign_transforms=new_campaign_transforms,
+            criterion=new_criterion,
+            metrics=new_metrics,
         )
+
+        # Debug: assert that the campaign was replaced
+        assert model.campaign_transforms == new_campaign_transforms
+
+        # Debug: assert that the criterion was replaced
+        assert model.criterion == new_criterion
+
+        # Debug: assert that the metrics was replaced
+        assert model.metrics == new_metrics
 
         # List to store all matching Conv2d layers
         matching_layers = []
 
         # Helper function to collect all matching Conv2d layers
         def collect_matching_conv2d_layers(
-            module: nn.Module, previous_out_channels: int, depth: int = 0
+            module: nn.Module,
+            previous_out_channels: int,
+            depth: int = 0,
+            parent_name="",
         ):
-            # If requested, print verbose information
-            if verbose:
-                indent = "  " * depth
             for name, child in module.named_children():
+                full_name = f"{parent_name}.{name}" if parent_name else name
                 if isinstance(child, nn.Conv2d):
                     if verbose:
                         print(
-                            f"{indent}Found Conv2d layer ('{name}') with {child.out_channels} output channel(s)"
+                            f"Found Conv2d layer ('{full_name}') with {child.out_channels} output channel(s)"
                         )
                     if child.out_channels == previous_out_channels:
-                        matching_layers.append((module, name, child))
+                        matching_layers.append((module, name, full_name, child))
                 else:
-                    if verbose:
-                        print(f"{indent}Entering module: {name}")
                     collect_matching_conv2d_layers(
-                        child, previous_out_channels, depth + 1
+                        child, previous_out_channels, depth + 1, full_name
                     )
 
         # Collect all matching Conv2d layers
-        collect_matching_conv2d_layers(model.net, previous_out_channels)
+        collect_matching_conv2d_layers(model, previous_out_channels)
 
         # Ensure we found at least one matching layer
         if not matching_layers:
@@ -749,17 +771,17 @@ class UNet(pl.LightningModule):
             )
 
         # Get the last matching layer
-        parent_module, name, last_conv_layer = matching_layers[-1]
+        parent_module, name, full_name, last_conv_layer = matching_layers[-1]
         in_channels = last_conv_layer.in_channels
         out_channels = last_conv_layer.out_channels
 
         # Print the identified last Conv2d layer if needed
         if verbose:
             print(
-                f"Found {len(matching_layers)} module(s) with {in_channels} output channel(s)."
+                f"Found {len(matching_layers)} module(s) with {in_channels} input channel(s) and {out_channels} output channel(s)."
             )
             print(
-                f"Replacing last Conv2d layer ('{name}') with {in_channels} input channel(s) and {out_channels} channel(s)."
+                f"Replacing last Conv2d layer ('{full_name}') with {in_channels} input channel(s) and {new_out_channels} output channel(s)."
             )
 
         # Assert that the last Conv2d's output channels match the expected previous_out_channels
@@ -778,6 +800,13 @@ class UNet(pl.LightningModule):
 
         # Set the new class names
         model.class_names = class_names
+
+        # Update hyperparameters to reflect new output channels and class names
+        model.hparams.out_channels = new_out_channels
+        model.hparams.class_names = class_names
+
+        # Log the updated hyperparameters (including criterion and metrics)
+        model.save_hyperparameters()
 
         # Return the loaded and modified model
         return model
