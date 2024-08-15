@@ -10,7 +10,9 @@
 # ******************************************************************************
 
 import os
+import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional, Union
 
@@ -22,6 +24,19 @@ from numpy.random import default_rng
 from sklearn.model_selection import KFold
 
 from qute.campaigns import CampaignTransforms
+
+
+@contextmanager
+def open_with_fallback(filename=None):
+    if filename:
+        file = open(filename, "w")
+    else:
+        file = sys.stdout
+    try:
+        yield file
+    finally:
+        if file is not sys.stdout:
+            file.close()
 
 
 class DataModuleLocalFolder(pl.LightningDataModule):
@@ -165,36 +180,43 @@ class DataModuleLocalFolder(pl.LightningDataModule):
         self.val_dataset = None
         self.test_dataset = None
 
-    def print_sets(self):
-        """Print the list of images/labels in the training, validation and test sets."""
+    def print_sets(self, filename: Union[None, Path, str] = None):
+        """Print the list of images/labels in the training, validation and test sets
+        either to file or to standard output."""
 
         if len(self._train_indices) == 0:
             print("No images in the training, validation and test sets.")
             return
 
-        print(f"Training set ({len(self._train_indices)} image pairs):")
-        for i in range(len(self._train_indices)):
-            print(
-                f"{i:5}: "
-                f"({self.source_images_label}: {self._all_images[self._train_indices[i]].name}, \t"
-                f"{self.target_images_label}: {self._all_labels[self._train_indices[i]].name})"
-            )
+        # Write either to file or standard output
+        with open_with_fallback(filename) as f:
 
-        print(f"\nValidation set ({len(self._val_indices)} image pairs):")
-        for i in range(len(self._val_indices)):
-            print(
-                f"{i:5}: "
-                f"({self.source_images_label}: {self._all_images[self._val_indices[i]].name}, \t"
-                f"{self.target_images_label}: {self._all_labels[self._val_indices[i]].name})"
-            )
+            end = "\n"
 
-        print(f"\nTest set ({len(self._test_indices)} image pairs):")
-        for i in range(len(self._test_indices)):
-            print(
-                f"{i:5}: "
-                f"({self.source_images_label}: {self._all_images[self._test_indices[i]].name}, \t"
-                f"{self.target_images_label}: {self._all_labels[self._test_indices[i]].name})"
-            )
+            f.write(f"Training set ({len(self._train_indices)} image pairs):{end}")
+
+            for i in range(len(self._train_indices)):
+                f.write(
+                    f"{i:5}: "
+                    f"({self.source_images_label}: {self._all_images[self._train_indices[i]].name}, \t"
+                    f"{self.target_images_label}: {self._all_labels[self._train_indices[i]].name}){end}"
+                )
+
+            f.write(f"\nValidation set ({len(self._val_indices)} image pairs):\n")
+            for i in range(len(self._val_indices)):
+                f.write(
+                    f"{i:5}: "
+                    f"({self.source_images_label}: {self._all_images[self._val_indices[i]].name}, \t"
+                    f"{self.target_images_label}: {self._all_labels[self._val_indices[i]].name}){end}"
+                )
+
+            f.write(f"\nTest set ({len(self._test_indices)} image pairs):{end}")
+            for i in range(len(self._test_indices)):
+                f.write(
+                    f"{i:5}: "
+                    f"({self.source_images_label}: {self._all_images[self._test_indices[i]].name}, \t"
+                    f"{self.target_images_label}: {self._all_labels[self._test_indices[i]].name}){end}"
+                )
 
     def setup(self, stage):
         """Prepare the data once."""
