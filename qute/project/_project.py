@@ -121,7 +121,11 @@ class Project:
         logs_dir = self._results_dir / "lightning_logs"
         logs_dir.mkdir(parents=True)
         if self._target_for_prediction_path is None:
+            # Create standard predictions location
             self._target_for_prediction_path = self._project_dir / "predictions" / name
+            self._target_for_prediction_path.mkdir(exist_ok=True, parents=True)
+        else:
+            # Make sure the passed one exists (create if necessary)
             self._target_for_prediction_path.mkdir(exist_ok=True, parents=True)
 
     def _set_selected_model(self, model_path: Union[None, Path, str] = None):
@@ -203,8 +207,7 @@ class Project:
                     print(e)
 
         # Check predictions
-        root_predictions = self._project_dir / "predictions"
-        for pred in root_predictions.iterdir():
+        for pred in self._target_for_prediction_path.iterdir():
             to_clean = False
             if not pred.is_dir():
                 continue
