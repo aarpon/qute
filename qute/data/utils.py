@@ -100,7 +100,7 @@ def qute_to_msd_format(
 ) -> tuple[bool, str]:
     """Convert a qute dataset (with sub-folders "images" and "labels") to an MSD dataset.
 
-
+    Make sure the images and labels have ONE numerical index only and that each is unique.
 
     Parameters
     ----------
@@ -358,7 +358,10 @@ def qute_to_msd_format(
         f"pointed at by the environment variable `nnUNet_raw`. Then, assuming the dataset id is `1`\n"
         f"and the dataset is 2D, run the following (adapt accordingly): "
     )
-    print(f"\n$ nnUNetv2_plan_and_preprocess -d 1 --verify_dataset_integrity")
+    print(f"\n```sh")
+    print(
+        f"$ nnUNetv2_plan_and_preprocess -d 1 --verify_dataset_integrity -pl nnUNetPlannerResEncM -gpu_memory_target 12 -overwrite_plans_name nnUNetResEncUNetPlans_12G"
+    )
     print(
         "$ for i in {0..4}; do nnUNetv2_train 1 2d $i --npz; done   # Fold 0 through 4, adapt as necessary"
     )
@@ -376,6 +379,7 @@ def qute_to_msd_format(
     print(
         f"     -np 8 -plans_json $nnUNet_results/$Dataset/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/plans.json"
     )
+    print(f"\n```")
     print(f"\nIn the commands above, replace `$Dataset` with the dataset name.")
     print(f"\nPlease see: ")
     print(
@@ -383,6 +387,9 @@ def qute_to_msd_format(
     )
     print(
         f"  * https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/how_to_use_nnunet.md"
+    )
+    print(
+        f"  * https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/resenc_presets.md"
     )
     print(
         f"  * https://transformhealthcare.medium.com/glioblastoma-brain-tumor-segmentation-part-6-neural-network-model-training-5de238e9b195"
@@ -397,13 +404,26 @@ def qute_to_msd_format(
 
 if __name__ == "__main__":
 
-    # Path to qute demo segmentation dataset
-    qute_dataset_folder = (
-        Path(userpaths.get_my_documents())
-        / "qute"
-        / "data"
-        / "demo_segmentation_3_classes/"
-    )
+    if len(sys.argv) == 1:
+
+        # Path to qute demo segmentation dataset
+        qute_dataset_folder = (
+            Path(userpaths.get_my_documents())
+            / "qute"
+            / "data"
+            / "demo_segmentation_3_classes/"
+        )
+
+    elif len(sys.argv) == 2:
+
+        # Check if we have a valid folder as a second argument
+        qute_dataset_folder = Path(sys.argv[1])
+
+    else:
+
+        sys.exit(
+            f"Please use: python {sys.argv[0]} [folder_to_process] (omit to use demo dataset)."
+        )
 
     if "nnUNet_raw" in os.environ:
         nnUnet_raw_folder = Path(os.environ["nnUNet_raw"])
