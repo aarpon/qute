@@ -10,26 +10,15 @@
 # ******************************************************************************
 
 
-from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Optional
 
-import numpy as np
-import pytorch_lightning as pl
-import torch
-from monai.data import DataLoader
-from monai.inferers import SlidingWindowInferer
 from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
 from monai.networks.nets import AttentionUnet as MonaiAttentionUNet
-from monai.transforms import Transform
-from monai.utils import BlendMode
-from tifffile import TiffWriter
-from torch import nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import PolynomialLR
 
 from qute.campaigns import CampaignTransforms
-from qute.device import get_device
 from qute.models.unet import UNet
 
 
