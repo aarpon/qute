@@ -363,13 +363,13 @@ def qute_to_msd_format(
         f"$ nnUNetv2_plan_and_preprocess -d 1 --verify_dataset_integrity -pl nnUNetPlannerResEncM -gpu_memory_target 12 -overwrite_plans_name nnUNetResEncUNetPlans_12G"
     )
     print(
-        "$ for i in {0..4}; do nnUNetv2_train 1 2d $i --npz; done   # Fold 0 through 4, adapt as necessary"
+        "$ for i in {0..4}; do nnUNetv2_train 1 2d $i --npz -p nnUNetResEncUNetPlans_12G; done   # Fold 0 through 4, adapt as necessary"
     )
     print(f"$ nnUNetv2_find_best_configuration -d 1 -f 0 1 2 3 4 -c 2d")
     print(
         f"$ nnUNetv2_predict -d 1 -i $nnUNet_raw/$Dataset/imagesTs -o $nnUNet_results/$Dataset/inference -f 0 1 2 3 4 \\"
     )
-    print(f"       -tr nnUNetTrainer -c 2d -p nnUNetPlans")
+    print(f"       -tr nnUNetTrainer -c 2d -p nnUNetResEncUNetPlans_12G")
     print(
         f"$ nnUNetv2_apply_postprocessing -i $nnUNet_results/$Dataset/inference -o $nnUNet_results/$Dataset/postprocessing \\"
     )
