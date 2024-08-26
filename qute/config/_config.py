@@ -37,7 +37,9 @@ class Config:
             assert self._config["settings"].name == "settings"
         except:
             return False
-        return True
+
+        # Validate the configuration
+        return self._validate()
 
     @property
     def trainer_mode(self):
@@ -261,3 +263,11 @@ class Config:
 
         # Now cast to a pathlib.Path() and return
         return Path(path_str)
+
+    def _validate(self):
+        """Validate configuration."""
+
+        # Check the trainer mode
+        return self.trainer_mode in ["train", "resume", "predict"]
+
+        # @TODO Complete the checks.
