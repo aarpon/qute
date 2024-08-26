@@ -30,7 +30,7 @@ from torch.optim.lr_scheduler import PolynomialLR
 
 from qute.campaigns import CampaignTransforms
 from qute.device import get_device
-from qute.models import UNet
+from qute.models.unet import UNet
 
 
 class AttentionUNet(UNet):
