@@ -42,6 +42,46 @@ class Config:
         return self._validate()
 
     @property
+    def checkpoint_monitor(self):
+        target = self._config["settings"]["checkpoint_monitor"]
+        metrics_class = self._config["settings"]["checkpoint_metrics_class"]
+        if target == "loss":
+            return "val_loss"
+        elif target == "metrics":
+            if metrics_class == "":
+                return "val_metrics"
+            else:
+                return f"val_metrics_{metrics_class}"
+        else:
+            raise ValueError("`checkpoint_monitor` must be one of 'loss' or 'metrics'.")
+
+    @property
+    def checkpoint_mode(self):
+        if self.checkpoint_monitor == "val_loss":
+            return "min"
+        elif "val_metric" in self.checkpoint_monitor:
+            return "max"
+        else:
+            raise ValueError("`checkpoint_monitor` must be one of 'loss' or 'metric'.")
+
+    @property
+    def use_early_stopping(self):
+        use_early_stopping = self._config["settings"]["use_early_stopping"]
+        return use_early_stopping.lower() == "true"
+
+    @property
+    def early_stopping_patience(self):
+        early_stopping_patience = int(
+            self._config["settings"]["early_stopping_patience"]
+        )
+        if self.use_early_stopping:
+            if early_stopping_patience < 1:
+                raise ValueError(
+                    "`early_stopping_patience` must be greater than or equal to 1."
+                )
+        return early_stopping_patience
+
+    @property
     def trainer_mode(self):
         return TrainerMode(self._config["settings"]["trainer_mode"])
 
@@ -268,6 +308,41 @@ class Config:
         """Validate configuration."""
 
         # Check the trainer mode
-        return self.trainer_mode in ["train", "resume", "predict"]
+        if not self.trainer_mode in ["train", "resume", "predict"]:
+            print("`trainer_mode` must be one of 'train', 'resume', or 'predict'.")
+            return False
+
+        # Validate checkpoint_monitor
+        checkpoint_monitor = self._config["settings"]["checkpoint_monitor"]
+        if checkpoint_monitor not in ["loss", "metrics"]:
+            print("`checkpoint_monitor` must be one of 'loss' or 'metrics'.")
+            return False
+
+        # Validate checkpoint_metric_class
+        checkpoint_metrics_class = self._config["settings"]["checkpoint_metrics_class"]
+        if checkpoint_metrics_class != "":
+            if checkpoint_metrics_class not in self.class_names:
+                print("`checkpoint_metrics_class` must be a valid class name.")
+                return False
+
+        # Validate early stopping and patience
+        if self._config["settings"]["use_early_stopping"].lower() not in [
+            "true",
+            "false",
+        ]:
+            print("Bad value for `use_early_stopping`.")
+            return False
+
+        patience = self._config["settings"]["early_stopping_patience"]
+        if patience != "":
+            try:
+                patience = int(patience)
+                assert patience > 0
+            except:
+                print("`early_stopping_patience` must be greater than 0.")
+                return False
 
         # @TODO Complete the checks.
+
+        # Return success
+        return True

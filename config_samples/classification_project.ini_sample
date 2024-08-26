@@ -26,25 +26,34 @@ target_images_label = label
 in_channels = 1
 
 # Number of output channels (corresponds to the number of classes to predict)
-out_channels = 2
+out_channels = 3
 
 # Fraction of source images to be used for training (0.0 - 1.0): omit for default
-train_fraction =
+train_fraction = 0.7
 
 # Fraction of source images to be used for validation (0.0 - 1.0): omit for default
-val_fraction =
+val_fraction = 0.2
 
 # Fraction of source images to be used for testing (0.0 - 1.0): omit for default
-test_fraction =
+test_fraction = 0.1
+
+# Checkpoint monitor: one of "loss" or "metrics"
+checkpoint_monitor = loss
+
+# Checkpoint metrics class: if `checkpoint_target` is `metrics`, one of the classes from `class_names`
+# can be used as monitor. Leave unset to use the global validation metric.
+# Ignored if `checkpoint_target` is loss.
+checkpoint_metrics_class =
+
+# Use early stopping based on `checkpoint_monitor` and `checkpoint_metrics_class`?
+use_early_stopping = True
+early_stopping_patience = 10
 
 # Full path to the images to be used for prediction: must be specified if trainer_mode is `predict`
-source_for_prediction =
+source_for_prediction = 
 
 # Full path to the folder where the predicted images will be stored: omit for default target
 target_for_prediction =
-
-# Whether to start from a self-supervised model
-fine_tune_from_self_supervised = False
 
 # Full path to an existing model for `resume` or `predict`: ignored if trainer_mode is `train`
 source_model_path =
@@ -56,10 +65,10 @@ seed = 2022
 batch_size = 8
 
 # Batch size for interference
-inference_batch_size = 8
+inference_batch_size = 4
 
 # Number of patches per image: total batch size will be `batch_size` * `num_patches`
-num_patches = 4
+num_patches = 1
 
 # Number of residual units for the U-Net
 num_res_units = 4
@@ -71,7 +80,7 @@ channels = 16, 32, 64
 strides = 2, 2
 
 # Size of one patch
-patch_size = 1024, 1024
+patch_size = 640, 640
 
 # Initial learning rate
 learning_rate = 0.001
@@ -80,7 +89,7 @@ learning_rate = 0.001
 include_background = True
 
 # Class names (for logs and TensorBoard)
-class_names =  background, cell
+class_names =  background, cell, membrane
 
 # Maximum number of training epochs
 max_epochs = 2000

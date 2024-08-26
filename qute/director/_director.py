@@ -300,20 +300,33 @@ class Director(ABC):
         """Set up trainer callbacks."""
 
         # Callbacks
-        self.early_stopping = EarlyStopping(
-            monitor="val_loss", patience=10, mode="min"
-        )  # Issues with Lightning's ES
+        if self.config.use_early_stopping:
+            self.early_stopping = EarlyStopping(
+                monitor=self.config.checkpoint_monitor,
+                patience=self.config.early_stopping_patience,
+                mode=self.config.checkpoint_mode,
+                verbose=True,
+            )  # Issues with Lightning's ES
         self.model_checkpoint = ModelCheckpoint(
-            dirpath=self.project.models_dir, monitor="val_loss"
+            dirpath=self.project.models_dir,
+            monitor=self.config.checkpoint_monitor,
+            mode=self.config.checkpoint_mode,
+            verbose=True,
         )
         self.lr_monitor = LearningRateMonitor(logging_interval="step")
 
         # Store them
-        self.training_callbacks = [
-            self.early_stopping,
-            self.model_checkpoint,
-            self.lr_monitor,
-        ]
+        if self.config.use_early_stopping:
+            self.training_callbacks = [
+                self.early_stopping,
+                self.model_checkpoint,
+                self.lr_monitor,
+            ]
+        else:
+            self.training_callbacks = [
+                self.model_checkpoint,
+                self.lr_monitor,
+            ]
 
     def _setup_trainer(self):
         """Set up the trainer."""
