@@ -128,6 +128,15 @@ class Project:
             # Make sure the passed one exists (create if necessary)
             self._target_for_prediction_path.mkdir(exist_ok=True, parents=True)
 
+    def copy_configuration_file(self):
+        """Copy configuration file to run directory."""
+        shutil.copy(self._config.config_file, self._run_dir)
+
+    def store_best_score(self, monitor: str, score: float):
+        """Store the best score to the run directory."""
+        with open(self._run_dir / "best_score.txt", "w") as file:
+            file.write(f"{monitor}: {score}")
+
     def _set_selected_model(self, model_path: Union[None, Path, str] = None):
         # Make sure the passed project exists
         if model_path is None or model_path == "":

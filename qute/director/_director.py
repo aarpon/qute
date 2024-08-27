@@ -30,7 +30,7 @@ from qute.campaigns import SegmentationCampaignTransforms2D
 from qute.config import Config
 from qute.data.dataloaders import DataModuleLocalFolder
 from qute.data.demos import CellSegmentationDemo
-from qute.models import UNet
+from qute.models.unet import UNet
 from qute.project import Project
 from qute.random import set_global_rng_seed
 
@@ -130,8 +130,8 @@ class Director(ABC):
         # Set up model
         self._setup_model()
 
-        # Show the model
-        print(self.model)
+        # Copy the configuration file to the run folder
+        self.project.copy_configuration_file()
 
         # Train
         self.trainer.fit(self.model, datamodule=self.data_module)
@@ -139,6 +139,11 @@ class Director(ABC):
         # Print path to best model
         print(f"Best model: {self.model_checkpoint.best_model_path}")
         print(f"Best model score: {self.model_checkpoint.best_model_score}")
+
+        # Store the best score
+        self.project.store_best_score(
+            self.config.checkpoint_monitor, self.model_checkpoint.best_model_score
+        )
 
         # Set it into the project
         self.project.selected_model_path = self.model_checkpoint.best_model_path
@@ -164,8 +169,8 @@ class Director(ABC):
             class_names=self.config.class_names,
         )
 
-        # Show the model
-        print(self.model)
+        # Copy the configuration file to the run folder
+        self.project.copy_configuration_file()
 
         # Train
         self.trainer.fit(self.model, datamodule=self.data_module)
@@ -173,6 +178,11 @@ class Director(ABC):
         # Print path to best model
         print(f"Best model: {self.model_checkpoint.best_model_path}")
         print(f"Best model score: {self.model_checkpoint.best_model_score}")
+
+        # Store the best score
+        self.project.store_best_score(
+            self.config.checkpoint_monitor, self.model_checkpoint.best_model_score
+        )
 
         # Set it into the project
         self.project.selected_model_path = self.model_checkpoint.best_model_path

@@ -26,6 +26,7 @@ class Config:
         self._config = None
 
     def parse(self) -> bool:
+        """Parse and validate the configuration file."""
 
         # Read the configuration file
         if not self._config_file.is_file():
@@ -80,6 +81,10 @@ class Config:
                     "`early_stopping_patience` must be greater than or equal to 1."
                 )
         return early_stopping_patience
+
+    @property
+    def config_file(self) -> Path:
+        return self._config_file
 
     @property
     def trainer_mode(self):
