@@ -48,3 +48,54 @@ def get_accelerator() -> str:
         return "mps"
 
     return "cpu"
+
+
+def does_cuda_support_16bit_mixed_precision() -> bool:
+    """Check if the CUDA GPU supports 16-bit mixed precision.
+
+    Returns
+    -------
+    result: bool
+        True if the CUDA GPU supports 16-bit mixed precision, False otherwise.
+    """
+    if not torch.cuda.is_available():
+        return False
+
+    # Check for CUDA capability
+    cuda_capability = torch.cuda.get_device_capability()
+
+    # CUDA capability 7.0 (Volta) and above support 16-bit mixed precision
+    return cuda_capability[0] >= 7
+
+
+def get_gpu_memory_info() -> tuple[int, int]:
+    """Return the maximum and currently available GPU memory for CUDA devices.
+
+    Returns
+    -------
+    total_memory: int
+        Total GPU memory (0 if CUDA is not available).
+
+    free_memory: int
+        Current free memory (0 if CUDA is not available).
+    """
+    if not torch.cuda.is_available():
+        return 0, 0
+
+    current_device = torch.cuda.current_device()
+    max_memory = torch.cuda.get_device_properties(current_device).total_memory
+    free_memory = torch.cuda.memory_reserved(
+        current_device
+    ) - torch.cuda.memory_allocated(current_device)
+
+    return max_memory, free_memory
+
+
+def free_cuda_memory() -> None:
+    """Free unused CUDA memory.
+
+    If CUDA is available, attempt to release any unused CUDA memory back to the device.
+    """
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
