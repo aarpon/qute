@@ -50,7 +50,7 @@ def get_accelerator() -> str:
     return "cpu"
 
 
-def does_cuda_support_16bit_mixed_precision() -> bool:
+def cuda_does_gpu_support_16bit_mixed_precision() -> bool:
     """Check if the CUDA GPU supports 16-bit mixed precision.
 
     Returns
@@ -68,7 +68,7 @@ def does_cuda_support_16bit_mixed_precision() -> bool:
     return cuda_capability[0] >= 7
 
 
-def get_gpu_memory_info() -> tuple[int, int]:
+def cuda_get_gpu_memory_info() -> tuple[int, int]:
     """Return the maximum and currently available GPU memory for CUDA devices.
 
     Returns
@@ -91,7 +91,7 @@ def get_gpu_memory_info() -> tuple[int, int]:
     return max_memory, free_memory
 
 
-def free_cuda_memory() -> None:
+def cuda_free_memory() -> None:
     """Free unused CUDA memory.
 
     If CUDA is available, attempt to release any unused CUDA memory back to the device.
