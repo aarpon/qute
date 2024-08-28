@@ -87,6 +87,10 @@ class Config:
         return self._config_file
 
     @property
+    def model_class(self):
+        return self._config["settings"]["model_class"]
+
+    @property
     def trainer_mode(self):
         return TrainerMode(self._config["settings"]["trainer_mode"])
 
@@ -252,6 +256,30 @@ class Config:
     def precision(self):
         return self._config["settings"]["precision"]
 
+    @property
+    def depths(self):
+        depths_str = self._config["settings"]["depths"]
+        if depths_str == "":
+            return None
+        depths = list(re.sub(r"\s+", "", depths_str).split(","))
+        for i, element in enumerate(depths):
+            depths[i] = int(element)
+        return tuple(depths)
+
+    @property
+    def num_heads(self):
+        num_heads_str = self._config["settings"]["num_heads"]
+        if num_heads_str == "":
+            return None
+        num_heads = list(re.sub(r"\s+", "", num_heads_str).split(","))
+        for i, element in enumerate(num_heads):
+            num_heads[i] = int(element)
+        return tuple(num_heads)
+
+    @property
+    def feature_size(self):
+        return int(self._config["settings"]["feature_size"])
+
     @staticmethod
     def process_path(path: Union[Path, str, None]) -> Union[Path, None]:
         """Process a path string with optional environmental variables.
@@ -311,6 +339,13 @@ class Config:
 
     def _validate(self):
         """Validate configuration."""
+
+        # Check the model class
+        if not self.model_class in ["unet", "attention_unet", "swin_unetr"]:
+            print(
+                "`model_class` must be one of 'unet', 'attention_unet', or 'swin_unetr'."
+            )
+            return False
 
         # Check the trainer mode
         if not self.trainer_mode in ["train", "resume", "predict"]:

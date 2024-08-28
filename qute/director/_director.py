@@ -30,6 +30,8 @@ from qute.campaigns import SegmentationCampaignTransforms2D
 from qute.config import Config
 from qute.data.dataloaders import DataModuleLocalFolder
 from qute.data.demos import CellSegmentationDemo
+from qute.models.attention_unet import AttentionUNet
+from qute.models.swinunetr import SwinUNETR
 from qute.models.unet import UNet
 from qute.project import Project
 from qute.random import set_global_rng_seed
@@ -39,6 +41,14 @@ class Director(ABC):
     """Abstract base class defining the interface for all directors."""
 
     def __init__(self, config_file: Union[Path, str]) -> None:
+        """Constructor.
+
+        Parameters
+        ----------
+
+        config_file: Union[Path, str]
+            Full path to the configuration file.
+        """
 
         # Check if the director is instantiated from a program entry point
         frame = inspect.currentframe()
@@ -128,34 +138,10 @@ class Director(ABC):
         self._setup_basis_for_training_and_resume()
 
         # Set up model
-        self._setup_model()
+        self._setup_model(model=self.config.model_class)
 
-        # Copy the configuration file to the run folder
-        self.project.copy_configuration_file()
-
-        # Train
-        self.trainer.fit(self.model, datamodule=self.data_module)
-
-        # Print path to best model
-        print(f"Best model: {self.model_checkpoint.best_model_path}")
-        print(f"Best model score: {self.model_checkpoint.best_model_score}")
-
-        # Store the best score
-        self.project.store_best_score(
-            self.config.checkpoint_monitor, self.model_checkpoint.best_model_score
-        )
-
-        # Set it into the project
-        self.project.selected_model_path = self.model_checkpoint.best_model_path
-
-        # Re-load weights from best model: this model is a classification one,
-        # so there is no need to change the output layer.
-        model = UNet.load_from_checkpoint(
-            self.project.selected_model_path, strict=False
-        )
-
-        # Test
-        self.trainer.test(model, dataloaders=self.data_module.test_dataloader())
+        # Run common training and testing operations for 'train' and 'resume' trained modes.
+        self._run_common_train_and_test()
 
     def _resume(self):
         """Resume training from a saved state."""
@@ -164,37 +150,14 @@ class Director(ABC):
         self._setup_basis_for_training_and_resume()
 
         # Load specified model
-        self.model = UNet.load_from_checkpoint(
+        model_class = self._get_model_class()
+        self.model = model_class.load_from_checkpoint(
             self.project.selected_model_path,
             class_names=self.config.class_names,
         )
 
-        # Copy the configuration file to the run folder
-        self.project.copy_configuration_file()
-
-        # Train
-        self.trainer.fit(self.model, datamodule=self.data_module)
-
-        # Print path to best model
-        print(f"Best model: {self.model_checkpoint.best_model_path}")
-        print(f"Best model score: {self.model_checkpoint.best_model_score}")
-
-        # Store the best score
-        self.project.store_best_score(
-            self.config.checkpoint_monitor, self.model_checkpoint.best_model_score
-        )
-
-        # Set it into the project
-        self.project.selected_model_path = self.model_checkpoint.best_model_path
-
-        # Re-load weights from best model: this model is a classification one,
-        # so there is no need to change the output layer.
-        model = UNet.load_from_checkpoint(
-            self.project.selected_model_path, strict=False
-        )
-
-        # Test
-        self.trainer.test(model, dataloaders=self.data_module.test_dataloader())
+        # Run common training and testing operations for 'train' and 'resume' trained modes.
+        self._run_common_train_and_test()
 
     def _predict(self):
         """Predict using a trained model."""
@@ -225,7 +188,8 @@ class Director(ABC):
         self._setup_data_module()
 
         # Load existing model
-        self.model = UNet.load_from_checkpoint(self.config.source_model_path)
+        model_class = self._get_model_class()
+        self.model = model_class.load_from_checkpoint(self.config.source_model_path)
 
         # Inform
         print(f"Predicting with model {self.config.source_model_path}")
@@ -235,6 +199,7 @@ class Director(ABC):
             print("Target for prediction not specified in configuration.")
         print(f"Predictions saved to {self.project.target_for_prediction}.")
 
+        # Run full inference
         self.model.full_inference(
             data_loader=self.data_module.inference_dataloader(
                 input_folder=self.project.source_for_prediction
@@ -282,6 +247,62 @@ class Director(ABC):
 
         # Set up trainer
         self._setup_trainer()
+
+    def _run_common_train_and_test(self):
+        """Run common training and testing operations for 'train' and
+        'resume' trained modes."""
+
+        # Copy the configuration file to the run folder
+        self.project.copy_configuration_file()
+
+        # Train
+        self.trainer.fit(self.model, datamodule=self.data_module)
+
+        # Print path to best model
+        print(f"Best model: {self.model_checkpoint.best_model_path}")
+        print(f"Best model score: {self.model_checkpoint.best_model_score}")
+
+        # Store the best score
+        self.project.store_best_score(
+            self.config.checkpoint_monitor, self.model_checkpoint.best_model_score
+        )
+
+        # Set it into the project
+        self.project.selected_model_path = self.model_checkpoint.best_model_path
+
+        # Re-load weights from best model
+        model_class = self._get_model_class()
+        model = model_class.load_from_checkpoint(
+            self.project.selected_model_path, strict=False
+        )
+
+        # Test
+        self.trainer.test(model, dataloaders=self.data_module.test_dataloader())
+
+        # If there is no source_for_prediction in the configuration file,
+        # we inform and skip the full inference
+        if self.config.source_for_prediction is None:
+            print(
+                "Source for prediction not specified in configuration. Skipping full inference."
+            )
+            return
+
+        # Display target folder
+        if self.config.target_for_prediction is None:
+            print("Target for prediction not specified in configuration.")
+        print(f"Predictions saved to {self.project.target_for_prediction}.")
+
+        #
+        # Run inference
+        self.model.full_inference(
+            data_loader=self.data_module.inference_dataloader(
+                input_folder=self.project.source_for_prediction
+            ),
+            target_folder=self.project.target_for_prediction,
+            roi_size=self.config.patch_size,
+            batch_size=self.config.inference_batch_size,
+            transpose=False,
+        )
 
     def _setup_project(self):
         """Set up the project."""
@@ -354,33 +375,94 @@ class Director(ABC):
         # Store parameters
         self.trainer.logger._default_hp_metric = False
 
-    def _setup_model(self):
-        """Set up the model."""
+    def _setup_model(self, model: str = "unet"):
+        """Set up the model.
 
-        # Set up the model
-        self.model = UNet(
-            campaign_transforms=self.campaign_transforms,
-            in_channels=self.config.in_channels,
-            out_channels=self.config.out_channels,
-            class_names=self.config.class_names,
-            num_res_units=self.config.num_res_units,
-            criterion=self.criterion,
-            channels=self.config.channels,
-            strides=self.config.strides,
-            metrics=self.metrics,
-            learning_rate=self.config.learning_rate,
-            lr_scheduler_class=self.lr_scheduler_class,
-            lr_scheduler_parameters=self.lr_scheduler_parameters,
-        )
+        Parameters
+        ----------
 
-    def _load_model(self):
-        """Load existing model."""
+        model: str
+            Model to use. One of "unet", "attention_unet", "swin_unetr"
+        """
 
-        # Load the model
-        self.model = UNet.load_from_checkpoint(
-            self.project.selected_model_path,
-            class_names=self.config.class_names,
-        )
+        if model not in ["unet", "attention_unet", "swin_unetr"]:
+            raise ValueError(
+                "The 'model' must be one of 'unet', 'attention_unet', or 'swin_unetr'."
+            )
+
+        if model == "unet":
+
+            # Set up the UNet model
+            self.model = UNet(
+                campaign_transforms=self.campaign_transforms,
+                in_channels=self.config.in_channels,
+                out_channels=self.config.out_channels,
+                class_names=self.config.class_names,
+                num_res_units=self.config.num_res_units,
+                criterion=self.criterion,
+                channels=self.config.channels,
+                strides=self.config.strides,
+                metrics=self.metrics,
+                learning_rate=self.config.learning_rate,
+                lr_scheduler_class=self.lr_scheduler_class,
+                lr_scheduler_parameters=self.lr_scheduler_parameters,
+            )
+
+        elif model == "attention_unet":
+
+            # Set up the Attention UNet model
+            self.model = AttentionUNet(
+                campaign_transforms=self.campaign_transforms,
+                in_channels=self.config.in_channels,
+                out_channels=self.config.out_channels,
+                class_names=self.config.class_names,
+                criterion=self.criterion,
+                channels=self.config.channels,
+                strides=self.config.strides,
+                metrics=self.metrics,
+                learning_rate=self.config.learning_rate,
+                lr_scheduler_class=self.lr_scheduler_class,
+                lr_scheduler_parameters=self.lr_scheduler_parameters,
+            )
+
+        elif model == "swin_unetr":
+
+            # Set up the SwinUNETR model
+            self.model = SwinUNETR(
+                campaign_transforms=self.campaign_transforms,
+                in_channels=self.config.in_channels,
+                out_channels=self.config.out_channels,
+                class_names=self.config.class_names,
+                spatial_dims=len(self.config.patch_size),
+                depths=self.config.depths,
+                num_heads=self.config.num_heads,
+                feature_size=self.config.feature_size,
+                criterion=self.criterion,
+                metrics=self.metrics,
+                learning_rate=self.config.learning_rate,
+                lr_scheduler_class=self.lr_scheduler_class,
+                lr_scheduler_parameters=self.lr_scheduler_parameters,
+            )
+
+        else:
+            raise ValueError(
+                "The 'model' must be one of 'unet', 'attention_unet', or 'swin_unetr'."
+            )
+
+        # Inform
+        print(f"Using model: {self._get_model_class()} ")
+
+    def _get_model_class(self):
+        """Return the class of the model being used."""
+        if self.config.model_class == "unet":
+            model_class = UNet
+        elif self.config.model_class == "attention_unet":
+            model_class = AttentionUNet
+        elif self.config.model_class == "swin_unetr":
+            model_class = SwinUNETR
+        else:
+            raise ValueError(f"Bad value for model type {self.config.model_class};")
+        return model_class
 
 
 class SegmentationDirector(Director):

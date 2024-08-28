@@ -11,3 +11,4 @@ runs/
 scratch/
 .mypy_cache/
 /projects/
+/qodana.yaml
