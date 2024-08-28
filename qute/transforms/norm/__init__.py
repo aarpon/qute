@@ -19,3 +19,15 @@ from ._norm import (
     ZNormalize,
     ZNormalized,
 )
+
+__doc__ = "Normalization and scaling transforms."
+__all__ = [
+    "ClippedZNormalize",
+    "ClippedZNormalized",
+    "MinMaxNormalize",
+    "MinMaxNormalized",
+    "Scale",
+    "Scaled",
+    "ZNormalize",
+    "ZNormalized",
+]

@@ -25,6 +25,11 @@ from sklearn.model_selection import KFold
 
 from qute.campaigns import CampaignTransforms
 
+__doc__ = "Dataloaders."
+__all__ = [
+    "DataModuleLocalFolder",
+]
+
 
 @contextmanager
 def open_with_fallback(filename=None):

@@ -15,3 +15,11 @@ from ._hash import (
     read_hash_from_file,
     write_hash_to_file,
 )
+
+__doc__ = "Functions for model hashing."
+__all__ = [
+    "calculate_file_hash",
+    "compare_file_hash",
+    "read_hash_from_file",
+    "write_hash_to_file",
+]

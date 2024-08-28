@@ -17,4 +17,11 @@ from ._device import (
     get_device,
 )
 
-__doc__ = """Simplify multi-platform device support."""
+__doc__ = "Simplify multi-platform device support."
+__all__ = [
+    "cuda_does_gpu_support_16bit_mixed_precision",
+    "cuda_free_memory",
+    "cuda_get_gpu_memory_info",
+    "get_accelerator",
+    "get_device",
+]

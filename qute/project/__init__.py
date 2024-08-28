@@ -10,3 +10,8 @@
 #  ******************************************************************************
 
 from ._project import Project
+
+__doc__ = "Manage training projects."
+__all__ = [
+    "Project",
+]

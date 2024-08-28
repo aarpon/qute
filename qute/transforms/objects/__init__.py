@@ -22,4 +22,16 @@ from ._objects import (
     WatershedAndLabelTransformd,
 )
 
-__doc__ = """Object-related transforms."""
+__doc__ = "Object-related transforms."
+__all__ = [
+    "LabelToTwoClassMask",
+    "LabelToTwoClassMaskd",
+    "NormalizedDistanceTransform",
+    "NormalizedDistanceTransformd",
+    "OneHotToMask",
+    "OneHotToMaskBatch",
+    "TwoClassMaskToLabel",
+    "TwoClassMaskToLabeld",
+    "WatershedAndLabelTransform",
+    "WatershedAndLabelTransformd",
+]

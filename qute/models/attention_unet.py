@@ -21,6 +21,11 @@ from torch.optim.lr_scheduler import PolynomialLR
 from qute.campaigns import CampaignTransforms
 from qute.models.unet import UNet
 
+__doc__ = "AttentionUNet."
+__all__ = [
+    "AttentionUNet",
+]
+
 
 class AttentionUNet(UNet):
     """Wrap MONAI's AttentionUNet architecture into a PyTorch Lightning module.

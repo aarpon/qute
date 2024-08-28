@@ -17,4 +17,10 @@ from ._io import (
     CustomTIFFReaderd,
 )
 
-__doc__ = """Input/output transforms."""
+__doc__ = "Input/output transforms."
+__all__ = [
+    "CellposeLabelReader",
+    "CustomND2Reader",
+    "CustomND2Readerd",
+    "CustomTIFFReader",
+]

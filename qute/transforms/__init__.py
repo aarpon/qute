@@ -11,4 +11,9 @@
 
 from ._transforms import AddFFT2, AddFFT2d, ToPyTorchLightningOutputd
 
-__doc__ = """Custom transforms."""
+__doc__ = "Custom transforms."
+__all__ = [
+    "AddFFT2",
+    "AddFFT2d",
+    "ToPyTorchLightningOutputd",
+]

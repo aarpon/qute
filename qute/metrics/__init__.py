@@ -11,4 +11,7 @@
 
 from ._metrics import CombinedInvMeanAbsoluteErrorBinaryDiceMetric
 
-__doc__ = """Custom metrics."""
+__doc__ = "Custom metrics."
+__all__ = [
+    "CombinedInvMeanAbsoluteErrorBinaryDiceMetric",
+]

@@ -19,4 +19,13 @@ from ._campaigns import (
     SelfSupervisedRestorationCampaignTransforms,
 )
 
-__doc__ = """Full training campaign definitions."""
+__doc__ = "Full training campaign definitions."
+__all__ = [
+    "CampaignTransforms",
+    "RestorationCampaignTransforms",
+    "SegmentationCampaignTransforms2D",
+    "SegmentationCampaignTransforms3D",
+    "SegmentationCampaignTransformsIDT2D",
+    "SegmentationCampaignTransformsIDT3D",
+    "SelfSupervisedRestorationCampaignTransforms",
+]

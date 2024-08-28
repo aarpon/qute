@@ -289,13 +289,12 @@ class Config:
 
         path: Union[Path, str, None]
             Full path that can optionally contain environment variables in the
-            for ${ENV_VAR}. For instance:
-                ${HOME}/Documents/qute
-            If path is None, None is returned.
+            for ${ENV_VAR}. For instance: `${HOME}/Documents/qute`. If path is
+            None, None is returned.
 
-        Please notice that ${HOME} will be considered to point to the user path
-        also in Windows, where it is not defined as an environment variable. All
-        other variables, must be defined in os.environ.
+            Please notice that ${HOME} will be considered to point to the user path
+            also in Windows, where it is not defined as an environment variable. All
+            other variables, must be defined in os.environ.
 
         Returns
         -------

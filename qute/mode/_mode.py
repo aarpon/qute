@@ -13,6 +13,8 @@ from enum import StrEnum
 
 
 class TrainerMode(StrEnum):
+    """Trainer mode."""
+
     TRAIN = "train"
     RESUME = "resume"
     PREDICT = "predict"

@@ -11,4 +11,7 @@
 
 from ._losses import CombinedMSEBinaryDiceCELoss
 
-__doc__ = """Custom loss functions."""
+__doc__ = "Custom loss functions."
+__all__ = [
+    "CombinedMSEBinaryDiceCELoss",
+]

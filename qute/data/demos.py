@@ -23,6 +23,13 @@ from qute.data.io import (
     get_cell_segmentation_idt_demo_dataset,
 )
 
+__doc__ = "Demo dataloaders."
+__all__ = [
+    "CellSegmentationDemo",
+    "CellSegmentationDemoIDT",
+    "CellRestorationDemo",
+]
+
 
 class CellSegmentationDemo(DataModuleLocalFolder):
     """DataLoader for the Cell Segmentation Demo."""

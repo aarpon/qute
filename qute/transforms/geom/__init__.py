@@ -11,4 +11,8 @@
 
 from ._geom import CustomResampler, CustomResamplerd
 
-__doc__ = """Geometric transforms."""
+__doc__ = "Geometric transforms."
+__all__ = [
+    "CustomResampler",
+    "CustomResamplerd",
+]

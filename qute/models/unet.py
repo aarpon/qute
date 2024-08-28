@@ -34,6 +34,11 @@ from torch.optim.lr_scheduler import PolynomialLR
 from qute.campaigns import CampaignTransforms
 from qute.device import get_device
 
+__doc__ = "UNet."
+__all__ = [
+    "UNet",
+]
+
 
 class UNet(pl.LightningModule):
     """Wrap MONAI's UNet architecture into a PyTorch Lightning module.
@@ -443,7 +448,7 @@ class UNet(pl.LightningModule):
             One of "mode" (default" and "mean").
             "mode": pick the most common class among the predictions for each pixel.
             "mean": (rounded) weighted mean of the predicted classed per pixel. The `weights` argument defines
-                    the relative contribution of the models.
+            the relative contribution of the models.
 
         weights: Optional[list]
             List of weights for each of the contributions. Only used if `voting_mechanism` is "mean".

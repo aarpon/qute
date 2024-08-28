@@ -10,3 +10,8 @@
 #  ******************************************************************************
 
 from ._seed import set_global_rng_seed
+
+__doc__ = "Seed the random number generator."
+__all__ = [
+    "set_global_rng_seed",
+]

@@ -10,3 +10,8 @@
 # ******************************************************************************
 
 from ._mode import TrainerMode
+
+__doc__ = "Trainer mode."
+__all__ = [
+    "TrainerMode",
+]

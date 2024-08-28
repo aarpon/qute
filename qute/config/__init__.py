@@ -10,3 +10,8 @@
 #  ******************************************************************************
 
 from ._config import Config
+
+__doc__ = "Manage qute configurations."
+__all__ = [
+    "Config",
+]

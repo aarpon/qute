@@ -21,6 +21,11 @@ from torch.optim.lr_scheduler import PolynomialLR
 from qute.campaigns import CampaignTransforms
 from qute.models.unet import UNet
 
+__doc__ = "SwinUNETR."
+__all__ = [
+    "SwinUNETR",
+]
+
 
 class SwinUNETR(UNet):
     """Wrap MONAI's SwinUNETR architecture into a PyTorch Lightning module.

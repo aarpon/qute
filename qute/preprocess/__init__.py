@@ -14,4 +14,9 @@ from ._preprocess import (
     extract_median_object_size,
 )
 
-__doc__ = """Preprocessing functions."""
+__doc__ = "Preprocessing functions."
+__all__ = [
+    "extract_fft_stats",
+    "extract_intensity_stats",
+    "extract_median_object_size",
+]

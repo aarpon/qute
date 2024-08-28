@@ -10,3 +10,10 @@
 #  ******************************************************************************
 
 from ._director import CellSegmentationDemoDirector, SegmentationDirector
+
+__doc__ = "Training directors."
+
+__all__ = [
+    "CellSegmentationDemoDirector",
+    "SegmentationDirector",
+]

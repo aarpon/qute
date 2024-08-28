@@ -10,8 +10,10 @@
 # ******************************************************************************
 
 __version__ = "0.3.0"
-__doc__ = """
-This is the documentation of the `qute` library.
+__doc__ = f"""
+This is the documentation of the `qute` library (version {__version__}).
 
 `qute` leverages and extends several [PyTorch](https://pytorch.org/)-based framework and tools.
+
+For getting-started instructions, see [qute on GitHub](https://github.com/aarpon/qute).
 """

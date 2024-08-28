@@ -16,4 +16,10 @@ from ._debug import (
     DebugMinNumVoxelCheckerd,
 )
 
-__doc__ = """Debugging transforms."""
+__doc__ = "Debugging transforms."
+__all__ = [
+    "DebugCheckAndFixAffineDimensions",
+    "DebugExtractChannel",
+    "DebugInformer",
+    "DebugMinNumVoxelCheckerd",
+]

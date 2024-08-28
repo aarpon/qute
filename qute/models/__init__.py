@@ -9,4 +9,4 @@
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
 
-__doc__ = """Models and architectures."""
+__doc__ = "Models and architectures."

@@ -10,3 +10,9 @@
 #  ******************************************************************************
 
 from ._tools import calculate_receptive_field, num_levels_for_object_size
+
+__doc__ = "Various tools."
+__all__ = [
+    "calculate_receptive_field",
+    "num_levels_for_object_size",
+]
