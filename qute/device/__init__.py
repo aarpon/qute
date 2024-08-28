@@ -9,6 +9,12 @@
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
 
-from ._device import get_accelerator, get_device
+from ._device import (
+    cuda_does_gpu_support_16bit_mixed_precision,
+    cuda_free_memory,
+    cuda_get_gpu_memory_info,
+    get_accelerator,
+    get_device,
+)
 
 __doc__ = """Simplify multi-platform device support."""
