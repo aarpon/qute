@@ -11,3 +11,5 @@ Welcome to qute!
 
 .. automodule:: qute
    :members:
+   :undoc-members:
+   :show-inheritance:

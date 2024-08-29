@@ -3,29 +3,44 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
-import os
+import datetime
 import sys
+from pathlib import Path
+
+import sphinx_rtd_theme
 
 # Add the project root directory to sys.path
-sys.path.insert(0, os.path.abspath(".."))
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from qute import __version__
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "qute"
-copyright = "2024, Aaron Ponti"
+year = str(datetime.datetime.now().year)
+copyright = f"2022 - {year}, Aaron Ponti"
 author = "Aaron Ponti"
-release = "0.3.0"
+release = f"{__version__}"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
     "sphinx.ext.autodoc",
+    "sphinx_rtd_theme",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
 ]
 
+# Autodoc settings
+autodoc_default_options = {
+    "members": True,
+    "undoc-members": True,
+    "show-inheritance": True,
+    "imported-members": True,
+}
+
+html_theme = "sphinx_rtd_theme"
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 

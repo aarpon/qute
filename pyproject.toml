@@ -41,7 +41,7 @@ force_grid_wrap = 0
 use_parentheses = true
 line_length = 88
 combine_as_imports = true
-known_third_party = ["imio", "monai", "natsort", "nd2reader", "numpy", "pytest", "pytorch_lightning", "ray", "requests", "scipy", "skimage", "sklearn", "tifffile", "torch", "torchmetrics", "tqdm", "typing_extensions", "userpaths"]
+known_third_party = ["imio", "monai", "natsort", "nd2reader", "numpy", "pytest", "pytorch_lightning", "ray", "requests", "scipy", "skimage", "sklearn", "sphinx_rtd_theme", "tifffile", "torch", "torchmetrics", "tqdm", "typing_extensions", "userpaths"]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<=3.12"
@@ -71,7 +71,7 @@ types-pyyaml = "^6.0.12.20240311"
 types-requests = "^2.32.0.20240622"
 pre-commit = "^3.7.1"
 sphinx = "1.8.5"
-sphinx-rtd-theme = "<=2.0.0"
+sphinx-rtd-theme = "1.3.0"
 
 [build-system]
 requires = ["poetry-core"]
