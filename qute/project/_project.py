@@ -215,8 +215,14 @@ class Project:
                 except Exception as e:
                     print(e)
 
-        # Check predictions
-        for pred in self._target_for_prediction_path.iterdir():
+        # Check predictions: we only clean if the target for predictions is contained
+        # in current run folder
+        predictions_in_current_run_folder = self._project_dir / "predictions"
+        if self._target_for_prediction_path.parent != predictions_in_current_run_folder:
+            # This is an external folder, we do not clean it
+            return
+
+        for pred in predictions_in_current_run_folder.iterdir():
             to_clean = False
             if not pred.is_dir():
                 continue
@@ -227,17 +233,17 @@ class Project:
 
             # Make sure not to delete current prediction folder
             if self._target_for_prediction_path == pred:
-                # This is current run and won't have any models or results yet
+                # This is current run and won't have any predictions yet
                 continue
 
-            # Are there predictions?
-            predictions_found = list(pred.rglob(f"*.tif"))
+            # Are there predictions (or anything else)? We only clean empy folders.
+            predictions_found = list(pred.rglob(f"*"))
             if len(predictions_found) == 0:
                 to_clean = True
 
             if to_clean:
                 # Remove folder recursively
                 try:
-                    shutil.rmtree(root_predictions / pred.name)
+                    shutil.rmtree(pred)
                 except Exception as e:
                     print(e)
