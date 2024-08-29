@@ -25,6 +25,9 @@ extensions = [
     "sphinx.ext.napoleon",
 ]
 
+# Mock some imports that are not needed to build the documentation
+autodoc_mock_imports = ["numpy", "userpaths", "torch", "pytorch_lightning", "monai"]
+
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
