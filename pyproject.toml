@@ -70,8 +70,8 @@ torch-tb-profiler = "^0.4.3"
 types-pyyaml = "^6.0.12.20240311"
 types-requests = "^2.32.0.20240622"
 pre-commit = "^3.7.1"
-sphinx = "^7.0.0"
-sphinx-rtd-theme = "^2.0.0"
+sphinx = "7.4.7"
+sphinx-rtd-theme = "2.0.0"
 
 [build-system]
 requires = ["poetry-core"]
