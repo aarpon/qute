@@ -39,6 +39,8 @@ autodoc_mock_imports = [
     "torchmetrics",
     "tifffile",
     "nd2reader",
+    "skimage",
+    "sklearn",
 ]
 
 templates_path = ["_templates"]
