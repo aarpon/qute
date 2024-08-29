@@ -41,6 +41,7 @@ autodoc_mock_imports = [
     "nd2reader",
     "skimage",
     "sklearn",
+    "tqdm",
 ]
 
 templates_path = ["_templates"]
