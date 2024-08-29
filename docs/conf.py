@@ -26,7 +26,20 @@ extensions = [
 ]
 
 # Mock some imports that are not needed to build the documentation
-autodoc_mock_imports = ["numpy", "userpaths", "torch", "pytorch_lightning", "monai"]
+autodoc_mock_imports = [
+    "numpy",
+    "userpaths",
+    "torch",
+    "pytorch_lightning",
+    "monai",
+    "scipy",
+    "natsort",
+    "imio",
+    "typing_extensions",
+    "torchmetrics",
+    "tifffile",
+    "nd2reader",
+]
 
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
