@@ -751,9 +751,9 @@ def test_to_label_batch(tmpdir):
     oh_2d[0, 0, :, 0:20] = 1  # B = 0
     oh_2d[0, 1, :, 20:40] = 2
     oh_2d[0, 2, :, 40:60] = 3
-    oh_2d[
-        1, 0, :, 0:20
-    ] = 4  # B = 1 (different values, to test that result in the same classifications)
+    oh_2d[1, 0, :, 0:20] = (
+        4  # B = 1 (different values, to test that result in the same classifications)
+    )
     oh_2d[1, 1, :, 20:40] = 5
     oh_2d[1, 2, :, 40:60] = 6
 
@@ -762,9 +762,9 @@ def test_to_label_batch(tmpdir):
     oh_3d[0, 0, :, :, 0:20] = 1  # B = 0
     oh_3d[0, 1, :, :, 20:40] = 2
     oh_3d[0, 2, :, :, 40:60] = 3
-    oh_3d[
-        1, 0, :, :, 0:20
-    ] = 4  # B = 1 (different values, to test that result in the same classifications)
+    oh_3d[1, 0, :, :, 0:20] = (
+        4  # B = 1 (different values, to test that result in the same classifications)
+    )
     oh_3d[1, 1, :, :, 20:40] = 5
     oh_3d[1, 2, :, :, 40:60] = 6
 
