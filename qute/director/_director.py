@@ -22,14 +22,19 @@ from pytorch_lightning.callbacks import (
     LearningRateMonitor,
     ModelCheckpoint,
 )
+from torch.nn import MSELoss
 from torch.optim.lr_scheduler import OneCycleLR
+from torchmetrics import MeanAbsoluteError
 from typing_extensions import override
 
 from qute import device
-from qute.campaigns import SegmentationCampaignTransforms2D
+from qute.campaigns import (
+    RestorationCampaignTransforms,
+    SegmentationCampaignTransforms2D,
+)
 from qute.config import Config
 from qute.data.dataloaders import DataModuleLocalFolder
-from qute.data.demos import CellSegmentationDemo
+from qute.data.demos import CellRestorationDemo, CellSegmentationDemo
 from qute.models.attention_unet import AttentionUNet
 from qute.models.swinunetr import SwinUNETR
 from qute.models.unet import UNet
@@ -153,6 +158,8 @@ class Director(ABC):
         model_class = self._get_model_class()
         self.model = model_class.load_from_checkpoint(
             self.project.selected_model_path,
+            criterion=self.criterion,
+            metrics=self.metrics,
             class_names=self.config.class_names,
         )
 
@@ -208,6 +215,7 @@ class Director(ABC):
             roi_size=self.config.patch_size,
             batch_size=self.config.inference_batch_size,
             transpose=False,
+            output_dtype=self.config.output_dtype,
         )
 
     def _setup_basis_for_training_and_resume(self):
@@ -273,7 +281,10 @@ class Director(ABC):
         # Re-load weights from best model
         model_class = self._get_model_class()
         model = model_class.load_from_checkpoint(
-            self.project.selected_model_path, strict=False
+            self.project.selected_model_path,
+            strict=False,
+            criterion=self.criterion,
+            metrics=self.metrics,
         )
 
         # Test
@@ -302,6 +313,7 @@ class Director(ABC):
             roi_size=self.config.patch_size,
             batch_size=self.config.inference_batch_size,
             transpose=False,
+            output_dtype=self.config.output_dtype,
         )
 
     def _setup_project(self):
@@ -465,6 +477,58 @@ class Director(ABC):
         return model_class
 
 
+class RestorationDirector(Director):
+    """Restoration Training Director."""
+
+    @override
+    def _setup_metrics(self):
+        """Set up metrics."""
+
+        # Metrics
+        self.metrics = MeanAbsoluteError()
+
+    @override
+    def _setup_loss(self):
+        """Set up loss function."""
+
+        # Set up loss function
+        self.criterion = MSELoss()
+
+    @override
+    def _setup_data_module(self):
+        """Set up data module."""
+
+        # Data module
+        self.data_module = DataModuleLocalFolder(
+            campaign_transforms=self.campaign_transforms,
+            data_dir=self.config.data_dir,  # Point to the root of the data directory
+            seed=self.config.seed,
+            batch_size=self.config.batch_size,
+            patch_size=self.config.patch_size,
+            num_patches=self.config.num_patches,
+            train_fraction=self.config.train_fraction,
+            val_fraction=self.config.val_fraction,
+            test_fraction=self.config.test_fraction,
+            source_images_sub_folder=self.config.source_images_sub_folder,
+            target_images_sub_folder=self.config.target_images_sub_folder,
+            source_images_label=self.config.source_images_label,
+            target_images_label=self.config.target_images_label,
+            inference_batch_size=self.config.inference_batch_size,
+        )
+
+    @override
+    def _setup_campaign_transforms(self):
+        """Set up campaign transforms."""
+
+        # Initialize default, example Restoration Campaign Transform
+        self.campaign_transforms = RestorationCampaignTransforms(
+            min_intensity=0,
+            max_intensity=15472,
+            patch_size=self.config.patch_size,
+            num_patches=self.config.num_patches,
+        )
+
+
 class SegmentationDirector(Director):
     """Segmentation Training Director."""
 
@@ -524,8 +588,30 @@ class SegmentationDirector(Director):
         )
 
 
+class CellRestorationDemoDirector(RestorationDirector):
+    """Restoration Demo Training Director."""
+
+    @override
+    def _setup_data_module(self):
+        """Set up data module."""
+
+        # Data module
+        self.data_module = CellRestorationDemo(
+            campaign_transforms=self.campaign_transforms,
+            download_dir=self.config.project_dir,
+            seed=self.config.seed,
+            batch_size=self.config.batch_size,
+            patch_size=self.config.patch_size,
+            num_patches=self.config.num_patches,
+            train_fraction=self.config.train_fraction,
+            val_fraction=self.config.val_fraction,
+            test_fraction=self.config.test_fraction,
+            inference_batch_size=self.config.inference_batch_size,
+        )
+
+
 class CellSegmentationDemoDirector(SegmentationDirector):
-    """Segmentation Training Director."""
+    """Segmentation Demo Training Director."""
 
     @override
     def _setup_data_module(self):

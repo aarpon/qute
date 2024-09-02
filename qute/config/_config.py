@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 from typing import Union
 
+import numpy as np
 import userpaths
 
 from qute.mode import TrainerMode
@@ -45,7 +46,10 @@ class Config:
     @property
     def checkpoint_monitor(self):
         target = self._config["settings"]["checkpoint_monitor"]
-        metrics_class = self._config["settings"]["checkpoint_metrics_class"]
+        if "checkpoint_metrics_class" in self._config["settings"]:
+            metrics_class = self._config["settings"]["checkpoint_metrics_class"]
+        else:
+            metrics_class = ""
         if target == "loss":
             return "val_loss"
         elif target == "metrics":
@@ -280,6 +284,15 @@ class Config:
     def feature_size(self):
         return int(self._config["settings"]["feature_size"])
 
+    @property
+    def output_dtype(self):
+        out_dtype = self._config["settings"]["output_dtype"]
+        try:
+            out_dtype = np.dtype(out_dtype)
+        except (TypeError, ValueError):
+            print(f"{out_dtype} is not a valid output dtype.")
+        return out_dtype
+
     @staticmethod
     def process_path(path: Union[Path, str, None]) -> Union[Path, None]:
         """Process a path string with optional environmental variables.
@@ -357,12 +370,15 @@ class Config:
             print("`checkpoint_monitor` must be one of 'loss' or 'metrics'.")
             return False
 
-        # Validate checkpoint_metric_class
-        checkpoint_metrics_class = self._config["settings"]["checkpoint_metrics_class"]
-        if checkpoint_metrics_class != "":
-            if checkpoint_metrics_class not in self.class_names:
-                print("`checkpoint_metrics_class` must be a valid class name.")
-                return False
+        # Validate checkpoint_metric_class (for segmentation jobs)
+        if "checkpoint_metrics_class" in self._config["settings"]:
+            checkpoint_metrics_class = self._config["settings"][
+                "checkpoint_metrics_class"
+            ]
+            if checkpoint_metrics_class != "":
+                if checkpoint_metrics_class not in self.class_names:
+                    print("`checkpoint_metrics_class` must be a valid class name.")
+                    return False
 
         # Validate early stopping and patience
         if self._config["settings"]["use_early_stopping"].lower() not in [

@@ -9,11 +9,18 @@
 #    Aaron Ponti - initial API and implementation
 #  ******************************************************************************
 
-from ._director import CellSegmentationDemoDirector, SegmentationDirector
+from ._director import (
+    CellRestorationDemoDirector,
+    CellSegmentationDemoDirector,
+    RestorationDirector,
+    SegmentationDirector,
+)
 
 __doc__ = "Training directors."
 
 __all__ = [
+    "CellRestorationDemoDirector",
     "CellSegmentationDemoDirector",
+    "RestorationDirector",
     "SegmentationDirector",
 ]

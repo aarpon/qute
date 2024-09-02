@@ -12,6 +12,4 @@ scratch/
 .mypy_cache/
 /projects/
 /qodana.yaml
-/docs/_build/
-/docs/_static/
-/docs/_templates/
+/doc/
