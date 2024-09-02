@@ -53,7 +53,7 @@ True
 To get started, try:
 
 ```bash
-$ python qute/examples_new/cell_segmentation_demo_unet.py 
+$ python qute/examples/cell_segmentation_demo_unet.py 
 ```
 Configuration parameters are explained in [config_samples/](config_samples/).
 
