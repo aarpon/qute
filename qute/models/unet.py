@@ -135,7 +135,7 @@ class UNet(pl.LightningModule):
         self.scheduler_class = lr_scheduler_class
         self.scheduler_parameters = lr_scheduler_parameters
         if class_names is None:
-            class_names = (f"class_{i}" for i in range(out_channels))
+            class_names = list(f"class_{i}" for i in range(out_channels))
         self.class_names = class_names
         if strides is None:
             strides = (2,) * (len(channels) - 1)
