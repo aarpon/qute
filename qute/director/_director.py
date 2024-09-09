@@ -43,7 +43,7 @@ from qute.project import Project
 from qute.random import set_global_rng_seed
 
 
-class _Director(ABC):
+class Director(ABC):
     """Abstract base class defining the interface for all directors."""
 
     def __init__(self, config_file: Union[Path, str]) -> None:
@@ -500,7 +500,7 @@ class _Director(ABC):
         return model_class
 
 
-class _EnsembleDirector(_Director, ABC):
+class EnsembleDirector(Director, ABC):
     """Ensemble Training Director."""
 
     def __init__(self, config_file: Union[Path, str], num_folds: int) -> None:
@@ -824,7 +824,7 @@ class _EnsembleDirector(_Director, ABC):
         return models
 
 
-class RestorationDirector(_Director):
+class RestorationDirector(Director):
     """Restoration Training Director."""
 
     @override
@@ -885,7 +885,7 @@ class RestorationDirector(_Director):
         return campaign_transforms
 
 
-class SegmentationDirector(_Director):
+class SegmentationDirector(Director):
     """Segmentation Training Director."""
 
     @override
@@ -986,7 +986,7 @@ class SegmentationDirector3D(SegmentationDirector):
         return campaign_transforms
 
 
-class EnsembleSegmentationDirector(_EnsembleDirector, SegmentationDirector):
+class EnsembleSegmentationDirector(EnsembleDirector, SegmentationDirector):
     """Ensemble Segmentation Training Director."""
 
     def __init__(self, config_file: Union[Path, str], num_folds: int) -> None:
