@@ -4,6 +4,21 @@
 # Trainer mode: one of `train`, `resume`, `predict`
 trainer_mode = train
 
+# Model class (one of unet, attention_unet, swin_unetr)
+model_class = unet
+
+# Is the dataset 3D?
+is_3d = False
+
+# Resample dataset to isotropic resolution? Only relevant is `is_3d = True`
+to_isotropic = False
+
+# Up-scale z to xy resolution? Only relevant is `is_3d = True`
+up_scale_z = False
+
+# Voxel size (z, y, x: used for resampling). Only relevant is `is_3d = True`
+voxel_size =
+
 # Root project directory
 project_dir = /path/to/project
 
