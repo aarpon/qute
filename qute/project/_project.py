@@ -132,10 +132,14 @@ class Project:
         """Copy configuration file to run directory."""
         shutil.copy(self._config.config_file, self._run_dir)
 
-    def store_best_score(self, monitor: str, score: float):
+    def store_best_score(self, monitor: str, score: float, fold: int = -1):
         """Store the best score to the run directory."""
-        with open(self._run_dir / "best_score.txt", "w") as file:
-            file.write(f"{monitor}: {score}")
+        if fold >= 0:
+            out_file = self._run_dir / f"fold_{fold}_best_score.txt"
+        else:
+            out_file = self._run_dir / "best_score.txt"
+        with open(out_file, "w") as file:
+            file.write(f"{monitor}: {float(score)}")
 
     def _set_selected_model(self, model_path: Union[None, Path, str] = None):
         # Make sure the passed project exists
@@ -144,7 +148,13 @@ class Project:
             return
 
         model_path = Path(model_path)
-        if not model_path.is_file():
+        if model_path.is_dir():
+            # The model path must contain at least one fold sub-folder
+            if len(list(model_path.glob("fold_0/*.ckpt"))) == 0:
+                raise IOError(
+                    f"The selected model folder {model_path} does not contain trained models."
+                )
+        elif not model_path.is_file():
             raise IOError(f"The selected model {model_path} does not exist.")
         self._selected_model_path = model_path
 

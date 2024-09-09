@@ -12,6 +12,8 @@
 from ._director import (
     CellRestorationDemoDirector,
     CellSegmentationDemoDirector,
+    EnsembleCellSegmentationDemoDirector,
+    EnsembleSegmentationDirector,
     RestorationDirector,
     SegmentationDirector,
 )
@@ -21,6 +23,8 @@ __doc__ = "Training directors."
 __all__ = [
     "CellRestorationDemoDirector",
     "CellSegmentationDemoDirector",
+    "EnsembleCellSegmentationDemoDirector",
+    "EnsembleSegmentationDirector",
     "RestorationDirector",
     "SegmentationDirector",
 ]
