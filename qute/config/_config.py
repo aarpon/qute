@@ -138,13 +138,6 @@ class Config:
         return Config.process_path(Path(target_for_prediction))
 
     @property
-    def fine_tune_from_self_supervised(self):
-        fine_tune_from_self_supervised = self._config["settings"][
-            "fine_tune_from_self_supervised"
-        ]
-        return fine_tune_from_self_supervised.lower() == "true"
-
-    @property
     def source_model_path(self):
         source_model_path = self._config["settings"]["source_model_path"]
         if source_model_path == "":

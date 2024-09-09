@@ -39,7 +39,7 @@ from qute.random import set_global_rng_seed
 
 # Load global configuration
 config_file = (
-    Path(__file__).parent / "cell_segmentation_demo_unet_config_hyperparameters.ini"
+    Path(__file__).parent / "cell_segmentation_demo_unet_hyperparameters_config.ini"
 )
 GLOBAL_CONFIG = Config(config_file)
 GLOBAL_CONFIG.parse()
