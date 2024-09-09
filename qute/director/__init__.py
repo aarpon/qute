@@ -16,6 +16,7 @@ from ._director import (
     EnsembleSegmentationDirector,
     RestorationDirector,
     SegmentationDirector,
+    SegmentationDirector3D,
 )
 
 __doc__ = "Training directors."
@@ -27,4 +28,5 @@ __all__ = [
     "EnsembleSegmentationDirector",
     "RestorationDirector",
     "SegmentationDirector",
+    "SegmentationDirector3D",
 ]

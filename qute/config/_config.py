@@ -293,6 +293,31 @@ class Config:
             print(f"{out_dtype} is not a valid output dtype.")
         return out_dtype
 
+    @property
+    def is_3d(self):
+        is_3d_str = self._config["settings"]["is_3d"]
+        return is_3d_str.lower() == "true"
+
+    @property
+    def to_isotropic(self):
+        to_isotropic_str = self._config["settings"]["to_isotropic"]
+        return to_isotropic_str.lower() == "true"
+
+    @property
+    def up_scale_z(self):
+        up_scale_z_str = self._config["settings"]["up_scale_z"]
+        return up_scale_z_str.lower() == "true"
+
+    @property
+    def voxel_size(self):
+        voxel_size_str = self._config["settings"]["voxel_size"]
+        if voxel_size_str == "":
+            return None
+        voxel_size = list(re.sub(r"\s+", "", voxel_size_str).split(","))
+        for i, element in enumerate(voxel_size):
+            voxel_size[i] = float(element)
+        return tuple(voxel_size)
+
     @staticmethod
     def process_path(path: Union[Path, str, None]) -> Union[Path, None]:
         """Process a path string with optional environmental variables.

@@ -31,6 +31,7 @@ from qute import device
 from qute.campaigns import (
     RestorationCampaignTransforms,
     SegmentationCampaignTransforms2D,
+    SegmentationCampaignTransforms3D,
 )
 from qute.config import Config
 from qute.data.dataloaders import DataModuleLocalFolder
@@ -149,7 +150,7 @@ class _Director(ABC):
         self._setup_basis_for_training_and_resume()
 
         # Set up model
-        self.model = self._setup_model(model=self.config.model_class)
+        self.model = self._setup_model()
 
         # Run common training and testing operations for 'train' and 'resume' trained modes.
         self._run_common_train_and_test()
@@ -409,16 +410,11 @@ class _Director(ABC):
         # Return the trainer
         return trainer
 
-    def _setup_model(self, model: str = "unet"):
-        """Set up the model.
+    def _setup_model(self):
+        """Set up the model."""
 
-        Parameters
-        ----------
-
-        model: str
-            Model to use. One of "unet", "attention_unet", "swin_unetr"
-        """
-
+        # Get and check the model from the configuration
+        model = self.config.model_class
         if model not in ["unet", "attention_unet", "swin_unetr"]:
             raise ValueError(
                 "The 'model' must be one of 'unet', 'attention_unet', or 'swin_unetr'."
@@ -429,6 +425,7 @@ class _Director(ABC):
             # Set up the UNet model
             model = UNet(
                 campaign_transforms=self.campaign_transforms,
+                spatial_dims=3 if self.config.is_3d else 2,
                 in_channels=self.config.in_channels,
                 out_channels=self.config.out_channels,
                 class_names=self.config.class_names,
@@ -447,6 +444,7 @@ class _Director(ABC):
             # Set up the Attention UNet model
             model = AttentionUNet(
                 campaign_transforms=self.campaign_transforms,
+                spatial_dims=3 if self.config.is_3d else 2,
                 in_channels=self.config.in_channels,
                 out_channels=self.config.out_channels,
                 class_names=self.config.class_names,
@@ -467,7 +465,7 @@ class _Director(ABC):
                 in_channels=self.config.in_channels,
                 out_channels=self.config.out_channels,
                 class_names=self.config.class_names,
-                spatial_dims=len(self.config.patch_size),
+                spatial_dims=3 if self.config.is_3d else 2,
                 depths=self.config.depths,
                 num_heads=self.config.num_heads,
                 feature_size=self.config.feature_size,
@@ -653,7 +651,7 @@ class _EnsembleDirector(_Director, ABC):
             )
 
             # Initialize new model
-            self.model = self._setup_model(model=self.config.model_class)
+            self.model = self._setup_model()
 
             # Set up trainer callbacks
             (
@@ -948,11 +946,40 @@ class SegmentationDirector(_Director):
     def _setup_campaign_transforms(self):
         """Set up campaign transforms."""
 
+        # Consistency check
+        if self.config.is_3d:
+            raise ValueError("Check the value of `is_3d` in the configuration file.")
+
         # Initialize default, example Segmentation Campaign Transform
         campaign_transforms = SegmentationCampaignTransforms2D(
             num_classes=self.config.out_channels,
             patch_size=self.config.patch_size,
             num_patches=self.config.num_patches,
+        )
+
+        # Return the campaign transforms
+        return campaign_transforms
+
+
+class SegmentationDirector3D(SegmentationDirector):
+    """Segmentation 3D Training Director."""
+
+    @override
+    def _setup_campaign_transforms(self):
+        """Set up campaign transforms."""
+
+        # Consistency check
+        if not self.config.is_3d:
+            raise ValueError("Check the value of `is_3d` in the configuration file.")
+
+        # Initialize default, example Segmentation Campaign Transform
+        campaign_transforms = SegmentationCampaignTransforms3D(
+            num_classes=self.config.out_channels,
+            patch_size=self.config.patch_size,
+            num_patches=self.config.num_patches,
+            voxel_size=self.config.voxel_size,
+            to_isotropic=self.config.to_isotropic,
+            upscale_z=self.config.up_scale_z,
         )
 
         # Return the campaign transforms
