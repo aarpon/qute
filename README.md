@@ -48,9 +48,15 @@ $ python -c "import torch; print(torch.backends.mps.is_available())"
 True
 ```
 
-## First steps
+## How to use
 
-To get started, try:
+### High-level API
+
+The high-level qute API provides easy to use objects that manage whole training, fine-tuning and prediction workflows following a user-defined configuration file. Configuration templates can be found in [config_samples/](config_samples/).
+
+![High-level API](resources/high_level_api.png){ width="800" height="600" style="display: block; margin: 0 auto" }
+
+To get started with the high-level API, try:
 
 ```bash
 $ python qute/examples/cell_segmentation_demo_unet.py 
@@ -62,7 +68,11 @@ To follow the training progress in [Tensorboard](https://www.tensorflow.org/tens
 ```bash
 $ tensorboard --logdir ${HOME}/Documents/qute/
 ```
-
 and then open TensorBoard on http://localhost:6006/.
 
-For an example on how to use `ray[tune]` to optimize hyper-parameters, see [qute/examples/cell_segmentation_hp_optim_demo_unet.py](qute/examples/cell_segmentation_hp_optim_demo_unet.py).
+### Low-level API
+
+The low-level API allows easy extension of qute for research and prototyping. You can find the detailed API documentation [here](https://ia-res.ethz.ch/docs/qute/index.html). 
+### Hyperparameter optimization
+
+For an example on how to use `ray[tune]` to optimize hyper-parameters, see [qute/examples/cell_segmentation_demo_unet_hyperparameters.py](qute/examples/cell_segmentation_demo_unet_hyperparameters.py).
