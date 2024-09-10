@@ -54,7 +54,7 @@ True
 
 The high-level qute API provides easy to use objects that manage whole training, fine-tuning and prediction workflows following a user-defined configuration file. Configuration templates can be found in [config_samples/](config_samples/).
 
-![High-level API](resources/high_level_api.png){ width="800" height="600" style="display: block; margin: 0 auto" }
+![High-level API](resources/high_level_api.png)
 
 To get started with the high-level API, try:
 
