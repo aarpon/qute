@@ -75,4 +75,4 @@ and then open TensorBoard on http://localhost:6006/.
 The low-level API allows easy extension of qute for research and prototyping. You can find the detailed API documentation [here](https://ia-res.ethz.ch/docs/qute/index.html). 
 ### Hyperparameter optimization
 
-For an example on how to use `ray[tune]` to optimize hyper-parameters, see [qute/examples/cell_segmentation_demo_unet_hyperparameters.py](qute/examples/cell_segmentation_demo_unet_hyperparameters.py).
+For an example on how to use `ray[tune]` to optimize hyper-parameters, see [examples/cell_segmentation_demo_unet_hyperparameters.py](examples/cell_segmentation_demo_unet_hyperparameters.py).
