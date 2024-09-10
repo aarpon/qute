@@ -1,5 +1,4 @@
-# qute
-
+# ![](resources/qute_logo_small.png)
 Framework to support deep-learning based computer-vision research in microscopy image analysis. Leverages and extends several [PyTorch](https://pytorch.org)-based framework and tools.
 
 * [PyTorch](https://pytorch.org)
@@ -59,7 +58,7 @@ The high-level qute API provides easy to use objects that manage whole training,
 To get started with the high-level API, try:
 
 ```bash
-$ python qute/examples/cell_segmentation_demo_unet.py 
+$ python qute/examples/cell_segmentation_demo_unet.py
 ```
 Configuration parameters are explained in [config_samples/](config_samples/).
 
@@ -72,7 +71,7 @@ and then open TensorBoard on http://localhost:6006/.
 
 ### Low-level API
 
-The low-level API allows easy extension of qute for research and prototyping. You can find the detailed API documentation [here](https://ia-res.ethz.ch/docs/qute/index.html). 
+The low-level API allows easy extension of qute for research and prototyping. You can find the detailed API documentation [here](https://ia-res.ethz.ch/docs/qute/index.html).
 ### Hyperparameter optimization
 
 For an example on how to use `ray[tune]` to optimize hyper-parameters, see [examples/cell_segmentation_demo_unet_hyperparameters.py](examples/cell_segmentation_demo_unet_hyperparameters.py).
