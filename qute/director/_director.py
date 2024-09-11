@@ -642,6 +642,11 @@ class EnsembleDirector(Director, ABC):
             # Set the fold for current training
             self.data_module.set_fold(self.current_fold)
 
+            # Print the train, validation and test sets to file
+            self.data_module.print_sets(
+                filename=self.project.run_dir / f"fold_{fold}_image_sets.txt"
+            )
+
             # Update the number of steps per epoch
             self.steps_per_epoch = len(self.data_module.train_dataloader())
 
