@@ -74,21 +74,18 @@ def cuda_get_gpu_memory_info() -> tuple[int, int]:
     Returns
     -------
     total_memory: int
-        Total GPU memory (0 if CUDA is not available).
+        Total GPU memory in bytes (0 if CUDA is not available).
 
     free_memory: int
-        Current free memory (0 if CUDA is not available).
+        Current free memory in bytes (0 if CUDA is not available).
     """
     if not torch.cuda.is_available():
         return 0, 0
 
-    current_device = torch.cuda.current_device()
-    max_memory = torch.cuda.get_device_properties(current_device).total_memory
-    free_memory = torch.cuda.memory_reserved(
-        current_device
-    ) - torch.cuda.memory_allocated(current_device)
+    # Get free and total memory
+    free_memory, total_memory = torch.cuda.mem_get_info()
 
-    return max_memory, free_memory
+    return total_memory, free_memory
 
 
 def cuda_free_memory() -> None:
