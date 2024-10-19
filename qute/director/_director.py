@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Union
 
 import pytorch_lightning as pl
+import torch
 from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
 from pytorch_lightning.callbacks import (
@@ -83,6 +84,24 @@ class Director(ABC):
         self.config = Config(self.config_file)
         if not self.config.parse():
             raise Exception("Invalid config file")
+
+        if device.get_accelerator() == "gpu":
+            # Properly enable usage of Tensor Cores
+            if device.cuda_does_gpu_support_16bit_mixed_precision() and (
+                self.config.precision == "16-mixed"
+                or self.config.precision == "bf16-mixed"
+            ):
+                torch.set_float32_matmul_precision("medium")
+                print(
+                    f'PyTorch Lightning Trainer precision = "{self.config.precision}"'
+                )
+                print(f'PyTorch matrix multiplication precision = "medium"')
+            else:
+                torch.set_float32_matmul_precision("high")
+                print(
+                    f'PyTorch Lightning Trainer precision = "{self.config.precision}"'
+                )
+                print(f'PyTorch matrix multiplication precision = "high"')
 
         # Keep a reference to the project
         self.project = None
