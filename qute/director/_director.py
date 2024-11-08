@@ -33,6 +33,7 @@ from qute.campaigns import (
     RestorationCampaignTransforms,
     SegmentationCampaignTransforms2D,
     SegmentationCampaignTransforms3D,
+    SelfSupervisedRestorationCampaignTransforms,
 )
 from qute.config import Config
 from qute.data.dataloaders import DataModuleLocalFolder
@@ -876,7 +877,7 @@ class RestorationDirector(Director):
         """Set up data module."""
 
         # Data module
-        self.data_module = DataModuleLocalFolder(
+        data_module = DataModuleLocalFolder(
             campaign_transforms=self.campaign_transforms,
             data_dir=self.config.data_dir,  # Point to the root of the data directory
             seed=self.config.seed,
@@ -892,6 +893,9 @@ class RestorationDirector(Director):
             target_images_label=self.config.target_images_label,
             inference_batch_size=self.config.inference_batch_size,
         )
+
+        # Return the data module
+        return data_module
 
     @override
     def _setup_campaign_transforms(self):
@@ -1008,6 +1012,16 @@ class SegmentationDirector3D(SegmentationDirector):
 
         # Return the campaign transforms
         return campaign_transforms
+
+
+class SelfSupervisedDirector(RestorationDirector):
+    """Self-Supervised Training Director."""
+
+    @override
+    def _setup_campaign_transforms(self):
+        """Set up campaign transforms."""
+
+        return SelfSupervisedRestorationCampaignTransforms()
 
 
 class EnsembleSegmentationDirector(EnsembleDirector, SegmentationDirector):

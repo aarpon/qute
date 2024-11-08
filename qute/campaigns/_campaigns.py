@@ -842,17 +842,17 @@ class RestorationCampaignTransforms(CampaignTransforms):
         train_transforms = Compose(
             [
                 CustomTIFFReaderd(
-                    keys=("image", "label"),
+                    keys=("image", "target"),
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
                 RandSpatialCropd(
-                    keys=("image", "label"),
+                    keys=("image", "target"),
                     roi_size=self.patch_size,
                     random_size=False,
                 ),
                 MinMaxNormalized(
-                    keys=("image", "label"),
+                    keys=("image", "target"),
                     min_intensity=self.min_intensity,
                     max_intensity=self.max_intensity,
                 ),
@@ -869,17 +869,17 @@ class RestorationCampaignTransforms(CampaignTransforms):
         val_transforms = Compose(
             [
                 CustomTIFFReaderd(
-                    keys=("image", "label"),
+                    keys=("image", "target"),
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
                 RandSpatialCropd(
-                    keys=("image", "label"),
+                    keys=("image", "target"),
                     roi_size=self.patch_size,
                     random_size=False,
                 ),
                 MinMaxNormalized(
-                    keys=("image", "label"),
+                    keys=("image", "target"),
                     min_intensity=self.min_intensity,
                     max_intensity=self.max_intensity,
                 ),

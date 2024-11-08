@@ -47,8 +47,6 @@ class CellSegmentationDemo(DataModuleLocalFolder):
         inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
         num_patches: int = 1,
-        source_images_sub_folder: str = "images",
-        target_images_sub_folder: str = "labels",
         seed: int = 42,
         num_workers: Optional[int] = os.cpu_count() - 1,
         num_inference_workers: Optional[int] = os.cpu_count() - 1,
@@ -98,12 +96,6 @@ class CellSegmentationDemo(DataModuleLocalFolder):
         num_patches: int = 1
             Number of patches per image to be extracted (and collated in the batch).
 
-        source_images_sub_folder: str = "images"
-            Name of the images sub-folder. It can be used to override the default "images".
-
-        target_images_sub_folder: str = "labels"
-            Name of the labels sub-folder. It can be used to override the default "labels".
-
         seed: int = 42
             Seed for all random number generators.
 
@@ -144,8 +136,10 @@ class CellSegmentationDemo(DataModuleLocalFolder):
             inference_batch_size=inference_batch_size,
             patch_size=patch_size,
             num_patches=num_patches,
-            source_images_sub_folder=source_images_sub_folder,
-            target_images_sub_folder=target_images_sub_folder,
+            source_images_sub_folder="images",
+            target_images_sub_folder="labels",
+            source_images_label="image",
+            target_images_label="label",
             seed=seed,
             num_workers=num_workers,
             num_inference_workers=num_inference_workers,
@@ -181,8 +175,6 @@ class CellSegmentationDemoIDT(DataModuleLocalFolder):
         inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
         num_patches: int = 1,
-        source_images_sub_folder: str = "images",
-        target_images_sub_folder: str = "labels",
         seed: int = 42,
         num_workers: Optional[int] = os.cpu_count() - 1,
         num_inference_workers: Optional[int] = os.cpu_count() - 1,
@@ -228,12 +220,6 @@ class CellSegmentationDemoIDT(DataModuleLocalFolder):
 
         num_patches: int = 1
             Number of patches per image to be extracted (and collated in the batch).
-
-        source_images_sub_folder: str = "images"
-            Name of the images sub-folder. It can be used to override the default "images".
-
-        target_images_sub_folder: str = "labels"
-            Name of the labels sub-folder. It can be used to override the default "labels".
 
         seed: int = 42
             Seed for all random number generators.
@@ -268,8 +254,10 @@ class CellSegmentationDemoIDT(DataModuleLocalFolder):
             inference_batch_size=inference_batch_size,
             patch_size=patch_size,
             num_patches=num_patches,
-            source_images_sub_folder=source_images_sub_folder,
-            target_images_sub_folder=target_images_sub_folder,
+            source_images_sub_folder="images",
+            target_images_sub_folder="labels",
+            source_images_label="image",
+            target_images_label="label",
             seed=seed,
             num_workers=num_workers,
             num_inference_workers=num_inference_workers,
@@ -303,8 +291,6 @@ class CellRestorationDemo(DataModuleLocalFolder):
         inference_batch_size: int = 2,
         patch_size: tuple = (512, 512),
         num_patches: int = 1,
-        source_images_sub_folder: str = "images",
-        target_images_sub_folder: str = "targets",
         seed: int = 42,
         num_workers: Optional[int] = os.cpu_count() - 1,
         num_inference_workers: Optional[int] = os.cpu_count() - 1,
@@ -350,12 +336,6 @@ class CellRestorationDemo(DataModuleLocalFolder):
 
         num_patches: int = 1
             Number of patches per image to be extracted (and collated in the batch).
-
-        source_images_sub_folder: str = "images"
-            Name of the images sub-folder. It can be used to override the default "images".
-
-        target_images_sub_folder: str = "labels"
-            Name of the labels sub-folder. It can be used to override the default "labels".
 
         seed: int = 42
             Seed for all random number generators.
@@ -392,8 +372,10 @@ class CellRestorationDemo(DataModuleLocalFolder):
             inference_batch_size=inference_batch_size,
             patch_size=patch_size,
             num_patches=num_patches,
-            source_images_sub_folder=source_images_sub_folder,
-            target_images_sub_folder=target_images_sub_folder,
+            source_images_sub_folder="images",
+            target_images_sub_folder="targets",
+            source_images_label="image",
+            target_images_label="target",
             seed=seed,
             num_workers=num_workers,
             num_inference_workers=num_inference_workers,

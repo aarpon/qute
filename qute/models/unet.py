@@ -44,7 +44,7 @@ class UNet(pl.LightningModule):
     """Wrap MONAI's UNet architecture into a PyTorch Lightning module.
 
     The default settings are compatible with a classification task, where
-    a single-channel input image is transformed into a three-class label image.
+    a single-channel input image is transformed into a multi-class label image.
     """
 
     def __init__(
@@ -88,12 +88,12 @@ class UNet(pl.LightningModule):
 
         class_names: Optional[tuple] = None
             Names of the output classes (for logging purposes). If omitted, they will default
-            to ("class_1", "class_2", ...)
+            to ("class_0", "class_1", ...)
 
         channels: tuple = (16, 32, 64)
-            Number of neuron per layer.
+            Number of neurons per layer.
 
-        strides: Optional[tuple] = (2, 2)
+        strides: Optional[tuple] = None
             Strides for down-sampling.
 
         criterion: DiceCELoss(include_background=False, to_onehot_y=False, softmax=True)
@@ -200,7 +200,7 @@ class UNet(pl.LightningModule):
             # Compute and log the mean metrics score per class
             mean_val_per_class = val_metrics.nanmean(dim=0)
 
-            # Do we have more than one output classes?
+            # Do we have more than one output class?
             if len(self.class_names) > 1:
 
                 # Make sure to log the correct class name in case the background is not
@@ -241,7 +241,7 @@ class UNet(pl.LightningModule):
             # Compute and log the mean metrics score per class
             mean_test_per_class = test_metrics.nanmean(dim=0)
 
-            # Do we have more than one output classes?
+            # Do we have more than one output class?
             if len(self.class_names) > 1:
 
                 # Make sure to log the correct class name in case the background is not
@@ -393,7 +393,9 @@ class UNet(pl.LightningModule):
                     )
                     c += 1
                     with TiffWriter(output_name) as tif:
-                        tif.write(pred)
+                        tif.write(
+                            pred, compression="zlib", compressionargs={"level": 9}
+                        )
 
                     # Inform
                     print(f"Saved {output_name}.")
@@ -621,7 +623,11 @@ class UNet(pl.LightningModule):
                         / f"{ensemble_prefix}{input_file_names[c].stem}.tif"
                     )
                     with TiffWriter(output_name) as tif:
-                        tif.write(ensemble_pred)
+                        tif.write(
+                            ensemble_pred,
+                            compression="zlib",
+                            compressionargs={"level": 9},
+                        )
 
                     # Inform
                     print(f"Saved {output_name}.")
@@ -651,7 +657,11 @@ class UNet(pl.LightningModule):
 
                             # Save
                             with TiffWriter(output_name) as tif:
-                                tif.write(current_pred)
+                                tif.write(
+                                    current_pred,
+                                    compression="zlib",
+                                    compressionargs={"level": 9},
+                                )
 
                     # Update global file counter c
                     c += 1
@@ -685,8 +695,8 @@ class UNet(pl.LightningModule):
         new_out_channels: int
             The number of output channels for the new Conv2d layer.
 
-        new_campaign_transforms: CampaignTransforms,
-            New CampaignTransform for the loaded model.
+        new_campaign_transforms: CampaignTransforms
+            New CampaignTransforms for the loaded model.
 
         new_criterion: loss function
             New criterion for the loaded model.
@@ -699,19 +709,15 @@ class UNet(pl.LightningModule):
 
         previous_out_channels: int = 1
             Number of output channels in the last convolutional layer of the loaded model.
-            Since this method expects a regression model, previous_out_channels defaults to 1,
-            but it should work also for a different number of output channels.
 
-        strict: bool: True
+        strict: bool = True
             Set to True for strict loading of the model (all modules and parameters must match).
 
         verbose: bool = False
-            Set to True for verbose info when scanning the model. Use this if something goes wrong and
-            you want to report an issue.
+            Set to True for verbose info when scanning the model.
 
-        map_location: Optional[torch.device]
-            The device to map the model's weights to when loading the checkpoint. Default is None, which
-            means the model is loaded to the current device.
+        map_location: Optional[Union[str, torch.device]]
+            The device to map the model's weights to when loading the checkpoint. Default is None.
 
         Returns
         -------
