@@ -164,6 +164,11 @@ class UNet(pl.LightningModule):
         }
         return [optimizer], [scheduler]
 
+    def forward(self, x):
+        """Forward step, implemented for compatibility with other libraries."""
+        y_hat = self.net(x)
+        return y_hat
+
     def training_step(self, batch, batch_idx):
         """Perform a training step."""
         x, y = batch

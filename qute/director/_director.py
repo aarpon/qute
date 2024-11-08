@@ -173,7 +173,7 @@ class Director(ABC):
         self.model = self._setup_model()
 
         # Run common training and testing operations for 'train' and 'resume' trained modes.
-        self._run_common_train_and_test()
+        self._run_common_train_and_resume()
 
     def _resume(self):
         """Resume training from a saved state."""
@@ -191,7 +191,7 @@ class Director(ABC):
         )
 
         # Run common training and testing operations for 'train' and 'resume' trained modes.
-        self._run_common_train_and_test()
+        self._run_common_train_and_resume()
 
     def _predict(self):
         """Predict using a trained model."""
@@ -288,7 +288,7 @@ class Director(ABC):
         # Set up trainer
         self.trainer = self._setup_trainer()
 
-    def _run_common_train_and_test(self):
+    def _run_common_train_and_resume(self):
         """Run common training and testing operations for 'train' and
         'resume' trained modes."""
 
