@@ -87,7 +87,7 @@ inference_batch_size = 4
 # Number of patches per image: total batch size will be `batch_size` * `num_patches`
 num_patches = 1
 
-# Number of residual units for the U-Net
+# [unet] Number of residual units for the U-Net
 num_res_units = 4
 
 # [unet, attenuation_net] Number of layers and corresponding filters in the U-Net encoder (contracting path)
@@ -121,7 +121,7 @@ class_names =  background, cell, membrane
 max_epochs = 2000
 
 # Output data type for full inference
-output_dtype = np.int32
+output_dtype = int32
 
 # Precision used by PyTorch for calculations
 # Please see https://lightning.ai/docs/pytorch/stable/common/precision_basic.html

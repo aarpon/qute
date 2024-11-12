@@ -92,7 +92,7 @@ learning_rate = 0.001
 max_epochs = 2000
 
 # Output data type for full inference
-output_dtype = np.uint16
+output_dtype = uint16
 
 # Precision used by PyTorch for calculations
 precision = 16-mixed

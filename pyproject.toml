@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "qute"
-version = "0.3.0"
+version = "0.4.0"
 description = "Deep learning workflow manager."
 authors = ["Aaron Ponti <aaron.ponti@bsse.ethz.ch>"]
 license = "Apache-2.0"
@@ -41,7 +41,7 @@ force_grid_wrap = 0
 use_parentheses = true
 line_length = 88
 combine_as_imports = true
-known_third_party = ["imio", "monai", "natsort", "nd2reader", "numpy", "pytest", "pytorch_lightning", "ray", "requests", "scipy", "skimage", "sklearn", "tifffile", "torch", "torchmetrics", "tqdm", "typing_extensions", "userpaths"]
+known_third_party = ["imio", "monai", "natsort", "nd2reader", "numpy", "pytest", "pytorch_lightning", "ray", "requests", "scipy", "skimage", "sklearn", "tifffile", "torch", "torchmetrics", "tqdm", "typer", "typing_extensions", "userpaths"]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<=3.13"
@@ -63,6 +63,7 @@ nd2reader = "^3.3.0"
 scipy = "^1.14.0"
 typing-extensions = "^4.12.2"
 monai = "^1.4.0"
+typer = "^0.13.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
@@ -71,6 +72,9 @@ types-pyyaml = "^6.0.12.20240311"
 types-requests = "^2.32.0.20240622"
 pre-commit = "^3.7.1"
 pdoc3 = "^0.11.1"
+
+[tool.poetry.scripts]
+qute = "qute.main:app"
 
 [build-system]
 requires = ["poetry-core"]

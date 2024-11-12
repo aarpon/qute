@@ -9,7 +9,7 @@
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __doc__ = f"""
 This is the documentation of the `qute` library (version {__version__}).
 

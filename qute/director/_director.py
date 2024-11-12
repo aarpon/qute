@@ -209,6 +209,9 @@ class Director(ABC):
         # Set up project
         self.project = Project(self.config)
 
+        # Copy the configuration file to the run folder
+        self.project.copy_configuration_file()
+
         # Check that the model exists
         if not self.config.source_model_path.is_file():
             raise ValueError(
@@ -231,7 +234,7 @@ class Director(ABC):
         # Display target folder
         if self.config.target_for_prediction is None:
             print("Target for prediction not specified in configuration.")
-        print(f"Predictions saved to {self.project.target_for_prediction}.")
+        print(f"Saving predictions to {self.project.target_for_prediction}.")
 
         # Run full inference
         self.model.full_inference(
@@ -333,7 +336,7 @@ class Director(ABC):
         # Display target folder
         if self.config.target_for_prediction is None:
             print("Target for prediction not specified in configuration.")
-        print(f"Predictions saved to {self.project.target_for_prediction}.")
+        print(f"Saving predictions to {self.project.target_for_prediction}.")
 
         # Run full inference
         self.model.full_inference(
@@ -746,7 +749,7 @@ class EnsembleDirector(Director, ABC):
         # Display target folder
         if self.config.target_for_prediction is None:
             print("Target for prediction not specified in configuration.")
-        print(f"Predictions saved to {self.project.target_for_prediction}.")
+        print(f"Saving predictions to {self.project.target_for_prediction}.")
 
         # Run ensemble prediction
         UNet.full_inference_ensemble(
@@ -787,6 +790,9 @@ class EnsembleDirector(Director, ABC):
 
         # Set up project
         self.project = Project(self.config)
+
+        # Copy the configuration file to the run folder
+        self.project.copy_configuration_file()
 
         # Initialize the campaign transforms
         self.campaign_transforms = self._setup_campaign_transforms()
