@@ -58,26 +58,6 @@ class Director(ABC):
             Full path to the configuration file.
         """
 
-        # Check if the director is instantiated from a program entry point
-        frame = inspect.currentframe()
-        cont = True
-        while cont:
-            caller_module = frame.f_globals["__name__"]
-            if caller_module == "qute.director._director":
-                frame = frame.f_back
-            else:
-                cont = False
-        caller_module = frame.f_globals["__name__"]
-        if caller_module != "__main__":
-            print(
-                "Warning: the Director is not instantiated from the program entry point (`__main__`).",
-                file=sys.stderr,
-            )
-            print(
-                "This could cause issues in particular on macOS and Windows.",
-                file=sys.stderr,
-            )
-
         # Store the configuration file
         self.config_file = config_file
 
