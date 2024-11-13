@@ -64,6 +64,7 @@ scipy = "^1.14.0"
 typing-extensions = "^4.12.2"
 monai = "^1.4.0"
 typer = "^0.13.0"
+torchmetrics = "^1.6.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

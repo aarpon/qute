@@ -44,13 +44,20 @@ in_channels = 1
 out_channels = 1
 
 # Fraction of source images to be used for training (0.0 - 1.0): omit for default
-train_fraction =
+train_fraction = 0.7
 
 # Fraction of source images to be used for validation (0.0 - 1.0): omit for default
-val_fraction =
+val_fraction = 0.2
 
 # Fraction of source images to be used for testing (0.0 - 1.0): omit for default
-test_fraction =
+test_fraction = 0.1
+
+# Checkpoint monitor: one of "loss" or "metrics"
+checkpoint_monitor = loss
+
+# Use early stopping based on `checkpoint_monitor` and `checkpoint_metrics_class`?
+use_early_stopping = True
+early_stopping_patience = 10
 
 # Full path to the images to be used for prediction: must be specified if trainer_mode is `predict`
 source_for_prediction =
@@ -59,6 +66,8 @@ source_for_prediction =
 target_for_prediction =
 
 # Full path to an existing model for `resume` or `predict`: ignored if trainer_mode is `train`
+# In case of ensemble prediction, pass the path to the models folder that contains the
+# various folds.
 source_model_path =
 
 # Seed for random number generation initialization
@@ -68,22 +77,31 @@ seed = 2022
 batch_size = 8
 
 # Batch size for interference
-inference_batch_size = 8
+inference_batch_size = 4
 
 # Number of patches per image: total batch size will be `batch_size` * `num_patches`
-num_patches = 4
+num_patches = 1
 
-# Number of residual units for the U-Net
+# [unet] Number of residual units for the U-Net
 num_res_units = 4
 
-# Number of layers and corresponding filters in the U-Net encoder (contracting path)
+# [unet, attenuation_net] Number of layers and corresponding filters in the U-Net encoder (contracting path)
 channels = 16, 32, 64
 
-# Kernel strides: must be one entry shorter than `channels` (omit to use defaults)
+# [unet, attenuation_net] Kernel strides: must be one entry shorter than `channels` (omit to use defaults)
 strides = 2, 2
 
+# [swin_unetr] Number of layers in each stage
+depths = 2, 2, 2, 2
+
+# [swin_unetr] Number of attention heads
+num_heads = 3, 6, 12, 24
+
+# [swin_unetr] Dimension of network feature size
+feature_size = 24
+
 # Size of one patch
-patch_size = 1024, 1024
+patch_size = 640, 640
 
 # Initial learning rate
 learning_rate = 0.001
@@ -95,4 +113,5 @@ max_epochs = 2000
 output_dtype = uint16
 
 # Precision used by PyTorch for calculations
+# Please see https://lightning.ai/docs/pytorch/stable/common/precision_basic.html
 precision = 16-mixed
