@@ -139,9 +139,11 @@ class CombinedInvMeanAbsoluteErrorBinaryDiceMetric(torchmetrics.Metric, ABC):
             raise ValueError("Unsupported geometry.")
 
         # Calculate the MAE metric
+        # Please notice that torchmetrics.MeanAbsoluteError() cannot handle batch dimensions
+        # larger than one, even though it is fine with processing 5D tensors of shape (1, C, D, H, W).
         mae_value = self.mae_metric(
-            output[:, self.regression_channel, ...].unsqueeze(1),
-            target[:, self.regression_channel, ...].unsqueeze(1),
+            output[:, self.regression_channel, ...].unsqueeze(1).reshape(-1),
+            target[:, self.regression_channel, ...].unsqueeze(1).reshape(-1),
         )
 
         # Normalize and invert MAE
