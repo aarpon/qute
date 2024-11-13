@@ -9,6 +9,7 @@
 #    Aaron Ponti - initial API and implementation
 #  ******************************************************************************
 import inspect
+import os
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -48,7 +49,7 @@ from qute.random import set_global_rng_seed
 class Director(ABC):
     """Abstract base class defining the interface for all directors."""
 
-    def __init__(self, config_file: Union[Path, str]) -> None:
+    def __init__(self, config_file: Union[Path, str], num_workers: int = -1) -> None:
         """Constructor.
 
         Parameters
@@ -60,6 +61,12 @@ class Director(ABC):
 
         # Store the configuration file
         self.config_file = config_file
+
+        # Number of workers
+        if num_workers == -1:
+            self.num_workers = os.cpu_count()
+        else:
+            self.num_workers = num_workers
 
         # Parse it
         self.config = Config(self.config_file)
@@ -202,7 +209,7 @@ class Director(ABC):
         self.campaign_transforms = self._setup_campaign_transforms()
 
         # Initialize data module
-        self.data_module = self._setup_data_module()
+        self.data_module = self._setup_data_module(num_workers=self.num_workers)
 
         # Load existing model
         model_class = self._get_model_class()
@@ -238,7 +245,7 @@ class Director(ABC):
         self.campaign_transforms = self._setup_campaign_transforms()
 
         # Set up the data module
-        self.data_module = self._setup_data_module()
+        self.data_module = self._setup_data_module(num_workers=self.num_workers)
 
         # Inform
         print(f"Working directory: {self.project.run_dir}")
@@ -591,7 +598,7 @@ class EnsembleDirector(Director, ABC):
         self.campaign_transforms = self._setup_campaign_transforms()
 
         # Set up the data module
-        self.data_module = self._setup_data_module()
+        self.data_module = self._setup_data_module(num_workers=self.num_workers)
 
         # Inform
         print(f"Working directory: {self.project.run_dir}")
@@ -778,7 +785,7 @@ class EnsembleDirector(Director, ABC):
         self.campaign_transforms = self._setup_campaign_transforms()
 
         # Initialize data module
-        self.data_module = self._setup_data_module()
+        self.data_module = self._setup_data_module(num_workers=self.num_workers)
 
         # Load all models
         models = self._load_models(models_dir=self.config.source_model_path)
@@ -859,7 +866,7 @@ class RestorationDirector(Director):
         return criterion
 
     @override
-    def _setup_data_module(self):
+    def _setup_data_module(self, num_workers: int = os.cpu_count()):
         """Set up data module."""
 
         # Data module
@@ -878,6 +885,7 @@ class RestorationDirector(Director):
             source_images_label=self.config.source_images_label,
             target_images_label=self.config.target_images_label,
             inference_batch_size=self.config.inference_batch_size,
+            num_workers=num_workers,
         )
 
         # Return the data module
@@ -931,7 +939,7 @@ class SegmentationDirector(Director):
         return criterion
 
     @override
-    def _setup_data_module(self):
+    def _setup_data_module(self, num_workers: int = os.cpu_count()):
         """Set up data module."""
 
         # Data module
@@ -951,6 +959,7 @@ class SegmentationDirector(Director):
             source_images_label=self.config.source_images_label,
             target_images_label=self.config.target_images_label,
             inference_batch_size=self.config.inference_batch_size,
+            num_workers=num_workers,
         )
 
         # Return data module
@@ -1016,7 +1025,7 @@ class EnsembleSegmentationDirector(EnsembleDirector, SegmentationDirector):
     def __init__(self, config_file: Union[Path, str], num_folds: int) -> None:
         super().__init__(config_file, num_folds)
 
-    def _setup_data_module(self):
+    def _setup_data_module(self, num_workers: int = os.cpu_count()):
         """Set up data module with folds."""
 
         # Data module
@@ -1036,6 +1045,7 @@ class EnsembleSegmentationDirector(EnsembleDirector, SegmentationDirector):
             source_images_label=self.config.source_images_label,
             target_images_label=self.config.target_images_label,
             inference_batch_size=self.config.inference_batch_size,
+            num_workers=num_workers,
         )
 
         # Return data module

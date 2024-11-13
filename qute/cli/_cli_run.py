@@ -26,6 +26,13 @@ def segmentation(
     config: str = typer.Argument(
         ..., help="Full path to the configuration file.", show_default=False
     ),
+    num_workers: int = typer.Option(
+        -1,
+        "-n",
+        "--num_workers",
+        help="Number of workers to be used for the dataloaders. Defaults to the number of CPU cores.",
+        show_default=False,
+    ),
 ):
     """Run a segmentation experiment specified by a configuration file."""
 
@@ -35,7 +42,7 @@ def segmentation(
         raise ValueError(f"The specified config file {config_file} does not exist.")
 
     # Instantiate Director
-    director = SegmentationDirector(config_file=config_file)
+    director = SegmentationDirector(config_file=config_file, num_workers=num_workers)
 
     # Run training
     director.run()
