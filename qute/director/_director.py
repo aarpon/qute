@@ -209,7 +209,7 @@ class Director(ABC):
         self.campaign_transforms = self._setup_campaign_transforms()
 
         # Initialize data module
-        self.data_module = self._setup_data_module(num_workers=self.num_workers)
+        self.data_module = self._setup_data_module()
 
         # Load existing model
         model_class = self._get_model_class()
@@ -245,7 +245,7 @@ class Director(ABC):
         self.campaign_transforms = self._setup_campaign_transforms()
 
         # Set up the data module
-        self.data_module = self._setup_data_module(num_workers=self.num_workers)
+        self.data_module = self._setup_data_module()
 
         # Inform
         print(f"Working directory: {self.project.run_dir}")
@@ -513,7 +513,12 @@ class Director(ABC):
 class EnsembleDirector(Director, ABC):
     """Ensemble Training Director."""
 
-    def __init__(self, config_file: Union[Path, str], num_folds: int) -> None:
+    def __init__(
+        self,
+        config_file: Union[Path, str],
+        num_folds: int,
+        num_workers: int = os.cpu_count(),
+    ) -> None:
         """Constructor.
 
         Parameters
@@ -529,6 +534,7 @@ class EnsembleDirector(Director, ABC):
         super().__init__(config_file=config_file)
         self.num_folds = num_folds
         self.current_fold = -1
+        self.num_workers = num_workers
 
         # Keep track of the trained models
         self._best_models = []
@@ -598,7 +604,7 @@ class EnsembleDirector(Director, ABC):
         self.campaign_transforms = self._setup_campaign_transforms()
 
         # Set up the data module
-        self.data_module = self._setup_data_module(num_workers=self.num_workers)
+        self.data_module = self._setup_data_module()
 
         # Inform
         print(f"Working directory: {self.project.run_dir}")
@@ -785,7 +791,7 @@ class EnsembleDirector(Director, ABC):
         self.campaign_transforms = self._setup_campaign_transforms()
 
         # Initialize data module
-        self.data_module = self._setup_data_module(num_workers=self.num_workers)
+        self.data_module = self._setup_data_module()
 
         # Load all models
         models = self._load_models(models_dir=self.config.source_model_path)
@@ -866,7 +872,7 @@ class RestorationDirector(Director):
         return criterion
 
     @override
-    def _setup_data_module(self, num_workers: int = os.cpu_count()):
+    def _setup_data_module(self):
         """Set up data module."""
 
         # Data module
@@ -885,7 +891,7 @@ class RestorationDirector(Director):
             source_images_label=self.config.source_images_label,
             target_images_label=self.config.target_images_label,
             inference_batch_size=self.config.inference_batch_size,
-            num_workers=num_workers,
+            num_workers=self.num_workers,
         )
 
         # Return the data module
@@ -939,7 +945,7 @@ class SegmentationDirector(Director):
         return criterion
 
     @override
-    def _setup_data_module(self, num_workers: int = os.cpu_count()):
+    def _setup_data_module(self):
         """Set up data module."""
 
         # Data module
@@ -959,7 +965,7 @@ class SegmentationDirector(Director):
             source_images_label=self.config.source_images_label,
             target_images_label=self.config.target_images_label,
             inference_batch_size=self.config.inference_batch_size,
-            num_workers=num_workers,
+            num_workers=self.num_workers,
         )
 
         # Return data module
@@ -1022,10 +1028,15 @@ class SelfSupervisedDirector(RestorationDirector):
 class EnsembleSegmentationDirector(EnsembleDirector, SegmentationDirector):
     """Ensemble Segmentation Training Director."""
 
-    def __init__(self, config_file: Union[Path, str], num_folds: int) -> None:
-        super().__init__(config_file, num_folds)
+    def __init__(
+        self,
+        config_file: Union[Path, str],
+        num_folds: int,
+        num_workers: int = os.cpu_count(),
+    ) -> None:
+        super().__init__(config_file, num_folds, num_workers)
 
-    def _setup_data_module(self, num_workers: int = os.cpu_count()):
+    def _setup_data_module(self):
         """Set up data module with folds."""
 
         # Data module
@@ -1045,7 +1056,7 @@ class EnsembleSegmentationDirector(EnsembleDirector, SegmentationDirector):
             source_images_label=self.config.source_images_label,
             target_images_label=self.config.target_images_label,
             inference_batch_size=self.config.inference_batch_size,
-            num_workers=num_workers,
+            num_workers=self.num_workers,
         )
 
         # Return data module
@@ -1097,6 +1108,7 @@ class CellRestorationDemoDirector(RestorationDirector):
             val_fraction=self.config.val_fraction,
             test_fraction=self.config.test_fraction,
             inference_batch_size=self.config.inference_batch_size,
+            num_workers=self.num_workers,
         )
 
         # Return data module
@@ -1122,6 +1134,7 @@ class CellSegmentationDemoDirector(SegmentationDirector):
             val_fraction=self.config.val_fraction,
             test_fraction=self.config.test_fraction,
             inference_batch_size=self.config.inference_batch_size,
+            num_workers=self.num_workers,
         )
 
         # Return data module
@@ -1148,6 +1161,7 @@ class EnsembleCellSegmentationDemoDirector(EnsembleSegmentationDirector):
             val_fraction=self.config.val_fraction,
             test_fraction=self.config.test_fraction,
             inference_batch_size=self.config.inference_batch_size,
+            num_workers=self.num_workers,
         )
 
         # Return the data module

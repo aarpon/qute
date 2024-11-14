@@ -13,7 +13,7 @@ from pathlib import Path
 
 import typer
 
-from qute.director import SegmentationDirector
+from qute.director import EnsembleCellSegmentationDemoDirector, SegmentationDirector
 
 # Instantiate Typer
 run_app = typer.Typer(
@@ -43,6 +43,44 @@ def segmentation(
 
     # Instantiate Director
     director = SegmentationDirector(config_file=config_file, num_workers=num_workers)
+
+    # Run training
+    director.run()
+
+
+@run_app.command()
+def ensemble_segmentation(
+    config: str = typer.Argument(
+        ..., help="Full path to the configuration file.", show_default=False
+    ),
+    num_folds: int = typer.Option(
+        5,
+        "-f",
+        "--num_folds",
+        help="Number of folds for cross-correlation validation.",
+        show_default=True,
+    ),
+    num_workers: int = typer.Option(
+        -1,
+        "-n",
+        "--num_workers",
+        help="Number of workers to be used for the dataloaders. Defaults to the number of CPU cores.",
+        show_default=False,
+    ),
+):
+    """Run a segmentation experiment specified by a configuration file."""
+
+    # Check input argument config
+    config_file = Path(config).resolve()
+    if not config_file.is_file():
+        raise ValueError(f"The specified config file {config_file} does not exist.")
+
+    # Instantiate Director
+    director = EnsembleCellSegmentationDemoDirector(
+        config_file=config_file,
+        num_folds=num_folds,
+        num_workers=num_workers,
+    )
 
     # Run training
     director.run()

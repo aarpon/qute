@@ -34,7 +34,7 @@ if __name__ == "__main__":
     try:
         mp.set_start_method("fork")
     except RuntimeError:
-        pass  # Start method is already set, ignore the error
+        pass
 
     # Run app
     app()

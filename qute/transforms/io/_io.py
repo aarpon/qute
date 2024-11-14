@@ -553,4 +553,12 @@ class CustomTIFFReaderd(MapTransform):
             # Assign the tensor to the corresponding key
             d[key] = out  # (Meta)Tensor(image)
 
+        # Check
+        expected_size = None
+        for key in self.keys:
+            if expected_size is None:
+                expected_size = d[key].shape
+            else:
+                assert d[key].shape == expected_size
+
         return d

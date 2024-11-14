@@ -235,7 +235,7 @@ class DebugInformer(Transform):
                 elif t is dict:
                     print(f"'{key}': dict;", end=" ")
                 elif t is pathlib.PosixPath:
-                    print(f"'{key}': path={str(data[key])};", end=" ")
+                    print(f"'{key}': path={str(data[key].name)};", end=" ")
                 else:
                     print(f"'{key}': {t};", end=" ")
             print()
