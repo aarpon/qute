@@ -857,6 +857,8 @@ class RestorationCampaignTransforms(CampaignTransforms):
                     max_intensity=self.max_intensity,
                 ),
                 ToPyTorchLightningOutputd(
+                    image_key="image",
+                    label_key="target",
                     image_dtype=torch.float32,
                     label_dtype=torch.float32,
                 ),
@@ -884,6 +886,8 @@ class RestorationCampaignTransforms(CampaignTransforms):
                     max_intensity=self.max_intensity,
                 ),
                 ToPyTorchLightningOutputd(
+                    image_key="image",
+                    label_key="target",
                     image_dtype=torch.float32,
                     label_dtype=torch.float32,
                 ),

@@ -8,9 +8,7 @@
 #  Contributors:
 #    Aaron Ponti - initial API and implementation
 #  ******************************************************************************
-import inspect
 import os
-import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Union
@@ -73,23 +71,9 @@ class Director(ABC):
         if not self.config.parse():
             raise Exception("Invalid config file")
 
-        if device.get_accelerator() == "gpu":
-            # Properly enable usage of Tensor Cores
-            if device.cuda_does_gpu_support_16bit_mixed_precision() and (
-                self.config.precision == "16-mixed"
-                or self.config.precision == "bf16-mixed"
-            ):
-                torch.set_float32_matmul_precision("medium")
-                print(
-                    f'PyTorch Lightning Trainer precision = "{self.config.precision}"'
-                )
-                print(f'PyTorch matrix multiplication precision = "medium"')
-            else:
-                torch.set_float32_matmul_precision("high")
-                print(
-                    f'PyTorch Lightning Trainer precision = "{self.config.precision}"'
-                )
-                print(f'PyTorch matrix multiplication precision = "high"')
+        # Set up training precision
+        self.trainer_precision = None
+        self._set_precision()
 
         # Keep a reference to the project
         self.project = None
@@ -129,6 +113,46 @@ class Director(ABC):
         """Set up metrics."""
         raise NotImplementedError("Reimplement in child class.")
 
+    def _set_precision(self):
+        """Set the precision for training based on the accelerator."""
+
+        # Device and precision settings
+        accelerator = device.get_accelerator()
+        if accelerator == "gpu":
+            # Properly enable usage of Tensor Cores on CUDA GPUs
+            if device.cuda_does_gpu_support_16bit_mixed_precision() and (
+                self.config.precision == "16-mixed"
+                or self.config.precision == "bf16-mixed"
+            ):
+                torch.set_float32_matmul_precision("medium")
+                print(
+                    f'PyTorch Lightning Trainer precision = "{self.config.precision}"'
+                )
+                print('PyTorch matrix multiplication precision = "medium"')
+            else:
+                torch.set_float32_matmul_precision("high")
+                print(
+                    f'PyTorch Lightning Trainer precision = "{self.config.precision}"'
+                )
+                print('PyTorch matrix multiplication precision = "high"')
+            # Set trainer_precision for GPU
+            trainer_precision = self.config.precision
+        elif accelerator == "mps":
+            # MPS backend currently supports only float32 precision
+            trainer_precision = 32
+            print("MPS backend detected. Using float32 precision.")
+        elif accelerator == "cpu":
+            # CPU backend supports only float32 precision efficiently
+            trainer_precision = 32
+            print("CPU backend detected. Using float32 precision.")
+        else:
+            # Other accelerators
+            trainer_precision = self.config.precision
+            print(f"Using default precision: {trainer_precision}")
+
+        # Store the trainer precision
+        self.trainer_precision = trainer_precision
+
     def run(self):
         """Run the process as configured in the configuration file."""
 
@@ -147,7 +171,7 @@ class Director(ABC):
 
         else:
             raise ValueError(
-                "Trainer mode must be one of 'train' or 'resume' or 'predict'."
+                "Trainer mode must be one of 'train', 'resume', or 'predict'."
             )
 
     def _train(self):
@@ -159,7 +183,7 @@ class Director(ABC):
         # Set up model
         self.model = self._setup_model()
 
-        # Run common training and testing operations for 'train' and 'resume' trained modes.
+        # Run common training and testing operations for 'train' and 'resume' modes.
         self._run_common_train_and_resume()
 
     def _resume(self):
@@ -177,7 +201,7 @@ class Director(ABC):
             class_names=self.config.class_names,
         )
 
-        # Run common training and testing operations for 'train' and 'resume' trained modes.
+        # Run common training and testing operations for 'train' and 'resume' modes.
         self._run_common_train_and_resume()
 
     def _predict(self):
@@ -211,24 +235,36 @@ class Director(ABC):
         # Initialize data module
         self.data_module = self._setup_data_module()
 
+        # Initialize criterion and metrics
+        self.criterion = self._setup_loss()
+        self.metrics = self._setup_metrics()
+
         # Load existing model
         model_class = self._get_model_class()
-        self.model = model_class.load_from_checkpoint(self.config.source_model_path)
+        self.model = model_class.load_from_checkpoint(
+            self.config.source_model_path,
+            criterion=self.criterion,
+            metrics=self.metrics,
+            class_names=self.config.class_names,
+        )
 
         # Inform
         print(f"Predicting with model {self.config.source_model_path}")
 
-        # Display target folder
+        # Determine target folder for predictions
         if self.config.target_for_prediction is None:
             print("Target for prediction not specified in configuration.")
-        print(f"Saving predictions to {self.project.target_for_prediction}.")
+            target_for_prediction = self.project.run_dir / "predictions"
+            print(f"Defaulting to {target_for_prediction}")
+        else:
+            target_for_prediction = self.config.target_for_prediction
 
         # Run full inference
         self.model.full_inference(
             data_loader=self.data_module.inference_dataloader(
-                input_folder=self.project.source_for_prediction
+                input_folder=self.config.source_for_prediction
             ),
-            target_folder=self.project.target_for_prediction,
+            target_folder=target_for_prediction,
             roi_size=self.config.patch_size,
             batch_size=self.config.inference_batch_size,
             transpose=False,
@@ -254,8 +290,10 @@ class Director(ABC):
         self.data_module.prepare_data()
         self.data_module.setup("train")
         self.steps_per_epoch = len(self.data_module.train_dataloader())
+        if self.steps_per_epoch == 0:
+            raise ValueError("Number of steps per epoch is zero. Check your data.")
 
-        # Print the train, validation and test sets to file
+        # Print the train, validation, and test sets to file
         self.data_module.print_sets(filename=self.project.run_dir / "image_sets.txt")
 
         # Set up loss function
@@ -279,8 +317,7 @@ class Director(ABC):
         self.trainer = self._setup_trainer()
 
     def _run_common_train_and_resume(self):
-        """Run common training and testing operations for 'train' and
-        'resume' trained modes."""
+        """Run common training and testing operations for 'train' and 'resume' modes."""
 
         # Copy the configuration file to the run folder
         self.project.copy_configuration_file()
@@ -307,6 +344,7 @@ class Director(ABC):
             strict=False,
             criterion=self.criterion,
             metrics=self.metrics,
+            class_names=self.config.class_names,
         )
 
         # Test
@@ -320,17 +358,20 @@ class Director(ABC):
             )
             return
 
-        # Display target folder
+        # Determine target folder for predictions
         if self.config.target_for_prediction is None:
             print("Target for prediction not specified in configuration.")
-        print(f"Saving predictions to {self.project.target_for_prediction}.")
+            target_for_prediction = self.project.run_dir / "predictions"
+            print(f"Defaulting to {target_for_prediction}")
+        else:
+            target_for_prediction = self.config.target_for_prediction
 
         # Run full inference
         self.model.full_inference(
             data_loader=self.data_module.inference_dataloader(
-                input_folder=self.project.source_for_prediction
+                input_folder=self.config.source_for_prediction
             ),
-            target_folder=self.project.target_for_prediction,
+            target_folder=target_for_prediction,
             roi_size=self.config.patch_size,
             batch_size=self.config.inference_batch_size,
             transpose=False,
@@ -408,7 +449,7 @@ class Director(ABC):
             default_root_dir=self.project.results_dir,
             accelerator=device.get_accelerator(),
             devices=1,
-            precision=self.config.precision,
+            precision=self.trainer_precision,
             callbacks=self.training_callbacks,
             max_epochs=self.config.max_epochs,
             log_every_n_steps=1,
@@ -424,75 +465,58 @@ class Director(ABC):
         """Set up the model."""
 
         # Get and check the model from the configuration
-        model = self.config.model_class
-        if model not in ["unet", "attention_unet", "swin_unetr"]:
+        model_class_name = self.config.model_class
+        if model_class_name not in ["unet", "attention_unet", "swin_unetr"]:
             raise ValueError(
-                "The 'model' must be one of 'unet', 'attention_unet', or 'swin_unetr'."
+                "The 'model_class' must be one of 'unet', 'attention_unet', or 'swin_unetr'."
             )
 
-        if model == "unet":
+        model_class = self._get_model_class()
 
-            # Set up the UNet model
-            model = UNet(
-                campaign_transforms=self.campaign_transforms,
-                spatial_dims=3 if self.config.is_3d else 2,
-                in_channels=self.config.in_channels,
-                out_channels=self.config.out_channels,
-                class_names=self.config.class_names,
-                num_res_units=self.config.num_res_units,
-                criterion=self.criterion,
-                channels=self.config.channels,
-                strides=self.config.strides,
-                metrics=self.metrics,
-                learning_rate=self.config.learning_rate,
-                lr_scheduler_class=self.lr_scheduler_class,
-                lr_scheduler_parameters=self.lr_scheduler_parameters,
+        # Prepare model-specific parameters
+        model_params = {
+            "campaign_transforms": self.campaign_transforms,
+            "spatial_dims": 3 if self.config.is_3d else 2,
+            "in_channels": self.config.in_channels,
+            "out_channels": self.config.out_channels,
+            "class_names": self.config.class_names,
+            "criterion": self.criterion,
+            "metrics": self.metrics,
+            "learning_rate": self.config.learning_rate,
+            "lr_scheduler_class": self.lr_scheduler_class,
+            "lr_scheduler_parameters": self.lr_scheduler_parameters,
+        }
+
+        # Add additional model-specific parameters
+        if model_class_name == "unet":
+            model_params.update(
+                {
+                    "num_res_units": self.config.num_res_units,
+                    "channels": self.config.channels,
+                    "strides": self.config.strides,
+                }
+            )
+        elif model_class_name == "attention_unet":
+            model_params.update(
+                {
+                    "channels": self.config.channels,
+                    "strides": self.config.strides,
+                }
+            )
+        elif model_class_name == "swin_unetr":
+            model_params.update(
+                {
+                    "depths": self.config.depths,
+                    "num_heads": self.config.num_heads,
+                    "feature_size": self.config.feature_size,
+                }
             )
 
-        elif model == "attention_unet":
-
-            # Set up the Attention UNet model
-            model = AttentionUNet(
-                campaign_transforms=self.campaign_transforms,
-                spatial_dims=3 if self.config.is_3d else 2,
-                in_channels=self.config.in_channels,
-                out_channels=self.config.out_channels,
-                class_names=self.config.class_names,
-                criterion=self.criterion,
-                channels=self.config.channels,
-                strides=self.config.strides,
-                metrics=self.metrics,
-                learning_rate=self.config.learning_rate,
-                lr_scheduler_class=self.lr_scheduler_class,
-                lr_scheduler_parameters=self.lr_scheduler_parameters,
-            )
-
-        elif model == "swin_unetr":
-
-            # Set up the SwinUNETR model
-            model = SwinUNETR(
-                campaign_transforms=self.campaign_transforms,
-                in_channels=self.config.in_channels,
-                out_channels=self.config.out_channels,
-                class_names=self.config.class_names,
-                spatial_dims=3 if self.config.is_3d else 2,
-                depths=self.config.depths,
-                num_heads=self.config.num_heads,
-                feature_size=self.config.feature_size,
-                criterion=self.criterion,
-                metrics=self.metrics,
-                learning_rate=self.config.learning_rate,
-                lr_scheduler_class=self.lr_scheduler_class,
-                lr_scheduler_parameters=self.lr_scheduler_parameters,
-            )
-
-        else:
-            raise ValueError(
-                "The 'model' must be one of 'unet', 'attention_unet', or 'swin_unetr'."
-            )
+        # Instantiate the model
+        model = model_class(**model_params)
 
         # Inform
-        print(f"Using model: {self._get_model_class()} ")
+        print(f"Using model: {model_class.__name__}")
 
         # Return the model
         return model
@@ -500,24 +524,23 @@ class Director(ABC):
     def _get_model_class(self):
         """Return the class of the model being used."""
         if self.config.model_class == "unet":
-            model_class = UNet
+            return UNet
         elif self.config.model_class == "attention_unet":
-            model_class = AttentionUNet
+            return AttentionUNet
         elif self.config.model_class == "swin_unetr":
-            model_class = SwinUNETR
+            return SwinUNETR
         else:
             raise ValueError(f"Bad value for model type {self.config.model_class};")
-        return model_class
 
 
-class EnsembleDirector(Director, ABC):
+class EnsembleDirector(Director):
     """Ensemble Training Director."""
 
     def __init__(
         self,
         config_file: Union[Path, str],
         num_folds: int,
-        num_workers: int = os.cpu_count(),
+        num_workers: int = -1,
     ) -> None:
         """Constructor.
 
@@ -528,13 +551,12 @@ class EnsembleDirector(Director, ABC):
             Full path to the configuration file.
 
         num_folds: int
-            Number of folds for cross-correlation validation.
+            Number of folds for cross-validation.
         """
 
-        super().__init__(config_file=config_file)
+        super().__init__(config_file=config_file, num_workers=num_workers)
         self.num_folds = num_folds
         self.current_fold = -1
-        self.num_workers = num_workers
 
         # Keep track of the trained models
         self._best_models = []
@@ -582,7 +604,7 @@ class EnsembleDirector(Director, ABC):
             default_root_dir=self.project.results_dir / f"fold_{self.current_fold}",
             accelerator=device.get_accelerator(),
             devices=1,
-            precision=self.config.precision,
+            precision=self.trainer_precision,
             callbacks=self.training_callbacks,
             max_epochs=self.config.max_epochs,
             log_every_n_steps=1,
@@ -593,49 +615,6 @@ class EnsembleDirector(Director, ABC):
 
         # Return the trainer
         return trainer
-
-    def _setup_basis_for_training_and_resume(self):
-        """Initialize the basic components for training or resume."""
-
-        # Set up the project
-        self.project = self._setup_project()
-
-        # Set up the transform campaign
-        self.campaign_transforms = self._setup_campaign_transforms()
-
-        # Set up the data module
-        self.data_module = self._setup_data_module()
-
-        # Inform
-        print(f"Working directory: {self.project.run_dir}")
-
-        # Calculate the number of steps per epoch
-        self.data_module.prepare_data()
-        self.data_module.setup("train")
-        self.steps_per_epoch = len(self.data_module.train_dataloader())
-
-        # Print the train, validation and test sets to file
-        self.data_module.print_sets(filename=self.project.run_dir / "image_sets.txt")
-
-        # Set up loss function
-        self.criterion = self._setup_loss()
-
-        # Set up metrics
-        self.metrics = self._setup_metrics()
-
-        # Set up trainer callbacks
-        (
-            self.training_callbacks,
-            self.early_stopping,
-            self.model_checkpoint,
-            self.lr_monitor,
-        ) = self._setup_trainer_callbacks()
-
-        # Set up the scheduler
-        self.lr_scheduler_class, self.lr_scheduler_parameters = self._setup_scheduler()
-
-        # Set up trainer
-        self.trainer = self._setup_trainer()
 
     def _train(self):
         """Run a training from scratch."""
@@ -658,13 +637,15 @@ class EnsembleDirector(Director, ABC):
             # Set the fold for current training
             self.data_module.set_fold(self.current_fold)
 
-            # Print the train, validation and test sets to file
+            # Print the train, validation, and test sets to file
             self.data_module.print_sets(
                 filename=self.project.run_dir / f"fold_{fold}_image_sets.txt"
             )
 
             # Update the number of steps per epoch
             self.steps_per_epoch = len(self.data_module.train_dataloader())
+            if self.steps_per_epoch == 0:
+                raise ValueError("Number of steps per epoch is zero. Check your data.")
 
             # Reset the learning rate scheduler
             self.lr_scheduler_class, self.lr_scheduler_parameters = (
@@ -683,21 +664,9 @@ class EnsembleDirector(Director, ABC):
             ) = self._setup_trainer_callbacks()
 
             # Instantiate the Trainer
-            self.trainer = pl.Trainer(
-                default_root_dir=self.project.results_dir / f"fold_{self.current_fold}",
-                accelerator=device.get_accelerator(),
-                devices=1,
-                precision=self.config.precision,
-                callbacks=self.training_callbacks,
-                max_epochs=self.config.max_epochs,
-                log_every_n_steps=1,
-            )
+            self.trainer = self._setup_trainer()
 
-            # Store parameters
-            # trainer.hparams = { }
-            self.trainer.logger._default_hp_metric = False
-
-            # Train with the optimal learning rate found above
+            # Train
             self.trainer.fit(self.model, datamodule=self.data_module)
 
             # Print path to best model
@@ -713,9 +682,6 @@ class EnsembleDirector(Director, ABC):
                 fold=self.current_fold,
             )
 
-            # Set it into the project
-            self.project.selected_model_path = self.model_checkpoint.best_model_path
-
             # Re-load weights from best model
             model_class = self._get_model_class()
             model = model_class.load_from_checkpoint(
@@ -723,6 +689,7 @@ class EnsembleDirector(Director, ABC):
                 strict=False,
                 criterion=self.criterion,
                 metrics=self.metrics,
+                class_names=self.config.class_names,
             )
 
             # Append to list of best models for inference
@@ -739,19 +706,21 @@ class EnsembleDirector(Director, ABC):
             )
             return
 
-        # Display target folder
+        # Determine target folder for predictions
         if self.config.target_for_prediction is None:
             print("Target for prediction not specified in configuration.")
-        print(f"Saving predictions to {self.project.target_for_prediction}.")
+            target_for_prediction = self.project.run_dir / "predictions"
+            print(f"Defaulting to {target_for_prediction}")
+        else:
+            target_for_prediction = self.config.target_for_prediction
 
         # Run ensemble prediction
-        UNet.full_inference_ensemble(
-            self._best_models,
+        self._best_models[0].full_inference_ensemble(
+            models=self._best_models,
             data_loader=self.data_module.inference_dataloader(
-                input_folder=self.project.source_for_prediction
+                input_folder=self.config.source_for_prediction
             ),
-            target_folder=self.project.target_for_prediction,
-            post_full_inference_transforms=self.campaign_transforms.get_post_full_inference_transforms(),
+            target_folder=target_for_prediction,
             roi_size=self.config.patch_size,
             batch_size=self.config.inference_batch_size,
             transpose=False,
@@ -761,13 +730,10 @@ class EnsembleDirector(Director, ABC):
             output_dtype=self.config.output_dtype,
         )
 
-    def _resume(self):
-        """Resume ensemble training using trained models."""
-        raise NotImplementedError("Currently not supported!")
-
     def _predict(self):
-        """Predict using a trained model."""
-        # Check that the config contains the path to the model to load
+        """Predict using a trained ensemble model."""
+
+        # Check that the config contains the path to the models to load
         if self.config.source_model_path is None:
             raise ValueError("No path for models to load found in the configuration!")
 
@@ -793,17 +759,28 @@ class EnsembleDirector(Director, ABC):
         # Initialize data module
         self.data_module = self._setup_data_module()
 
+        # Initialize criterion and metrics
+        self.criterion = self._setup_loss()
+        self.metrics = self._setup_metrics()
+
         # Load all models
         models = self._load_models(models_dir=self.config.source_model_path)
 
+        # Determine target folder for predictions
+        if self.config.target_for_prediction is None:
+            print("Target for prediction not specified in configuration.")
+            target_for_prediction = self.project.run_dir / "predictions"
+            print(f"Defaulting to {target_for_prediction}")
+        else:
+            target_for_prediction = self.config.target_for_prediction
+
         # Run ensemble prediction
-        UNet.full_inference_ensemble(
-            models,
+        models[0].full_inference_ensemble(
+            models=models,
             data_loader=self.data_module.inference_dataloader(
-                input_folder=self.project.source_for_prediction
+                input_folder=self.config.source_for_prediction
             ),
-            target_folder=self.project.target_for_prediction,
-            post_full_inference_transforms=self.campaign_transforms.get_post_full_inference_transforms(),
+            target_folder=target_for_prediction,
             roi_size=self.config.patch_size,
             batch_size=self.config.inference_batch_size,
             transpose=False,
@@ -814,253 +791,39 @@ class EnsembleDirector(Director, ABC):
         )
 
     def _load_models(self, models_dir: Path):
-        """Reload all model found in the model folds."""
+        """Reload all models found in the model folds."""
 
         # Re-load all (best) models
         models = []
         fold = 0
-        found = True
-        while found:
-
+        while True:
             # Look for the model for current fold
-            found = list(models_dir.glob(f"fold_{fold}/*.ckpt"))
-            if len(found) == 0:
-                found = False
-                continue
+            model_paths = list((models_dir / f"fold_{fold}").glob("*.ckpt"))
+            if not model_paths:
+                break  # No more models
 
-            # Try loading the model
-            try:
-                model = UNet.load_from_checkpoint(found[0])
-            except:
-                print(f"Could not load the trained model {found[0]} for fold {fold}!")
-                continue
+            model_path = model_paths[0]  # Assuming one model per fold
+
+            # Load the model
+            model_class = self._get_model_class()
+            model = model_class.load_from_checkpoint(
+                model_path,
+                criterion=self.criterion,
+                metrics=self.metrics,
+                class_names=self.config.class_names,
+            )
 
             # Add it to the list
             models.append(model)
 
             # Inform
-            print(f"Fold {fold}: re-loaded model = {found[0]}")
+            print(f"Fold {fold}: re-loaded model = {model_path}")
 
             # Increase fold number
             fold += 1
 
         print(f"Loaded {len(models)} trained models.")
         return models
-
-
-class RestorationDirector(Director):
-    """Restoration Training Director."""
-
-    @override
-    def _setup_metrics(self):
-        """Set up metrics."""
-
-        # Metrics
-        metrics = MeanAbsoluteError()
-
-        # Return metrics
-        return metrics
-
-    @override
-    def _setup_loss(self):
-        """Set up loss function."""
-
-        # Set up loss function
-        criterion = MSELoss()
-
-        # Return loss
-        return criterion
-
-    @override
-    def _setup_data_module(self):
-        """Set up data module."""
-
-        # Data module
-        data_module = DataModuleLocalFolder(
-            campaign_transforms=self.campaign_transforms,
-            data_dir=self.config.data_dir,  # Point to the root of the data directory
-            seed=self.config.seed,
-            batch_size=self.config.batch_size,
-            patch_size=self.config.patch_size,
-            num_patches=self.config.num_patches,
-            train_fraction=self.config.train_fraction,
-            val_fraction=self.config.val_fraction,
-            test_fraction=self.config.test_fraction,
-            source_images_sub_folder=self.config.source_images_sub_folder,
-            target_images_sub_folder=self.config.target_images_sub_folder,
-            source_images_label=self.config.source_images_label,
-            target_images_label=self.config.target_images_label,
-            inference_batch_size=self.config.inference_batch_size,
-            num_workers=self.num_workers,
-        )
-
-        # Return the data module
-        return data_module
-
-    @override
-    def _setup_campaign_transforms(self):
-        """Set up campaign transforms."""
-
-        # Initialize default, example Restoration Campaign Transform
-        campaign_transforms = RestorationCampaignTransforms(
-            min_intensity=0,
-            max_intensity=15472,
-            patch_size=self.config.patch_size,
-            num_patches=self.config.num_patches,
-        )
-
-        # Return campaign transforms
-        return campaign_transforms
-
-
-class SegmentationDirector(Director):
-    """Segmentation Training Director."""
-
-    @override
-    def _setup_metrics(self):
-        """Set up metrics."""
-
-        # Metrics
-        metrics = DiceMetric(
-            include_background=self.config.include_background,
-            reduction="mean_batch",
-            get_not_nans=False,
-        )
-
-        # Return metrics
-        return metrics
-
-    @override
-    def _setup_loss(self):
-        """Set up loss function."""
-
-        # Set up loss function
-        criterion = DiceCELoss(
-            include_background=self.config.include_background,
-            to_onehot_y=False,
-            softmax=True,
-        )
-
-        # Return criterion
-        return criterion
-
-    @override
-    def _setup_data_module(self):
-        """Set up data module."""
-
-        # Data module
-        data_module = DataModuleLocalFolder(
-            campaign_transforms=self.campaign_transforms,
-            data_dir=self.config.data_dir,  # Point to the root of the data directory
-            seed=self.config.seed,
-            num_folds=1,  # No ensemble
-            batch_size=self.config.batch_size,
-            patch_size=self.config.patch_size,
-            num_patches=self.config.num_patches,
-            train_fraction=self.config.train_fraction,
-            val_fraction=self.config.val_fraction,
-            test_fraction=self.config.test_fraction,
-            source_images_sub_folder=self.config.source_images_sub_folder,
-            target_images_sub_folder=self.config.target_images_sub_folder,
-            source_images_label=self.config.source_images_label,
-            target_images_label=self.config.target_images_label,
-            inference_batch_size=self.config.inference_batch_size,
-            num_workers=self.num_workers,
-        )
-
-        # Return data module
-        return data_module
-
-    @override
-    def _setup_campaign_transforms(self):
-        """Set up campaign transforms."""
-
-        # Consistency check
-        if self.config.is_3d:
-            raise ValueError("Check the value of `is_3d` in the configuration file.")
-
-        # Initialize default, example Segmentation Campaign Transform
-        campaign_transforms = SegmentationCampaignTransforms2D(
-            num_classes=self.config.out_channels,
-            patch_size=self.config.patch_size,
-            num_patches=self.config.num_patches,
-        )
-
-        # Return the campaign transforms
-        return campaign_transforms
-
-
-class SegmentationDirector3D(SegmentationDirector):
-    """Segmentation 3D Training Director."""
-
-    @override
-    def _setup_campaign_transforms(self):
-        """Set up campaign transforms."""
-
-        # Consistency check
-        if not self.config.is_3d:
-            raise ValueError("Check the value of `is_3d` in the configuration file.")
-
-        # Initialize default, example Segmentation Campaign Transform
-        campaign_transforms = SegmentationCampaignTransforms3D(
-            num_classes=self.config.out_channels,
-            patch_size=self.config.patch_size,
-            num_patches=self.config.num_patches,
-            voxel_size=self.config.voxel_size,
-            to_isotropic=self.config.to_isotropic,
-            upscale_z=self.config.up_scale_z,
-        )
-
-        # Return the campaign transforms
-        return campaign_transforms
-
-
-class SelfSupervisedDirector(RestorationDirector):
-    """Self-Supervised Training Director."""
-
-    @override
-    def _setup_campaign_transforms(self):
-        """Set up campaign transforms."""
-
-        return SelfSupervisedRestorationCampaignTransforms()
-
-
-class EnsembleSegmentationDirector(EnsembleDirector, SegmentationDirector):
-    """Ensemble Segmentation Training Director."""
-
-    def __init__(
-        self,
-        config_file: Union[Path, str],
-        num_folds: int,
-        num_workers: int = os.cpu_count(),
-    ) -> None:
-        super().__init__(config_file, num_folds, num_workers)
-
-    def _setup_data_module(self):
-        """Set up data module with folds."""
-
-        # Data module
-        data_module = DataModuleLocalFolder(
-            campaign_transforms=self.campaign_transforms,
-            data_dir=self.config.data_dir,  # Point to the root of the data directory
-            seed=self.config.seed,
-            num_folds=self.num_folds,  # Ensemble
-            batch_size=self.config.batch_size,
-            patch_size=self.config.patch_size,
-            num_patches=self.config.num_patches,
-            train_fraction=self.config.train_fraction,
-            val_fraction=self.config.val_fraction,
-            test_fraction=self.config.test_fraction,
-            source_images_sub_folder=self.config.source_images_sub_folder,
-            target_images_sub_folder=self.config.target_images_sub_folder,
-            source_images_label=self.config.source_images_label,
-            target_images_label=self.config.target_images_label,
-            inference_batch_size=self.config.inference_batch_size,
-            num_workers=self.num_workers,
-        )
-
-        # Return data module
-        return data_module
 
     def _setup_basis_for_training_and_resume(self):
         """Initialize the basic components for training or resume."""
@@ -1071,16 +834,15 @@ class EnsembleSegmentationDirector(EnsembleDirector, SegmentationDirector):
         # Set up the transform campaign
         self.campaign_transforms = self._setup_campaign_transforms()
 
-        # Set up the data module (with folds)
+        # Set up the data module
         self.data_module = self._setup_data_module()
-
-        # Calculate the number of steps per epoch
-        self.data_module.prepare_data()
-        self.data_module.setup("train")
-        self.steps_per_epoch = len(self.data_module.train_dataloader())
 
         # Inform
         print(f"Working directory: {self.project.run_dir}")
+
+        # Prepare data and set up for training
+        self.data_module.prepare_data()
+        self.data_module.setup("train")
 
         # Set up loss function
         self.criterion = self._setup_loss()
@@ -1089,14 +851,187 @@ class EnsembleSegmentationDirector(EnsembleDirector, SegmentationDirector):
         self.metrics = self._setup_metrics()
 
 
+class RestorationDirector(Director):
+    """Restoration Training Director."""
+
+    @override
+    def _setup_metrics(self):
+        """Set up metrics."""
+        return MeanAbsoluteError()
+
+    @override
+    def _setup_loss(self):
+        """Set up loss function."""
+        return MSELoss()
+
+    @override
+    def _setup_data_module(self):
+        """Set up data module."""
+        data_module = DataModuleLocalFolder(
+            campaign_transforms=self.campaign_transforms,
+            data_dir=self.config.data_dir,
+            seed=self.config.seed,
+            batch_size=self.config.batch_size,
+            patch_size=self.config.patch_size,
+            num_patches=self.config.num_patches,
+            train_fraction=self.config.train_fraction,
+            val_fraction=self.config.val_fraction,
+            test_fraction=self.config.test_fraction,
+            source_images_sub_folder=self.config.source_images_sub_folder,
+            target_images_sub_folder=self.config.target_images_sub_folder,
+            source_images_label=self.config.source_images_label,
+            target_images_label=self.config.target_images_label,
+            inference_batch_size=self.config.inference_batch_size,
+            num_workers=self.num_workers,
+        )
+        return data_module
+
+    @override
+    def _setup_campaign_transforms(self):
+        """Set up campaign transforms."""
+        campaign_transforms = RestorationCampaignTransforms(
+            min_intensity=0,
+            max_intensity=15472,
+            patch_size=self.config.patch_size,
+            num_patches=self.config.num_patches,
+        )
+        return campaign_transforms
+
+
+class SegmentationDirector(Director):
+    """Segmentation Training Director."""
+
+    @override
+    def _setup_metrics(self):
+        """Set up metrics."""
+        return DiceMetric(
+            include_background=self.config.include_background,
+            reduction="mean_batch",
+            get_not_nans=False,
+        )
+
+    @override
+    def _setup_loss(self):
+        """Set up loss function."""
+        return DiceCELoss(
+            include_background=self.config.include_background,
+            to_onehot_y=False,
+            softmax=True,
+        )
+
+    @override
+    def _setup_data_module(self):
+        """Set up data module."""
+        data_module = DataModuleLocalFolder(
+            campaign_transforms=self.campaign_transforms,
+            data_dir=self.config.data_dir,
+            seed=self.config.seed,
+            num_folds=1,
+            batch_size=self.config.batch_size,
+            patch_size=self.config.patch_size,
+            num_patches=self.config.num_patches,
+            train_fraction=self.config.train_fraction,
+            val_fraction=self.config.val_fraction,
+            test_fraction=self.config.test_fraction,
+            source_images_sub_folder=self.config.source_images_sub_folder,
+            target_images_sub_folder=self.config.target_images_sub_folder,
+            source_images_label=self.config.source_images_label,
+            target_images_label=self.config.target_images_label,
+            inference_batch_size=self.config.inference_batch_size,
+            num_workers=self.num_workers,
+        )
+        return data_module
+
+    @override
+    def _setup_campaign_transforms(self):
+        """Set up campaign transforms."""
+        if self.config.is_3d:
+            raise ValueError("Check the value of `is_3d` in the configuration file.")
+
+        campaign_transforms = SegmentationCampaignTransforms2D(
+            num_classes=self.config.out_channels,
+            patch_size=self.config.patch_size,
+            num_patches=self.config.num_patches,
+        )
+        return campaign_transforms
+
+
+class SegmentationDirector3D(SegmentationDirector):
+    """Segmentation 3D Training Director."""
+
+    @override
+    def _setup_campaign_transforms(self):
+        """Set up campaign transforms."""
+        if not self.config.is_3d:
+            raise ValueError("Check the value of `is_3d` in the configuration file.")
+
+        campaign_transforms = SegmentationCampaignTransforms3D(
+            num_classes=self.config.out_channels,
+            patch_size=self.config.patch_size,
+            num_patches=self.config.num_patches,
+            voxel_size=self.config.voxel_size,
+            to_isotropic=self.config.to_isotropic,
+            upscale_z=self.config.up_scale_z,
+        )
+        return campaign_transforms
+
+
+class SelfSupervisedDirector(RestorationDirector):
+    """Self-Supervised Training Director."""
+
+    @override
+    def _setup_campaign_transforms(self):
+        """Set up campaign transforms."""
+        return SelfSupervisedRestorationCampaignTransforms()
+
+
+class EnsembleSegmentationDirector(EnsembleDirector, SegmentationDirector):
+    """Ensemble Segmentation Training Director."""
+
+    def __init__(
+        self,
+        config_file: Union[Path, str],
+        num_folds: int,
+        num_workers: int = -1,
+    ) -> None:
+        super().__init__(config_file, num_folds, num_workers)
+
+    def _setup_data_module(self):
+        """Set up data module with folds."""
+        data_module = DataModuleLocalFolder(
+            campaign_transforms=self.campaign_transforms,
+            data_dir=self.config.data_dir,
+            seed=self.config.seed,
+            num_folds=self.num_folds,
+            batch_size=self.config.batch_size,
+            patch_size=self.config.patch_size,
+            num_patches=self.config.num_patches,
+            train_fraction=self.config.train_fraction,
+            val_fraction=self.config.val_fraction,
+            test_fraction=self.config.test_fraction,
+            source_images_sub_folder=self.config.source_images_sub_folder,
+            target_images_sub_folder=self.config.target_images_sub_folder,
+            source_images_label=self.config.source_images_label,
+            target_images_label=self.config.target_images_label,
+            inference_batch_size=self.config.inference_batch_size,
+            num_workers=self.num_workers,
+        )
+        return data_module
+
+    def _setup_basis_for_training_and_resume(self):
+        """Initialize the basic components for training or resume."""
+        super()._setup_basis_for_training_and_resume()
+        # Ensure that data module is prepared with folds
+        self.data_module.prepare_data()
+        self.data_module.setup("train")
+
+
 class CellRestorationDemoDirector(RestorationDirector):
     """Restoration Demo Training Director."""
 
     @override
     def _setup_data_module(self):
         """Set up data module."""
-
-        # Data module
         data_module = CellRestorationDemo(
             campaign_transforms=self.campaign_transforms,
             download_dir=self.config.project_dir,
@@ -1110,8 +1045,6 @@ class CellRestorationDemoDirector(RestorationDirector):
             inference_batch_size=self.config.inference_batch_size,
             num_workers=self.num_workers,
         )
-
-        # Return data module
         return data_module
 
 
@@ -1121,8 +1054,6 @@ class CellSegmentationDemoDirector(SegmentationDirector):
     @override
     def _setup_data_module(self):
         """Set up data module."""
-
-        # Data module
         data_module = CellSegmentationDemo(
             campaign_transforms=self.campaign_transforms,
             download_dir=self.config.project_dir,
@@ -1136,8 +1067,6 @@ class CellSegmentationDemoDirector(SegmentationDirector):
             inference_batch_size=self.config.inference_batch_size,
             num_workers=self.num_workers,
         )
-
-        # Return data module
         return data_module
 
 
@@ -1147,8 +1076,6 @@ class EnsembleCellSegmentationDemoDirector(EnsembleSegmentationDirector):
     @override
     def _setup_data_module(self):
         """Set up data module."""
-
-        # Data module
         data_module = CellSegmentationDemo(
             campaign_transforms=self.campaign_transforms,
             download_dir=self.config.project_dir,
@@ -1163,6 +1090,4 @@ class EnsembleCellSegmentationDemoDirector(EnsembleSegmentationDirector):
             inference_batch_size=self.config.inference_batch_size,
             num_workers=self.num_workers,
         )
-
-        # Return the data module
         return data_module
