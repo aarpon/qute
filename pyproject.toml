@@ -23,7 +23,6 @@ dependencies = [
     "numpy<2.0.0,>=1.26.0",
     "tifffile<2025.0.0,>=2024.7.2",
     "natsort<9.0.0,>=8.4.0",
-    "pytorch-lightning<3.0.0,>=2.4.0",
     "tensorboard>=2.11.2",
     "scikit-image>=0.19.3",
     "ray[tune]<3.0.0,>=2.3.1",
@@ -31,15 +30,16 @@ dependencies = [
     "userpaths>=0.1.3",
     "nnunetv2>=2.2.1",
     "hiddenlayer @ git+https://github.com/FabianIsensee/hiddenlayer.git",
-    "imio>=0.3.0",
     "nd2reader<4.0.0,>=3.3.0",
     "scipy<2.0.0,>=1.14.0",
     "typing-extensions<5.0.0,>=4.12.2",
     "monai<2.0.0,>=1.4.0",
     "typer<1.0.0,>=0.13.0",
-    "torch==2.4.1",
-    "torchvision<=0.20.0",
     "ruff>=0.8.0",
+    "torchvision>=0.20.1",
+    "torch>=2.5.1",
+    "pytorch-lightning>=2.4.0",
+    "torchmetrics>=1.6.0",
 ]
 
 [project.scripts]
