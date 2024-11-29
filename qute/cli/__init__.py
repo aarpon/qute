@@ -10,3 +10,8 @@
 #  ******************************************************************************
 from ._cli_config import config_app
 from ._cli_run import run_app
+
+__all__ = [
+    "config_app",
+    "run_app",
+]

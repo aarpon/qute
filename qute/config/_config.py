@@ -371,14 +371,14 @@ class Config:
         """Validate configuration."""
 
         # Check the model class
-        if not self.model_class in ["unet", "attention_unet", "swin_unetr"]:
+        if self.model_class not in ["unet", "attention_unet", "swin_unetr"]:
             print(
                 "`model_class` must be one of 'unet', 'attention_unet', or 'swin_unetr'."
             )
             return False
 
         # Check the trainer mode
-        if not self.trainer_mode in ["train", "resume", "predict"]:
+        if self.trainer_mode not in ["train", "resume", "predict"]:
             print("`trainer_mode` must be one of 'train', 'resume', or 'predict'.")
             return False
 

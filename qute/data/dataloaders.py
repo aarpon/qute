@@ -261,7 +261,9 @@ class DataModuleLocalFolder(pl.LightningDataModule):
 
         # Extract the indices for the test set and assign everything else to the combined
         # training + validation set
-        num_test_images = min(1, int(round(self.test_fraction * len(self._all_images))))
+        num_test_images = int(round(self.test_fraction * len(self._all_images)))
+        if num_test_images == 0:
+            num_test_images = 1
         self._test_indices = shuffled_indices[-num_test_images:]
         self._train_val_indices = shuffled_indices[:-num_test_images]
 
@@ -269,9 +271,11 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             # Update the training and validation fractions since the test set
             # has been removed already
             updated_val_fraction = self.val_fraction / (1.0 - self.test_fraction)
-            num_val_images = min(
-                1, int(round(updated_val_fraction * len(self._train_val_indices)))
+            num_val_images = int(
+                round(updated_val_fraction * len(self._train_val_indices))
             )
+            if num_val_images == 0:
+                num_val_images = 1
             self._val_indices = self._train_val_indices[-num_val_images:]
             self._train_indices = self._train_val_indices[:-num_val_images]
 
@@ -370,7 +374,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
                 f"Current fold: {self.current_fold}."
             )
         else:
-            print(f"One-way split.")
+            print("One-way split.")
 
     def train_dataloader(self):
         """Return DataLoader for Training data."""

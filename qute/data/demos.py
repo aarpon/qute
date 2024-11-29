@@ -240,7 +240,7 @@ class CellSegmentationDemoIDT(DataModuleLocalFolder):
 
         # Download directory is parent of the actual data_dir that we pass to the parent class
         self.download_dir = Path(download_dir).resolve()
-        data_dir = self.download_dir / f"demo_segmentation_idt"
+        data_dir = self.download_dir / "demo_segmentation_idt"
 
         # Call base constructor
         super().__init__(
@@ -358,7 +358,7 @@ class CellRestorationDemo(DataModuleLocalFolder):
         self.download_dir = Path(download_dir).resolve()
 
         # Data directory
-        data_dir = self.download_dir / f"demo_restoration"
+        data_dir = self.download_dir / "demo_restoration"
 
         # Call base constructor
         super().__init__(

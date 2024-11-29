@@ -14,10 +14,8 @@ import sys
 from pathlib import Path
 
 import pytorch_lightning as pl
-import torch
 from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
-from pytorch_lightning import seed_everything
 from pytorch_lightning.loggers import TensorBoardLogger
 from ray import air, tune
 from ray.tune import CLIReporter

@@ -162,7 +162,7 @@ class Project:
         """Return a list of all models available in the project."""
         if self._run_dir is None:
             return []
-        return list(self._run_dir.rglob(f"*.ckpt"))
+        return list(self._run_dir.rglob("*.ckpt"))
 
     def _is_valid_run_name(self, run) -> bool:
         """Check whether the run has a valid name."""
@@ -206,7 +206,7 @@ class Project:
             if not models_dir.is_dir():
                 to_clean = True
             else:
-                models_found = list(models_dir.rglob(f"*.ckpt"))
+                models_found = list(models_dir.rglob("*.ckpt"))
                 if len(models_found) == 0:
                     to_clean = True
 
@@ -214,7 +214,7 @@ class Project:
             if not results_dir.is_dir():
                 to_clean = True
             else:
-                logs_found = list(results_dir.rglob(f"*version*"))
+                logs_found = list(results_dir.rglob("*version*"))
                 if len(logs_found) == 0:
                     to_clean = True
 
@@ -247,7 +247,7 @@ class Project:
                 continue
 
             # Are there predictions (or anything else)? We only clean empy folders.
-            predictions_found = list(pred.rglob(f"*"))
+            predictions_found = list(pred.rglob("*"))
             if len(predictions_found) == 0:
                 to_clean = True
 

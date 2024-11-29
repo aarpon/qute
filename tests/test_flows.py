@@ -10,7 +10,6 @@
 #  ******************************************************************************
 
 import numpy as np
-import pytest
 
 from qute.transforms.util import compute_2d_flows
 

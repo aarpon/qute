@@ -23,4 +23,5 @@ __all__ = [
     "CustomND2Reader",
     "CustomND2Readerd",
     "CustomTIFFReader",
+    "CustomTIFFReaderd",
 ]

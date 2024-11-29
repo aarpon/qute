@@ -249,8 +249,8 @@ class CustomND2Reader(Transform):
         if self.as_meta_tensor and self.voxel_size is not None:
             if not self.ensure_channel_first:
                 raise ValueError(
-                    f"If both `as_meta_tensor` is True and `voxel_size` is specified,"
-                    f"`ensure_channel_first` must be True."
+                    "If both `as_meta_tensor` is True and `voxel_size` is specified,"
+                    "`ensure_channel_first` must be True."
                 )
 
         # File path
@@ -447,8 +447,8 @@ class CustomTIFFReader(Transform):
         if self.as_meta_tensor and self.voxel_size is not None:
             if not self.ensure_channel_first:
                 raise ValueError(
-                    f"If both `as_meta_tensor` is True and `voxel_size` is specified,"
-                    f"`ensure_channel_first` must be True."
+                    "If both `as_meta_tensor` is True and `voxel_size` is specified,"
+                    "`ensure_channel_first` must be True."
                 )
 
         # File path

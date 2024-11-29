@@ -23,7 +23,6 @@ from monai.transforms import (
     RandGaussianSmoothd,
     RandRotate90d,
     RandRotated,
-    RandSpatialCrop,
     RandSpatialCropd,
 )
 

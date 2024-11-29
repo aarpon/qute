@@ -10,8 +10,6 @@
 #  ******************************************************************************
 from pathlib import Path
 
-import pytest
-import typer
 from typer.testing import CliRunner
 
 from qute import __version__

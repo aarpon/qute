@@ -14,3 +14,4 @@ scratch/
 /qodana.yaml
 /doc/
 /debug.py
+/.ruff_cache/

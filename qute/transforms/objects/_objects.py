@@ -83,7 +83,7 @@ class LabelToTwoClassMask(Transform):
             Tensor as with two-class mask.
         """
 
-        if not type(data) in [torch.Tensor, monai.data.MetaTensor, np.ndarray]:
+        if type(data) not in [torch.Tensor, monai.data.MetaTensor, np.ndarray]:
             raise TypeError(f"Unsupported input type {type(data)}.")
 
         # Keep track of whether we are working with MONAI MetaTensor
@@ -277,7 +277,7 @@ class TwoClassMaskToLabel(Transform):
             Tensor as with label image.
         """
 
-        if not type(data) in [torch.Tensor, monai.data.MetaTensor, np.ndarray]:
+        if type(data) not in [torch.Tensor, monai.data.MetaTensor, np.ndarray]:
             raise TypeError(f"Unsupported input type {type(data)}.")
 
         # Keep track of whether we are working with MONAI MetaTensor
@@ -717,7 +717,7 @@ class NormalizedDistanceTransform(Transform):
             Updated array (as Tensor) with the normalized distance transform added as a new plane.
         """
 
-        if not type(data) in [torch.Tensor, monai.data.MetaTensor, np.ndarray]:
+        if type(data) not in [torch.Tensor, monai.data.MetaTensor, np.ndarray]:
             raise TypeError(f"Unsupported input type {type(data)}.")
 
         # Do we have a 2D or 3D tensor (excluding batch and channel dimensions)?
@@ -928,7 +928,7 @@ class WatershedAndLabelTransform(Transform):
             Updated array (as a Tensor) with the normalized distance transform added as a new plane.
         """
 
-        if not type(data) in [torch.Tensor, monai.data.MetaTensor, np.ndarray]:
+        if type(data) not in [torch.Tensor, monai.data.MetaTensor, np.ndarray]:
             raise TypeError(f"Unsupported input type {type(data)}.")
 
         # Do we have a 2D or 3D tensor (excluding batch and channel dimensions)?

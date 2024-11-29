@@ -177,19 +177,19 @@ def qute_to_msd_format(
     # Make sure the images and labels sub-folders exist
     images_folder = input_folder / "images"
     if not images_folder.is_dir():
-        return False, f"The `images` sub-folder does not exit."
+        return False, "The `images` sub-folder does not exit."
 
     labels_folder = input_folder / "labels"
     if not labels_folder.is_dir():
-        return False, f"The `labels` sub-folder does not exit."
+        return False, "The `labels` sub-folder does not exit."
 
     # Get the contents of images_folder and labels_folder
     images_files = list(images_folder.glob("*.tif*"))
     labels_files = list(labels_folder.glob("*.tif*"))
     if len(images_files) == 0 or len(labels_files) == 0:
-        return False, f"No `images` or `labels` found."
+        return False, "No `images` or `labels` found."
     if len(images_files) != len(labels_files):
-        return False, f"Unmatched number of `images` and `labels`."
+        return False, "Unmatched number of `images` and `labels`."
 
     # Check whether the output folder already exists, otherwise create
     output_folder = Path(output_folder)
@@ -350,58 +350,58 @@ def qute_to_msd_format(
     # Finally, create input.yaml
     with open(dataset_folder / "input.yaml", "w") as f:
         f.write(f"dataset_name_or_id: {dataset_id}\n")
-        f.write(f"modality: CT\n")
+        f.write("modality: CT\n")
         f.write(f"datalist: {datalist_file}\n")
         f.write(f"dataroot: {dataset_folder}\n")
 
     # Inform
-    print(f"\n\n* * * All done! * * *")
+    print("\n\n* * * All done! * * *")
     print(f"\nData and configuration files written to `{dataset_folder}`.")
     print(
         f"\nIf it is not already there, please make sure to copy/move `{dataset_folder.name}` to the folder "
     )
     print(
-        f"pointed at by the environment variable `nnUNet_raw`. Then, assuming the dataset id is `1`\n"
-        f"and the dataset is 2D, run the following (adapt accordingly): "
+        "pointed at by the environment variable `nnUNet_raw`. Then, assuming the dataset id is `1`\n"
+        "and the dataset is 2D, run the following (adapt accordingly): "
     )
-    print(f"\n```sh")
+    print("\n```sh")
     print(
-        f"$ nnUNetv2_plan_and_preprocess -d 1 --verify_dataset_integrity -pl nnUNetPlannerResEncM -gpu_memory_target 12 -overwrite_plans_name nnUNetResEncUNetPlans_12G"
+        "$ nnUNetv2_plan_and_preprocess -d 1 --verify_dataset_integrity -pl nnUNetPlannerResEncM -gpu_memory_target 12 -overwrite_plans_name nnUNetResEncUNetPlans_12G"
     )
     print(
         "$ for i in {0..4}; do nnUNetv2_train 1 2d $i --npz -p nnUNetResEncUNetPlans_12G; done   # Fold 0 through 4, adapt as necessary"
     )
-    print(f"$ nnUNetv2_find_best_configuration -d 1 -f 0 1 2 3 4 -c 2d")
+    print("$ nnUNetv2_find_best_configuration -d 1 -f 0 1 2 3 4 -c 2d")
     print(
-        f"$ nnUNetv2_predict -d 1 -i $nnUNet_raw/$Dataset/imagesTs -o $nnUNet_results/$Dataset/inference -f 0 1 2 3 4 \\"
+        "$ nnUNetv2_predict -d 1 -i $nnUNet_raw/$Dataset/imagesTs -o $nnUNet_results/$Dataset/inference -f 0 1 2 3 4 \\"
     )
-    print(f"       -tr nnUNetTrainer -c 2d -p nnUNetResEncUNetPlans_12G")
+    print("       -tr nnUNetTrainer -c 2d -p nnUNetResEncUNetPlans_12G")
     print(
-        f"$ nnUNetv2_apply_postprocessing -i $nnUNet_results/$Dataset/inference -o $nnUNet_results/$Dataset/postprocessing \\"
-    )
-    print(
-        f"       -pp_pkl_file $nnUNet_results/$Dataset/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/postprocessing.pkl \\"
+        "$ nnUNetv2_apply_postprocessing -i $nnUNet_results/$Dataset/inference -o $nnUNet_results/$Dataset/postprocessing \\"
     )
     print(
-        f"     -np 8 -plans_json $nnUNet_results/$Dataset/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/plans.json"
-    )
-    print(f"\n```")
-    print(f"\nIn the commands above, replace `$Dataset` with the dataset name.")
-    print(f"\nPlease see: ")
-    print(
-        f"  * https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/set_environment_variables.md"
+        "       -pp_pkl_file $nnUNet_results/$Dataset/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/postprocessing.pkl \\"
     )
     print(
-        f"  * https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/how_to_use_nnunet.md"
+        "     -np 8 -plans_json $nnUNet_results/$Dataset/nnUNetTrainer__nnUNetPlans__2d/crossval_results_folds_0_1_2_3_4/plans.json"
+    )
+    print("\n```")
+    print("\nIn the commands above, replace `$Dataset` with the dataset name.")
+    print("\nPlease see: ")
+    print(
+        "  * https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/set_environment_variables.md"
     )
     print(
-        f"  * https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/resenc_presets.md"
+        "  * https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/how_to_use_nnunet.md"
     )
     print(
-        f"  * https://transformhealthcare.medium.com/glioblastoma-brain-tumor-segmentation-part-6-neural-network-model-training-5de238e9b195"
+        "  * https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/resenc_presets.md"
     )
     print(
-        f"  * https://transformhealthcare.medium.com/glioblastoma-brain-tumor-segmentation-part-7-inference-58d4287a040d"
+        "  * https://transformhealthcare.medium.com/glioblastoma-brain-tumor-segmentation-part-6-neural-network-model-training-5de238e9b195"
+    )
+    print(
+        "  * https://transformhealthcare.medium.com/glioblastoma-brain-tumor-segmentation-part-7-inference-58d4287a040d"
     )
 
     # Return success

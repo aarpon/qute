@@ -1,34 +1,34 @@
-# ******************************************************************************
-# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
-# All rights reserved. This program and the accompanying materials
-# are made available under the terms of the Apache License Version 2.0
-# which accompanies this distribution, and is available at
-# https://www.apache.org/licenses/LICENSE-2.0.txt
+#  ********************************************************************************
+#  Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+#  All rights reserved. This program and the accompanying materials
+#  are made available under the terms of the Apache License Version 2.0
+#  which accompanies this distribution, and is available at
+#  https://www.apache.org/licenses/LICENSE-2.0.txt
 #
-# Contributors:
-#   Aaron Ponti - initial API and implementation
-# ******************************************************************************
-from pathlib import Path
-from typing import Optional, Tuple, Union
+#  Contributors:
+#    Aaron Ponti - initial API and implementation
+#  ******************************************************************************
+
+from typing import Optional, Tuple
 
 import monai
 import torch
-from monai.networks.nets import SwinUNETR as MONAISwinUNETR
+from monai.networks.nets import EfficientNetBN
 
 from qute.campaigns import CampaignTransforms
 from qute.models.base_model import BaseModel
 
-__doc__ = "SwinUNETR and related classes."
+__doc__ = "EfficientNet Model."
 __all__ = [
-    "SwinUNETR",
+    "EfficientNet",
 ]
 
 
-class SwinUNETR(BaseModel):
-    """Wrap MONAI's SwinUNETR architecture into a PyTorch Lightning module.
+class EfficientNet(BaseModel):
+    """Wrap MONAI's EfficientNetBN architecture into a PyTorch Lightning module.
 
     The default settings are compatible with a classification task, where
-    a single-channel input image is transformed into a multi-class label image.
+    an input image is transformed into a multi-class output.
     """
 
     def __init__(
@@ -42,17 +42,18 @@ class SwinUNETR(BaseModel):
         lr_scheduler_class: torch.optim.lr_scheduler = torch.optim.lr_scheduler.LambdaLR,
         lr_scheduler_parameters: Optional[dict] = None,
         class_names: Optional[Tuple[str, ...]] = None,
+        model_name: str = "efficientnet-b0",
         spatial_dims: int = 2,
         in_channels: int = 1,
         out_channels: int = 3,
-        img_size: Tuple[int, int] = (640, 640),
-        depths: Tuple[int, ...] = (2, 2, 2, 2),
-        num_heads: Tuple[int, ...] = (3, 6, 12, 24),
-        feature_size: int = 24,
-        dropout: float = 0.0,
+        pretrained: bool = False,
+        dropout: float = 0.2,
     ):
         """
         Constructor.
+
+        Parameters
+        ----------
 
         Parameters
         ----------
@@ -90,20 +91,12 @@ class SwinUNETR(BaseModel):
         out_channels: int = 3
             Number of output channels (or labels, or classes)
 
-        img_size: Tuple[int, int] = (640, 640)
-            Input image size. Must be divisible by the patch size and window size.
-
-        depths: Tuple[int, ...] = (2, 2, 2, 2)
-            Depths of each stage in the Swin Transformer.
-
-        num_heads: Tuple[int, ...] = (3, 6, 12, 24)
-            Number of attention heads in different layers.
-
-        feature_size: int = 24
-            Feature size dimension.
+        pretrained: bool
+            Whether to load pretrained weights.
 
         dropout: float = 0.0
-            Dropout ratio.
+            Dropout ratio (currently unused).
+
         """
         super().__init__(
             campaign_transforms=campaign_transforms,
@@ -122,17 +115,21 @@ class SwinUNETR(BaseModel):
 
         self.class_names = class_names
 
-        # Initialize the network (include img_size)
-        self.net = MONAISwinUNETR(
-            img_size=img_size,
-            in_channels=in_channels,
-            out_channels=out_channels,
-            depths=depths,
-            num_heads=num_heads,
-            feature_size=feature_size,
-            use_checkpoint=False,
+        # Store network-specific parameters
+        self.model_name = model_name
+        self.spatial_dims = spatial_dims
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.pretrained = pretrained
+        self.dropout = dropout
+
+        # Initialize the EfficientNet model
+        self.net = EfficientNetBN(
+            model_name=model_name,
             spatial_dims=spatial_dims,
-            drop_rate=dropout,
+            in_channels=in_channels,
+            num_classes=out_channels,
+            pretrained=pretrained,
         )
 
         # Log the hyperparameters
@@ -153,29 +150,3 @@ class SwinUNETR(BaseModel):
         """
         y_hat = self.net(x)
         return y_hat
-
-    def save_encoder_weights(self, filename: Union[str, Path]) -> None:
-        """Save encoder weights."""
-        if self.net is None or self.net.swinViT is None:
-            return
-        torch.save(self.net.swinViT.state_dict(), filename)
-
-    def load_encoder_weights(self, filename: Union[str, Path]) -> None:
-        """Load encoder weights."""
-        if self.net is None or self.net.swinViT is None:
-            return
-        self.net.swinViT.load_state_dict(torch.load(filename))
-
-    def freeze_encoder(self):
-        """Freeze the encoder weights."""
-        if self.net is None or self.net.swinViT is None:
-            return
-        for param in self.net.swinViT.parameters():
-            param.requires_grad = False
-
-    def unfreeze_encoder(self):
-        """Unfreeze the encoder weights."""
-        if self.net is None or self.net.encoder is None:
-            return
-        for param in self.net.swinViT.parameters():
-            param.requires_grad = True
