@@ -164,7 +164,7 @@ class SwinUNETR(BaseModel):
         """Load encoder weights."""
         if self.net is None or self.net.swinViT is None:
             return
-        self.net.swinViT.load_state_dict(torch.load(filename))
+        self.net.swinViT.load_state_dict(torch.load(filename, weights_only=True))
 
     def freeze_encoder(self):
         """Freeze the encoder weights."""
