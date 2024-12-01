@@ -24,6 +24,7 @@ from torch.optim.lr_scheduler import OneCycleLR
 from torchmetrics import MeanAbsoluteError
 
 from qute import device
+from qute.callbacks import ProgressiveUnfreezeCallback
 from qute.campaigns import (
     SegmentationCampaignTransforms2D,
     SelfSupervisedRestorationCampaignTransforms,
@@ -234,6 +235,12 @@ if __name__ == "__main__":
         verbose=True,
     )
     classification_lr_monitor = LearningRateMonitor(logging_interval="step")
+    progressive_unfreeze = ProgressiveUnfreezeCallback(
+        model=classification_model.net.swinViT,
+        start_epoch=int(CONFIG["classification_max_epochs"] / 3),
+        max_epochs=int(CONFIG["classification_max_epochs"]),
+        unfreeze_strategy="linear",
+    )
 
     # Instantiate the new Trainer
     classification_trainer = pl.Trainer(
@@ -242,7 +249,11 @@ if __name__ == "__main__":
         devices=1,
         precision=CONFIG["precision"],
         # callbacks=[model_checkpoint, early_stopping, lr_monitor],
-        callbacks=[classification_model_checkpoint, classification_lr_monitor],
+        callbacks=[
+            classification_model_checkpoint,
+            classification_lr_monitor,
+            progressive_unfreeze,
+        ],
         max_epochs=CONFIG["classification_max_epochs"],
         log_every_n_steps=1,
     )
