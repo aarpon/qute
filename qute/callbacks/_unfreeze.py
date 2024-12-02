@@ -16,105 +16,88 @@ import torch.nn as nn
 
 
 def progressive_unfreeze(
-    model: nn.Module,
+    encoder: nn.Module,
     start_epoch: int,
+    end_epoch: int,
     max_epochs: int,
     unfreeze_strategy: str = "linear",
 ):
     """
-    Progressively unfreeze encoder layers during fine-tuning (backwards from n-1 towards 0)
+    Progressively unfreeze encoder layers during fine-tuning within a specified epoch range
 
     Parameters
     ----------
-
-    model: nn.Module
-        PyTorch model with encoder layers
-
+    encoder: nn.Module
+        The encoder module to progressively unfreeze
     start_epoch: int
         Epoch to begin unfreezing
-
+    end_epoch: int
+        Epoch by which all layers should be unfrozen
     max_epochs: int
         Total number of training epochs
-
     unfreeze_strategy: str
-        One of "linear or "exponential"
+        One of "linear" or "exponential"
     """
 
-    def unfreeze_layers(model, num_layers_to_unfreeze: int):
-        # Get encoder parameters in reverse order (top to bottom)
-        encoder_params = list(reversed(list(model.encoder.parameters())))
+    def unfreeze_layers(encoder, num_layers_to_unfreeze: int):
+        encoder_params = list(reversed(list(encoder.parameters())))
+        total_layers = len(encoder_params)
 
-        # Unfreeze
-        for i, param in enumerate(encoder_params):
-            if i < num_layers_to_unfreeze:
+        # If we've reached end_epoch, unfreeze everything
+        if num_layers_to_unfreeze >= total_layers:
+            for param in encoder_params:
                 param.requires_grad = True
-            else:
-                param.requires_grad = False
+        else:
+            for i, param in enumerate(encoder_params):
+                param.requires_grad = i < num_layers_to_unfreeze
 
-    def on_epoch_start(epoch):
-        if epoch >= start_epoch:
-            total_encoder_layers = len(list(model.encoder.parameters()))
+    def on_train_epoch_start(epoch):
+        total_encoder_layers = len(list(encoder.parameters()))
 
+        if epoch < start_epoch:
+            # Keep everything frozen before start_epoch
+            unfreeze_layers(encoder, 0)
+        elif epoch >= end_epoch:
+            # Unfreeze everything after end_epoch
+            unfreeze_layers(encoder, total_encoder_layers)
+        else:
+            # Progressive unfreezing between start_epoch and end_epoch
             if unfreeze_strategy == "linear":
-                # Linearly increase unfrozen layers (from top)
                 num_layers_to_unfreeze = int(
                     (epoch - start_epoch + 1)
                     * total_encoder_layers
-                    / (max_epochs - start_epoch)
+                    / (end_epoch - start_epoch)
                 )
             elif unfreeze_strategy == "exponential":
-                # Exponentially increase unfrozen layers (from top)
                 num_layers_to_unfreeze = int(
                     total_encoder_layers * (1 - math.exp(-(epoch - start_epoch + 1)))
                 )
             else:
                 raise ValueError(
-                    '`unfreeze_strategy` must be one of "linear" or "exponential."'
+                    '`unfreeze_strategy` must be one of "linear" or "exponential"'
                 )
 
-            unfreeze_layers(model, num_layers_to_unfreeze)
-
-            # Optional: Log unfrozen layers
+            unfreeze_layers(encoder, num_layers_to_unfreeze)
             print(
                 f"Epoch {epoch}: Unfreezing {num_layers_to_unfreeze} top encoder layers."
             )
 
-    return on_epoch_start
+    return on_train_epoch_start
 
 
 # Custom callback
 class ProgressiveUnfreezeCallback(pl.Callback):
-    """Progressively unfreeze encoder layers during fine-tuning (backwards from n-1 towards 0)."""
-
     def __init__(
         self,
-        model: nn.Module,
+        encoder: nn.Module,
         start_epoch: int,
+        end_epoch: int,
         max_epochs: int,
         unfreeze_strategy: str = "linear",
     ):
-        """
-        Constructor.
-
-        Parameters
-        ----------
-
-        model: nn.Module
-            PyTorch model with encoder layers
-
-        start_epoch: int
-            Epoch to begin unfreezing
-
-        max_epochs: int
-            Total number of training epochs
-
-        unfreeze_strategy: str
-            One of "linear or "exponential"
-        """
         self.unfreeze_fn = progressive_unfreeze(
-            model, start_epoch, max_epochs, unfreeze_strategy
+            encoder, start_epoch, end_epoch, max_epochs, unfreeze_strategy
         )
 
-    def on_epoch_start(self, trainer, pl_module):
-        """Custom on_epoch_start hook."""
+    def on_train_epoch_start(self, trainer, pl_module):
         self.unfreeze_fn(trainer.current_epoch)

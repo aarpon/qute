@@ -49,8 +49,8 @@ CONFIG = {
     "classification_out_channels": 3,
     "include_background": True,
     "class_names": ["background", "cell", "membrane"],
-    "self_supervised_max_epochs": 100,
-    "classification_max_epochs": 50,
+    "self_supervised_max_epochs": 1000,
+    "classification_max_epochs": 1000,
     "precision": "16-mixed",
     "models_dir": Path(userpaths.get_my_documents()) / "qute" / exp_name / "models",
     "results_dir": Path(userpaths.get_my_documents()) / "qute" / exp_name / "results",
@@ -211,8 +211,8 @@ if __name__ == "__main__":
         campaign_transforms=classification_campaign_transforms,
         criterion=classification_criterion,
         metrics=classification_metrics,
-        lr_scheduler_class=self_supervised_lr_scheduler_class,
-        lr_scheduler_parameters=self_supervised_lr_scheduler_parameters,
+        lr_scheduler_class=classification_lr_scheduler_class,
+        lr_scheduler_parameters=classification_lr_scheduler_parameters,
         learning_rate=CONFIG["learning_rate"],
         in_channels=CONFIG["in_channels"],
         out_channels=CONFIG["classification_out_channels"],
@@ -236,8 +236,9 @@ if __name__ == "__main__":
     )
     classification_lr_monitor = LearningRateMonitor(logging_interval="step")
     progressive_unfreeze = ProgressiveUnfreezeCallback(
-        model=classification_model.net.swinViT,
-        start_epoch=int(CONFIG["classification_max_epochs"] / 3),
+        encoder=classification_model.net.swinViT,  # Encoder
+        start_epoch=int(CONFIG["classification_max_epochs"] * 0.1),
+        end_epoch=int(CONFIG["classification_max_epochs"] * 0.7),
         max_epochs=int(CONFIG["classification_max_epochs"]),
         unfreeze_strategy="linear",
     )
