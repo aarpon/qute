@@ -145,14 +145,25 @@ if __name__ == "__main__":
     # Train the model
     self_supervised_trainer.fit(self_supervised_model, self_supervised_data_module)
 
-    # Save the encoder weights
+    # Reload the best model
+    best_model = SwinUNETR.load_from_checkpoint(
+        self_supervised_model_checkpoint.best_model_path,
+        strict=False,
+        criterion=self_supervised_criterion,
+        metrics=self_supervised_metrics,
+    )
+
+    # Save the encoder weights for the best model
     self_supervised_encoder_weights_path = (
         Path(self_supervised_model_checkpoint.best_model_path).parent
         / "encoder_weights.pth"
     )
-    self_supervised_model.save_encoder_weights(self_supervised_encoder_weights_path)
+    best_model.save_encoder_weights(self_supervised_encoder_weights_path)
 
-    print(self_supervised_model)
+    # Test
+    self_supervised_trainer.test(
+        best_model, dataloaders=self_supervised_data_module.test_dataloader()
+    )
 
     # -----------------------------------------------------------------------------------------#
     #                                                                                         #
@@ -262,17 +273,16 @@ if __name__ == "__main__":
     # Fine-tune the model
     classification_trainer.fit(classification_model, classification_data_module)
 
+    # Test
+    classification_trainer.test(
+        best_model, dataloaders=self_supervised_data_module.test_dataloader()
+    )
+
     # Keep track of the best model checkpoint
     best_model_checkpoint_path = classification_model_checkpoint.best_model_path
 
-    # -----------------------------------------------------------------------------------------#
-    #                                                                                         #
-    # Prediction with fine-tuned classifier                                                   #
-    #                                                                                         #
-    # -----------------------------------------------------------------------------------------#
-
     # Reload model
-    prediction_model = SwinUNETR.load_from_checkpoint(
+    best_model = SwinUNETR.load_from_checkpoint(
         best_model_checkpoint_path,
         strict=False,
         criterion=classification_criterion,
@@ -280,8 +290,14 @@ if __name__ == "__main__":
         class_names=CONFIG["class_names"],
     )
 
+    # -----------------------------------------------------------------------------------------#
+    #                                                                                          #
+    # Prediction with fine-tuned classifier                                                    #
+    #                                                                                          #
+    # -----------------------------------------------------------------------------------------#
+
     # Save the full predictions (on the test set)
-    prediction_model.full_inference(
+    best_model.full_inference(
         data_loader=classification_data_module.inference_dataloader(
             classification_data_module.data_dir / "images/"
         ),
