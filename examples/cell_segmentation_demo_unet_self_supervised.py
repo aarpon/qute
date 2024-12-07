@@ -273,11 +273,6 @@ if __name__ == "__main__":
     # Fine-tune the model
     classification_trainer.fit(classification_model, classification_data_module)
 
-    # Test
-    classification_trainer.test(
-        best_model, dataloaders=self_supervised_data_module.test_dataloader()
-    )
-
     # Keep track of the best model checkpoint
     best_model_checkpoint_path = classification_model_checkpoint.best_model_path
 
@@ -288,6 +283,11 @@ if __name__ == "__main__":
         criterion=classification_criterion,
         metrics=classification_metrics,
         class_names=CONFIG["class_names"],
+    )
+
+    # Test
+    classification_trainer.test(
+        best_model, dataloaders=classification_data_module.test_dataloader()
     )
 
     # -----------------------------------------------------------------------------------------#
