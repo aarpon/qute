@@ -1,4 +1,12 @@
 # This is a configuration template for a CLASSIFICATION (segmentation) study.
+[metadata]
+
+# Project type
+project_type = classification
+
+# Configuration file version
+version = 0
+
 [settings]
 
 # Trainer mode: one of `train`, `resume`, `predict`

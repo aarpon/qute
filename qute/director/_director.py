@@ -34,7 +34,7 @@ from qute.campaigns import (
     SegmentationCampaignTransforms3D,
     SelfSupervisedRestorationCampaignTransforms,
 )
-from qute.config import Config
+from qute.config import Config, ConfigFactory
 from qute.data.dataloaders import DataModuleLocalFolder
 from qute.data.demos import CellRestorationDemo, CellSegmentationDemo
 from qute.models.attention_unet import AttentionUNet
@@ -66,8 +66,10 @@ class Director(ABC):
         else:
             self.num_workers = num_workers
 
+        # Get the proper configuration parser
+        self.config = ConfigFactory.get_config(config_file)
+
         # Parse it
-        self.config = Config(self.config_file)
         if not self.config.parse():
             raise Exception("Invalid config file")
 

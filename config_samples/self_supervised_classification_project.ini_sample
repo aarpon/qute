@@ -1,0 +1,175 @@
+# This is a configuration template for a SELF-SUPERVISED CLASSIFICATION (segmentation) study.
+[metadata]
+
+# Project type
+project_type = self-supervised-classification
+
+# Configuration file version
+version = 0
+
+[settings]
+
+# Model class (currently, only swin_unetr is supported)
+model_class = swin_unetr
+
+# Root project directory
+project_dir = /path/to/project
+
+# Seed for random number generation initialization
+seed = 2024
+
+# Batch size for training
+batch_size = 3
+
+# Batch size for interference
+inference_batch_size = 8
+
+# Number of patches per image: total batch size will be `batch_size` * `num_patches`
+num_patches = 4
+
+# [swin_unetr]
+depths = 2, 2, 2, 2, 2
+
+# [swin_unetr]
+num_heads = 3, 6, 12, 24, 48
+
+# [swin_unetr]
+feature_size = 24
+
+# Size of one patch
+patch_size = 768, 768
+
+# Precision used by PyTorch for calculations
+# Please see https://lightning.ai/docs/pytorch/stable/common/precision_basic.html
+precision = 16-mixed
+
+[self-supervised]
+
+# Toggle whether to run
+run = True
+
+# Root of data directory: either absolute path, or relative to `project_dir`
+data_dir = self-supervised
+
+# Subfolder for the source images for training/validation/testing
+source_images_sub_folder = images
+
+# Subfolder for the target images for training/validation/testing
+target_images_sub_folder = targets
+
+# Label for the source images for training/validation/testing
+source_images_label = image
+
+# Label for the target images for training/validation/testing
+target_images_label = target
+
+# Number of input channels (e.g., 1 for a gray-scale image)
+in_channels = 1
+
+# Number of output channels
+out_channels = 1
+
+# Fraction of source images to be used for training (0.0 - 1.0): omit for default
+train_fraction = 0.8
+
+# Fraction of source images to be used for validation (0.0 - 1.0): omit for default
+val_fraction = 0.15
+
+# Fraction of source images to be used for testing (0.0 - 1.0): omit for default
+test_fraction = 0.05
+
+# Checkpoint monitor: one of "loss" or "metrics"
+checkpoint_monitor = loss
+
+# Checkpoint metrics class: if `checkpoint_target` is `metrics`, one of the classes from `class_names`
+# can be used as monitor. Leave unset to use the global validation metric.
+# Ignored if `checkpoint_target` is loss.
+checkpoint_metrics_class =
+
+# Use early stopping based on `checkpoint_monitor` and `checkpoint_metrics_class`?
+use_early_stopping = False
+early_stopping_patience =
+
+# Initial learning rate
+learning_rate = 0.001
+
+# Maximum number of training epochs
+max_epochs = 5000
+
+# Output data type for full inference
+output_dtype = int32
+
+[classification]
+
+# Toggle whether to run
+run = True
+
+# Root of data directory: either absolute path, or relative to `project_dir`
+data_dir = classification
+
+# Subfolder for the source images for training/validation/testing
+source_images_sub_folder = images
+
+# Subfolder for the target images for training/validation/testing
+target_images_sub_folder = labels
+
+# Label for the source images for training/validation/testing
+source_images_label = image
+
+# Label for the target images for training/validation/testing
+target_images_label = label
+
+# Number of input channels (e.g., 1 for a gray-scale image)
+in_channels = 1
+
+# Number of output channels (corresponds to the number of classes to predict)
+out_channels = 3
+
+# Fraction of source images to be used for training (0.0 - 1.0): omit for default
+train_fraction = 0.8
+
+# Fraction of source images to be used for validation (0.0 - 1.0): omit for default
+val_fraction = 0.15
+
+# Fraction of source images to be used for testing (0.0 - 1.0): omit for default
+test_fraction = 0.05
+
+# Checkpoint monitor: one of "loss" or "metrics"
+checkpoint_monitor = loss
+
+# Checkpoint metrics class: if `checkpoint_target` is `metrics`, one of the classes from `class_names`
+# can be used as monitor. Leave unset to use the global validation metric.
+# Ignored if `checkpoint_target` is loss.
+checkpoint_metrics_class =
+
+# Use early stopping based on `checkpoint_monitor` and `checkpoint_metrics_class`?
+use_early_stopping = False
+early_stopping_patience =
+
+# Unfreeze strategy (omit to keep encoder frozen)
+unfreeze_strategy = linear
+
+# Full path to the images to be used for prediction: must be specified if trainer_mode is `predict`
+source_for_prediction =
+
+# Full path to the folder where the predicted images will be stored: omit for default target
+target_for_prediction =
+
+# Full path to an existing model for `resume` or `predict`: ignored if trainer_mode is `train`
+# Must be specified if the self-supervised training was not run
+source_model_path =
+
+# Initial learning rate
+learning_rate = 0.001
+
+# Whether the background class should be included in the calculation of loss and metrics
+include_background = False
+
+# Class names (for logs and TensorBoard)
+class_names =  background, soma, neurite
+
+# Maximum number of training epochs
+max_epochs = 2000
+
+# Output data type for full inference
+output_dtype = int32

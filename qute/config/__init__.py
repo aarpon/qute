@@ -9,9 +9,10 @@
 #    Aaron Ponti - initial API and implementation
 #  ******************************************************************************
 
-from ._config import Config
+from ._config import Config, ConfigFactory
 
 __doc__ = "Manage qute configurations."
 __all__ = [
     "Config",
+    "ConfigFactory",
 ]
