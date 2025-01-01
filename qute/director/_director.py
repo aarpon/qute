@@ -542,18 +542,18 @@ class EnsembleDirector(Director):
         num_folds: int,
         num_workers: int = -1,
     ) -> None:
-        """Constructor.
+        """
+        Constructor.
 
         Parameters
         ----------
-
         config_file: Union[Path, str]
             Full path to the configuration file.
-
         num_folds: int
             Number of folds for cross-validation.
+        num_workers: int
+            Number of workers to use for data loading. Default is -1, which uses all available CPUs.
         """
-
         super().__init__(config_file=config_file, num_workers=num_workers)
         self.num_folds = num_folds
         self.current_fold = -1
@@ -563,8 +563,9 @@ class EnsembleDirector(Director):
 
     def _setup_trainer_callbacks(self):
         """Set up trainer callbacks."""
-
         # Callbacks
+        training_callbacks = []
+        early_stopping = None
         if self.config.use_early_stopping:
             early_stopping = EarlyStopping(
                 monitor=self.config.checkpoint_monitor,
@@ -572,33 +573,23 @@ class EnsembleDirector(Director):
                 mode=self.config.checkpoint_mode,
                 verbose=True,
             )
-        else:
-            early_stopping = None
+            training_callbacks.append(early_stopping)
+
         model_checkpoint = ModelCheckpoint(
             dirpath=self.project.models_dir / f"fold_{self.current_fold}",
             monitor=self.config.checkpoint_monitor,
             mode=self.config.checkpoint_mode,
             verbose=True,
         )
-        lr_monitor = LearningRateMonitor(logging_interval="step")
+        training_callbacks.append(model_checkpoint)
 
-        # Add them to the training callbacks list
-        if self.config.use_early_stopping:
-            training_callbacks = [
-                early_stopping,
-                model_checkpoint,
-                lr_monitor,
-            ]
-        else:
-            training_callbacks = [
-                model_checkpoint,
-                lr_monitor,
-            ]
+        lr_monitor = LearningRateMonitor(logging_interval="step")
+        training_callbacks.append(lr_monitor)
 
         return training_callbacks, early_stopping, model_checkpoint, lr_monitor
 
     def _setup_trainer(self):
-        """Set up the trainer."""
+        """Set up the PyTorch Lightning trainer."""
         # Instantiate the Trainer
         trainer = pl.Trainer(
             default_root_dir=self.project.results_dir / f"fold_{self.current_fold}",
@@ -617,8 +608,7 @@ class EnsembleDirector(Director):
         return trainer
 
     def _train(self):
-        """Run a training from scratch."""
-
+        """Run a training from scratch with cross-validation."""
         # Set up components common to train and resume
         self._setup_basis_for_training_and_resume()
 
@@ -627,11 +617,10 @@ class EnsembleDirector(Director):
 
         # Run training with n-fold cross-validation
         for fold in range(self.num_folds):
-
             # Store current fold
             self.current_fold = fold
 
-            # Print path to best model
+            # Inform
             print(f"Fold {fold}: starting training.")
 
             # Set the fold for current training
@@ -698,22 +687,27 @@ class EnsembleDirector(Director):
             # Test
             self.trainer.test(model, dataloaders=self.data_module.test_dataloader())
 
-        # If there is no source_for_prediction in the configuration file,
-        # we inform and skip the full inference
-        if self.config.source_for_prediction is None:
+        # If there is a source for prediction, run ensemble inference
+        if self.config.source_for_prediction is not None:
+            # Determine the target folder for predictions
+            target_for_prediction = self.config.target_for_prediction
+            if target_for_prediction is None:
+                print("Target for prediction not specified in configuration.")
+                target_for_prediction = self.project.run_dir / "predictions"
+                print(f"Defaulting to {target_for_prediction}")
+
+            # Display target folder
+            print(f"Saving predictions to {target_for_prediction}.")
+
+            # Run ensemble prediction
+            self._run_ensemble_inference(target_for_prediction)
+        else:
             print(
                 "Source for prediction not specified in configuration. Skipping full inference."
             )
-            return
 
-        # Determine target folder for predictions
-        if self.config.target_for_prediction is None:
-            print("Target for prediction not specified in configuration.")
-            target_for_prediction = self.project.run_dir / "predictions"
-            print(f"Defaulting to {target_for_prediction}")
-        else:
-            target_for_prediction = self.config.target_for_prediction
-
+    def _run_ensemble_inference(self, target_for_prediction):
+        """Run ensemble inference using the trained models."""
         # Run ensemble prediction
         self._best_models[0].full_inference_ensemble(
             models=self._best_models,
@@ -792,7 +786,6 @@ class EnsembleDirector(Director):
 
     def _load_models(self, models_dir: Path):
         """Reload all models found in the model folds."""
-
         # Re-load all (best) models
         models = []
         fold = 0
@@ -825,48 +818,21 @@ class EnsembleDirector(Director):
         print(f"Loaded {len(models)} trained models.")
         return models
 
-    def _setup_basis_for_training_and_resume(self):
-        """Initialize the basic components for training or resume."""
-
-        # Set up the project
-        self.project = self._setup_project()
-
-        # Set up the transform campaign
-        self.campaign_transforms = self._setup_campaign_transforms()
-
-        # Set up the data module
-        self.data_module = self._setup_data_module()
-
-        # Inform
-        print(f"Working directory: {self.project.run_dir}")
-
-        # Prepare data and set up for training
-        self.data_module.prepare_data()
-        self.data_module.setup("train")
-
-        # Set up loss function
-        self.criterion = self._setup_loss()
-
-        # Set up metrics
-        self.metrics = self._setup_metrics()
-
 
 class RestorationDirector(Director):
     """Restoration Training Director."""
 
-    @override
     def _setup_metrics(self):
-        """Set up metrics."""
+        """Set up metrics for restoration."""
         return MeanAbsoluteError()
 
-    @override
     def _setup_loss(self):
-        """Set up loss function."""
+        """Set up loss function for restoration."""
         return MSELoss()
 
-    @override
     def _setup_data_module(self):
-        """Set up data module."""
+        """Set up data module for restoration."""
+        # Data module
         data_module = DataModuleLocalFolder(
             campaign_transforms=self.campaign_transforms,
             data_dir=self.config.data_dir,
@@ -884,49 +850,51 @@ class RestorationDirector(Director):
             inference_batch_size=self.config.inference_batch_size,
             num_workers=self.num_workers,
         )
+
+        # Return the data module
         return data_module
 
-    @override
     def _setup_campaign_transforms(self):
-        """Set up campaign transforms."""
+        """Set up campaign transforms for restoration."""
+        # Initialize default Restoration Campaign Transform
         campaign_transforms = RestorationCampaignTransforms(
             min_intensity=0,
             max_intensity=15472,
             patch_size=self.config.patch_size,
             num_patches=self.config.num_patches,
         )
+
+        # Return campaign transforms
         return campaign_transforms
 
 
 class SegmentationDirector(Director):
     """Segmentation Training Director."""
 
-    @override
     def _setup_metrics(self):
-        """Set up metrics."""
+        """Set up metrics for segmentation."""
         return DiceMetric(
             include_background=self.config.include_background,
             reduction="mean_batch",
             get_not_nans=False,
         )
 
-    @override
     def _setup_loss(self):
-        """Set up loss function."""
+        """Set up loss function for segmentation."""
         return DiceCELoss(
             include_background=self.config.include_background,
             to_onehot_y=False,
             softmax=True,
         )
 
-    @override
     def _setup_data_module(self):
-        """Set up data module."""
+        """Set up data module for segmentation."""
+        # Data module
         data_module = DataModuleLocalFolder(
             campaign_transforms=self.campaign_transforms,
             data_dir=self.config.data_dir,
             seed=self.config.seed,
-            num_folds=1,
+            num_folds=1,  # No ensemble
             batch_size=self.config.batch_size,
             patch_size=self.config.patch_size,
             num_patches=self.config.num_patches,
@@ -940,31 +908,37 @@ class SegmentationDirector(Director):
             inference_batch_size=self.config.inference_batch_size,
             num_workers=self.num_workers,
         )
+
+        # Return data module
         return data_module
 
-    @override
     def _setup_campaign_transforms(self):
-        """Set up campaign transforms."""
+        """Set up campaign transforms for segmentation."""
+        # Consistency check
         if self.config.is_3d:
             raise ValueError("Check the value of `is_3d` in the configuration file.")
 
+        # Initialize default Segmentation Campaign Transform
         campaign_transforms = SegmentationCampaignTransforms2D(
             num_classes=self.config.out_channels,
             patch_size=self.config.patch_size,
             num_patches=self.config.num_patches,
         )
+
+        # Return the campaign transforms
         return campaign_transforms
 
 
 class SegmentationDirector3D(SegmentationDirector):
     """Segmentation 3D Training Director."""
 
-    @override
     def _setup_campaign_transforms(self):
-        """Set up campaign transforms."""
+        """Set up campaign transforms for 3D segmentation."""
+        # Consistency check
         if not self.config.is_3d:
             raise ValueError("Check the value of `is_3d` in the configuration file.")
 
+        # Initialize default Segmentation Campaign Transform for 3D
         campaign_transforms = SegmentationCampaignTransforms3D(
             num_classes=self.config.out_channels,
             patch_size=self.config.patch_size,
@@ -973,15 +947,16 @@ class SegmentationDirector3D(SegmentationDirector):
             to_isotropic=self.config.to_isotropic,
             upscale_z=self.config.up_scale_z,
         )
+
+        # Return the campaign transforms
         return campaign_transforms
 
 
 class SelfSupervisedDirector(RestorationDirector):
     """Self-Supervised Training Director."""
 
-    @override
     def _setup_campaign_transforms(self):
-        """Set up campaign transforms."""
+        """Set up campaign transforms for self-supervised restoration."""
         return SelfSupervisedRestorationCampaignTransforms()
 
 
@@ -998,11 +973,12 @@ class EnsembleSegmentationDirector(EnsembleDirector, SegmentationDirector):
 
     def _setup_data_module(self):
         """Set up data module with folds."""
+        # Data module
         data_module = DataModuleLocalFolder(
             campaign_transforms=self.campaign_transforms,
             data_dir=self.config.data_dir,
             seed=self.config.seed,
-            num_folds=self.num_folds,
+            num_folds=self.num_folds,  # Ensemble
             batch_size=self.config.batch_size,
             patch_size=self.config.patch_size,
             num_patches=self.config.num_patches,
@@ -1016,11 +992,16 @@ class EnsembleSegmentationDirector(EnsembleDirector, SegmentationDirector):
             inference_batch_size=self.config.inference_batch_size,
             num_workers=self.num_workers,
         )
+
+        # Return data module
         return data_module
 
     def _setup_basis_for_training_and_resume(self):
         """Initialize the basic components for training or resume."""
+
+        # Call parent method
         super()._setup_basis_for_training_and_resume()
+
         # Ensure that data module is prepared with folds
         self.data_module.prepare_data()
         self.data_module.setup("train")
@@ -1029,9 +1010,9 @@ class EnsembleSegmentationDirector(EnsembleDirector, SegmentationDirector):
 class CellRestorationDemoDirector(RestorationDirector):
     """Restoration Demo Training Director."""
 
-    @override
     def _setup_data_module(self):
-        """Set up data module."""
+        """Set up data module for cell restoration demo."""
+        # Data module
         data_module = CellRestorationDemo(
             campaign_transforms=self.campaign_transforms,
             download_dir=self.config.project_dir,
@@ -1045,15 +1026,17 @@ class CellRestorationDemoDirector(RestorationDirector):
             inference_batch_size=self.config.inference_batch_size,
             num_workers=self.num_workers,
         )
+
+        # Return data module
         return data_module
 
 
 class CellSegmentationDemoDirector(SegmentationDirector):
     """Segmentation Demo Training Director."""
 
-    @override
     def _setup_data_module(self):
-        """Set up data module."""
+        """Set up data module for cell segmentation demo."""
+        # Data module
         data_module = CellSegmentationDemo(
             campaign_transforms=self.campaign_transforms,
             download_dir=self.config.project_dir,
@@ -1067,15 +1050,17 @@ class CellSegmentationDemoDirector(SegmentationDirector):
             inference_batch_size=self.config.inference_batch_size,
             num_workers=self.num_workers,
         )
+
+        # Return data module
         return data_module
 
 
 class EnsembleCellSegmentationDemoDirector(EnsembleSegmentationDirector):
     """Ensemble Segmentation Demo Training Director."""
 
-    @override
     def _setup_data_module(self):
-        """Set up data module."""
+        """Set up data module for ensemble cell segmentation demo."""
+        # Data module
         data_module = CellSegmentationDemo(
             campaign_transforms=self.campaign_transforms,
             download_dir=self.config.project_dir,
