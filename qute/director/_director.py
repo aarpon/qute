@@ -268,6 +268,7 @@ class Director(ABC):
             roi_size=self.config.patch_size,
             batch_size=self.config.inference_batch_size,
             transpose=False,
+            prefix="",
             output_dtype=self.config.output_dtype,
         )
 
@@ -375,6 +376,7 @@ class Director(ABC):
             roi_size=self.config.patch_size,
             batch_size=self.config.inference_batch_size,
             transpose=False,
+            prefix="",
             output_dtype=self.config.output_dtype,
         )
 
@@ -721,6 +723,7 @@ class EnsembleDirector(Director):
             save_individual_preds=True,
             voting_mechanism="mode",
             weights=None,
+            prefix="",
             output_dtype=self.config.output_dtype,
         )
 
@@ -781,6 +784,7 @@ class EnsembleDirector(Director):
             save_individual_preds=True,
             voting_mechanism="mode",
             weights=None,
+            prefix="",
             output_dtype=self.config.output_dtype,
         )
 
