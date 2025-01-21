@@ -15,3 +15,4 @@ scratch/
 /doc/
 /debug.py
 /.ruff_cache/
+/.venv/
