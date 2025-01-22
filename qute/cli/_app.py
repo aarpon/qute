@@ -132,15 +132,16 @@ def version(
         """Display detailed version information."""
         import subprocess
 
+        import monai
         import pytorch_lightning as pl
         import torch
         import torchvision
 
-        typer.echo(f"qute {__version__}")
-        typer.echo(
-            f"PyTorch {torch.__version__} with torchvision {torchvision.__version__}"
-        )
-        typer.echo(f"PyTorch-Lightning {pl.__version__}")
+        typer.echo(f"qute                : {__version__}")
+        typer.echo(f"PyTorch             : {torch.__version__}")
+        typer.echo(f"Torchvision         : {torchvision.__version__}")
+        typer.echo(f"PyTorch-Lightning   : {pl.__version__}")
+        typer.echo(f"MONAI               : {monai.__version__}")
         try:
             cmd = ["nvidia-smi", "--version"]
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
