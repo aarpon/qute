@@ -32,20 +32,17 @@ dependencies = [
     "nnunetv2>=2.2.1",
     "hiddenlayer @ git+https://github.com/FabianIsensee/hiddenlayer.git",
     "imio>=0.3.0",
-    "nd2reader<4.0.0,>=3.3.0",
+    "nd2reader>=3.3.1",
     "scipy<2.0.0,>=1.14.0",
     "typing-extensions<5.0.0,>=4.12.2",
     "monai<2.0.0,>=1.4.0",
     "typer<1.0.0,>=0.13.0",
     "ruff>=0.8.0",
     "torch>=2.5.1",
-    "zarr>=3.0.1",
+    "torchvision>=0.20.1",
 ]
 
-[project.scripts]
-qute = "qute.main:app"
-
-[dependencies-groups]
+[dependency-groups]
 dev = [
     "pytest<9.0.0,>=8.0.0",
     "torch-tb-profiler<1.0.0,>=0.4.3",
@@ -54,6 +51,10 @@ dev = [
     "pre-commit<4.0.0,>=3.7.1",
     "pdoc3<1.0.0,>=0.11.1",
 ]
+
+[project.scripts]
+qute = "qute.main:app"
+
 #[tool-uv]
 #default-groups = []
 

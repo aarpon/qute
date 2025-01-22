@@ -9,10 +9,19 @@
 #    Aaron Ponti - initial API and implementation
 #  ******************************************************************************
 
-from ._config import Config, ConfigFactory
+from ._config import (
+    ClassificationConfig,
+    Config,
+    ConfigFactory,
+    RegressionConfig,
+    SelfSupervisedClassificationConfig,
+)
 
 __doc__ = "Manage qute configurations."
 __all__ = [
     "Config",
     "ConfigFactory",
+    "ClassificationConfig",
+    "RegressionConfig",
+    "SelfSupervisedClassificationConfig",
 ]

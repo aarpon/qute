@@ -477,13 +477,19 @@ class Director(ABC):
 
         model_class = self._get_model_class()
 
+        # In case of a restoration model, we do not have class names
+        if hasattr(self.config, "class_names"):
+            class_names = self.config.class_names
+        else:
+            class_names = []
+
         # Prepare model-specific parameters
         model_params = {
             "campaign_transforms": self.campaign_transforms,
             "spatial_dims": 3 if self.config.is_3d else 2,
             "in_channels": self.config.in_channels,
             "out_channels": self.config.out_channels,
-            "class_names": self.config.class_names,
+            "class_names": class_names,
             "criterion": self.criterion,
             "metrics": self.metrics,
             "learning_rate": self.config.learning_rate,

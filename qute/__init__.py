@@ -9,6 +9,20 @@
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
 
+import multiprocessing as mp
+import os
+import platform
+
+try:
+    mp.set_start_method("fork")
+except RuntimeError:
+    pass
+
+if platform.system() == "Darwin" and platform.machine() == "arm64":
+    # Allow falling back to CPU on Apple M1/M2 devices if
+    # operations are not supported by MPS.
+    os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+
 __version__ = "0.5.0"
 __doc__ = f"""
 This is the documentation of the `qute` library (version {__version__}).

@@ -8,10 +8,8 @@
 #  Contributors:
 #    Aaron Ponti - initial API and implementation
 #  ******************************************************************************
-from ._cli_config import config_app
-from ._cli_run import run_app
+from ._app import app
 
 __all__ = [
-    "config_app",
-    "run_app",
+    "app",
 ]
