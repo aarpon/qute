@@ -116,39 +116,64 @@ class Director(ABC):
         raise NotImplementedError("Reimplement in child class.")
 
     def _set_precision(self):
-        """Set the precision for training based on the accelerator."""
+        """Set the precision for training based on the accelerator.
+
+        One of "32", "16-mixed", "bf16-mixed", "16", "bf16".
+
+        These are fully-supported by PyTorch-Lightning.
+
+        "32":
+            * Full 32-bit floating point precision (default).
+            * Used when no precision argument is specified.
+            * Suitable for tasks requiring high precision or for unsupported hardware configurations.
+
+        "16-mixed":
+            * Mixed precision training using FP16 (16-bit floating point).
+            * Enabled via PyTorch's AMP (Automatic Mixed Precision).
+            * Requires CUDA and supported GPUs (NVIDIA GPUs with Tensor Cores).
+
+        "bf16-mixed":
+            * Mixed precision training using bfloat16 (BF16).
+            * Enabled via PyTorch's AMP.
+            * Supported on NVIDIA Ampere GPUs or later, and some TPUs.
+            * Provides higher range compared to FP16 but slightly lower precision.
+
+        "16" (FP16 Full Precision):
+            * Pure FP16 precision (not mixed).
+            * Rarely used as it is less stable for training compared to "16-mixed".
+            * Suitable for inference on FP16-capable hardware but not recommended for training.
+
+        "bf16" (BF16 Full Precision):
+            * Pure BF16 precision.
+            * Similar to "16", this is typically used for inference rather than training.
+        """
+
+        ALLOWED_PRECISION = ["32", "16-mixed", "bf16-mixed", "16", "bf16"]
+        if self.config.precision not in ALLOWED_PRECISION:
+            raise ValueError(
+                f"Unsupported precision: {self.config.precision}. Allowed values are {ALLOWED_PRECISION}."
+            )
 
         # Device and precision settings
         accelerator = device.get_accelerator()
         if accelerator == "gpu":
-            # Properly enable usage of Tensor Cores on CUDA GPUs
-            if device.cuda_does_gpu_support_16bit_mixed_precision() and (
-                self.config.precision == "16-mixed"
-                or self.config.precision == "bf16-mixed"
-            ):
-                torch.set_float32_matmul_precision("medium")
-                print(
-                    f'PyTorch Lightning Trainer precision = "{self.config.precision}"'
-                )
-                print('PyTorch matrix multiplication precision = "medium"')
-            else:
-                torch.set_float32_matmul_precision("high")
-                print(
-                    f'PyTorch Lightning Trainer precision = "{self.config.precision}"'
-                )
-                print('PyTorch matrix multiplication precision = "high"')
-            # Set trainer_precision for GPU
+            # PyTorch-Lighting will use the passed precision with its Trainer object.
+            # If the hardware does not support it, PyTorch-Lightning will transparently
+            # adapt it.
             trainer_precision = self.config.precision
+            print(f'PyTorch Lightning Trainer precision = "{self.config.precision}"')
+
         elif accelerator == "mps":
-            # MPS backend currently supports only float32 precision
-            trainer_precision = 32
+            # MPS backend currently supports only float32 precision. Override the setting.
+            trainer_precision = "32"
             print("MPS backend detected. Using float32 precision.")
+
         elif accelerator == "cpu":
-            # CPU backend supports only float32 precision efficiently
-            trainer_precision = 32
+            # CPU backend supports only float32 precision efficiently. Override the setting.
+            trainer_precision = "32"
             print("CPU backend detected. Using float32 precision.")
         else:
-            # Other accelerators
+            # Other accelerators - use the passed precision and hope for the best.
             trainer_precision = self.config.precision
             print(f"Using default precision: {trainer_precision}")
 
