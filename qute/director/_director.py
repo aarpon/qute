@@ -1,5 +1,5 @@
 #  ********************************************************************************
-#  Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+#  Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 #  All rights reserved. This program and the accompanying materials
 #  are made available under the terms of the Apache License Version 2.0
 #  which accompanies this distribution, and is available at
@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Union
 
 import pytorch_lightning as pl
-import torch
 from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
 from pytorch_lightning.callbacks import (
@@ -25,7 +24,6 @@ from pytorch_lightning.callbacks import (
 from torch.nn import MSELoss
 from torch.optim.lr_scheduler import OneCycleLR
 from torchmetrics import MeanAbsoluteError
-from typing_extensions import override
 
 from qute import device
 from qute.campaigns import (
@@ -34,7 +32,7 @@ from qute.campaigns import (
     SegmentationCampaignTransforms3D,
     SelfSupervisedRestorationCampaignTransforms,
 )
-from qute.config import Config
+from qute.config import ConfigFactory
 from qute.data.dataloaders import DataModuleLocalFolder
 from qute.data.demos import CellRestorationDemo, CellSegmentationDemo
 from qute.models.attention_unet import AttentionUNet
@@ -66,8 +64,10 @@ class Director(ABC):
         else:
             self.num_workers = num_workers
 
+        # Get the proper configuration parser
+        self.config = ConfigFactory.get_config(config_file)
+
         # Parse it
-        self.config = Config(self.config_file)
         if not self.config.parse():
             raise Exception("Invalid config file")
 
@@ -114,39 +114,64 @@ class Director(ABC):
         raise NotImplementedError("Reimplement in child class.")
 
     def _set_precision(self):
-        """Set the precision for training based on the accelerator."""
+        """Set the precision for training based on the accelerator.
+
+        One of "32", "16-mixed", "bf16-mixed", "16", "bf16".
+
+        These are fully-supported by PyTorch-Lightning.
+
+        "32":
+            * Full 32-bit floating point precision (default).
+            * Used when no precision argument is specified.
+            * Suitable for tasks requiring high precision or for unsupported hardware configurations.
+
+        "16-mixed":
+            * Mixed precision training using FP16 (16-bit floating point).
+            * Enabled via PyTorch's AMP (Automatic Mixed Precision).
+            * Requires CUDA and supported GPUs (NVIDIA GPUs with Tensor Cores).
+
+        "bf16-mixed":
+            * Mixed precision training using bfloat16 (BF16).
+            * Enabled via PyTorch's AMP.
+            * Supported on NVIDIA Ampere GPUs or later, and some TPUs.
+            * Provides higher range compared to FP16 but slightly lower precision.
+
+        "16" (FP16 Full Precision):
+            * Pure FP16 precision (not mixed).
+            * Rarely used as it is less stable for training compared to "16-mixed".
+            * Suitable for inference on FP16-capable hardware but not recommended for training.
+
+        "bf16" (BF16 Full Precision):
+            * Pure BF16 precision.
+            * Similar to "16", this is typically used for inference rather than training.
+        """
+
+        ALLOWED_PRECISION = ["32", "16-mixed", "bf16-mixed", "16", "bf16"]
+        if self.config.precision not in ALLOWED_PRECISION:
+            raise ValueError(
+                f"Unsupported precision: {self.config.precision}. Allowed values are {ALLOWED_PRECISION}."
+            )
 
         # Device and precision settings
         accelerator = device.get_accelerator()
         if accelerator == "gpu":
-            # Properly enable usage of Tensor Cores on CUDA GPUs
-            if device.cuda_does_gpu_support_16bit_mixed_precision() and (
-                self.config.precision == "16-mixed"
-                or self.config.precision == "bf16-mixed"
-            ):
-                torch.set_float32_matmul_precision("medium")
-                print(
-                    f'PyTorch Lightning Trainer precision = "{self.config.precision}"'
-                )
-                print('PyTorch matrix multiplication precision = "medium"')
-            else:
-                torch.set_float32_matmul_precision("high")
-                print(
-                    f'PyTorch Lightning Trainer precision = "{self.config.precision}"'
-                )
-                print('PyTorch matrix multiplication precision = "high"')
-            # Set trainer_precision for GPU
+            # PyTorch-Lighting will use the passed precision with its Trainer object.
+            # If the hardware does not support it, PyTorch-Lightning will transparently
+            # adapt it.
             trainer_precision = self.config.precision
+            print(f'PyTorch Lightning Trainer precision = "{self.config.precision}"')
+
         elif accelerator == "mps":
-            # MPS backend currently supports only float32 precision
-            trainer_precision = 32
+            # MPS backend currently supports only float32 precision. Override the setting.
+            trainer_precision = "32"
             print("MPS backend detected. Using float32 precision.")
+
         elif accelerator == "cpu":
-            # CPU backend supports only float32 precision efficiently
-            trainer_precision = 32
+            # CPU backend supports only float32 precision efficiently. Override the setting.
+            trainer_precision = "32"
             print("CPU backend detected. Using float32 precision.")
         else:
-            # Other accelerators
+            # Other accelerators - use the passed precision and hope for the best.
             trainer_precision = self.config.precision
             print(f"Using default precision: {trainer_precision}")
 
@@ -475,13 +500,19 @@ class Director(ABC):
 
         model_class = self._get_model_class()
 
+        # In case of a restoration model, we do not have class names
+        if hasattr(self.config, "class_names"):
+            class_names = self.config.class_names
+        else:
+            class_names = []
+
         # Prepare model-specific parameters
         model_params = {
             "campaign_transforms": self.campaign_transforms,
             "spatial_dims": 3 if self.config.is_3d else 2,
             "in_channels": self.config.in_channels,
             "out_channels": self.config.out_channels,
-            "class_names": self.config.class_names,
+            "class_names": class_names,
             "criterion": self.criterion,
             "metrics": self.metrics,
             "learning_rate": self.config.learning_rate,

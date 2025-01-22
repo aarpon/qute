@@ -1,5 +1,5 @@
 # ******************************************************************************
-# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 # All rights reserved. This program and the accompanying materials
 # are made available under the terms of the Apache License Version 2.0
 # which accompanies this distribution, and is available at
@@ -111,7 +111,7 @@ def get_cell_segmentation_demo_dataset(
 
 
 def get_cell_segmentation_idt_demo_dataset(
-    download_dir: Optional[Union[Path, str]] = None
+    download_dir: Optional[Union[Path, str]] = None,
 ):
     """If not yet present, download and expands segmentation demo dataset.
 

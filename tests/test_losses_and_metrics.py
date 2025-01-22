@@ -1,5 +1,5 @@
 # ******************************************************************************
-# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 # All rights reserved. This program and the accompanying materials
 # are made available under the terms of the Apache License Version 2.0
 # which accompanies this distribution, and is available at
@@ -60,7 +60,6 @@ def extract_test_transforms_data(tmpdir):
 
 
 def test_metrics_3d(extract_test_transforms_data):
-
     # Load TIFF file with (dtype=torch.int32)
     reader = CustomTIFFReader(
         dtype=torch.int32, as_meta_tensor=True, ensure_channel_first=True
@@ -154,7 +153,6 @@ def test_metrics_3d(extract_test_transforms_data):
 
 
 def test_metrics_2d(extract_test_transforms_data):
-
     # Load TIFF file with (dtype=torch.int32)
     reader = CustomTIFFReader(
         dtype=torch.int32, as_meta_tensor=True, ensure_channel_first=True
@@ -247,7 +245,6 @@ def test_metrics_2d(extract_test_transforms_data):
 
 
 def test_losses_3d(extract_test_transforms_data):
-
     # Load TIFF file with (dtype=torch.int32)
     reader = CustomTIFFReader(
         dtype=torch.int32, as_meta_tensor=True, ensure_channel_first=True

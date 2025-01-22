@@ -1,5 +1,5 @@
 # ******************************************************************************
-# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 # All rights reserved. This program and the accompanying materials
 # are made available under the terms of the Apache License Version 2.0
 # which accompanies this distribution, and is available at
@@ -128,7 +128,6 @@ class LabelToTwoClassMask(Transform):
 
         # Process all labels serially
         for region in regions:
-
             if region.label == 0:
                 continue
 
@@ -309,7 +308,6 @@ class TwoClassMaskToLabel(Transform):
 
         # Do we need to dilate?
         if self.border_thickness is not None and self.border_thickness > 0:
-
             # Allocate result
             labels_dilated = torch.zeros(data.shape, dtype=torch.int32)
 
@@ -321,7 +319,6 @@ class TwoClassMaskToLabel(Transform):
 
             # Process all labels serially
             for lbl in torch.unique(labels):
-
                 if lbl == 0:
                     continue
 
@@ -636,7 +633,6 @@ class NormalizedDistanceTransform(Transform):
 
         # Process all labels serially
         for region in regions:
-
             if region.label == 0:
                 continue
 

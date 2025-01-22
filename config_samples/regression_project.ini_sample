@@ -1,4 +1,12 @@
 # This is a configuration template for a REGRESSION (restoration) study.
+[metadata]
+
+# Project type
+project_type = regression
+
+# Configuration file version
+version = 0
+
 [settings]
 
 # Trainer mode: one of `train`, `resume`, `predict`

@@ -1,5 +1,5 @@
 #  ********************************************************************************
-#  Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+#  Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 #  All rights reserved. This program and the accompanying materials
 #  are made available under the terms of the Apache License Version 2.0
 #  which accompanies this distribution, and is available at
@@ -11,6 +11,7 @@
 import configparser
 import os
 import re
+from abc import ABC
 from pathlib import Path
 from typing import Union
 
@@ -20,9 +21,44 @@ import userpaths
 from qute.mode import TrainerMode
 
 
-class Config:
-    def __init__(self, config_file):
+class ConfigFactory:
+    def __init__(self):
+        raise Exception("Config Factory is not implemented")
 
+    @staticmethod
+    def get_config(config_path: Union[str, Path]):
+        """Return the appropriate Configuration object for the passed configuration file."""
+
+        # Make sure to work with a Path
+        config_path = Path(config_path)
+
+        # Read the configuration file
+        if not config_path.is_file():
+            print(f"{config_path} not found!")
+            return None
+        try:
+            config = configparser.ConfigParser()
+            config.read(config_path)
+            assert config["metadata"].name == "metadata"
+        except:
+            print(f"{config_path} is not a valid metadata file!")
+            return None
+
+        if config["metadata"]["project_type"] == "classification":
+            return ClassificationConfig(config_path)
+        elif config["metadata"]["project_type"] == "regression":
+            return RegressionConfig(config_path)
+        elif config["metadata"]["project_type"] == "self-supervised-classification":
+            return SelfSupervisedClassificationConfig(config_path)
+        else:
+            print("Unsupported configuration file!")
+            return None
+
+
+class Config(ABC):
+    """Abstract base class for configuration objects."""
+
+    def __init__(self, config_file):
         self._config_file = Path(config_file).resolve()
         self._config = None
 
@@ -42,6 +78,61 @@ class Config:
 
         # Validate the configuration
         return self._validate()
+
+    @staticmethod
+    def process_path(path: Union[Path, str, None]) -> Union[Path, None]:
+        """Process a path string with optional environmental variables.
+
+        Parameters
+        ----------
+
+        path: Union[Path, str, None]
+            Full path that can optionally contain environment variables in the
+            for ${ENV_VAR}. For instance: `${HOME}/Documents/qute`. If path is
+            None, None is returned.
+
+            Please notice that ${HOME} will be considered to point to the user path
+            also in Windows, where it is not defined as an environment variable. All
+            other variables, must be defined in os.environ.
+
+        Returns
+        -------
+
+        path: Union[Path, None]
+            Path with expanded environment variables (if present), or None.
+        """
+
+        # Find environment variables of the form ${ENV_VAR} in the string
+        pattern = r"\$\{.+?\}"
+
+        # Make sure to work with a string version of the absolute path
+        # with forward slashes only
+        path_str = str(Path(path))
+        path_str = path_str.replace("\\", "/")
+
+        # Find all substrings
+        matches = re.findall(pattern, path_str)
+
+        # Process matches
+        for match in matches:
+            # We treat $HOME specially
+            if match == "${HOME}":
+                match_rep = userpaths.get_profile()
+            else:
+                match_rep = os.getenv(match[2:-1], None)
+                if match_rep is None:
+                    raise ValueError(f"Undefined environment variable {match}.")
+            index = path_str.find(match)
+            if index == -1:
+                raise ValueError(f"Could not find {match} in {path_str}.")
+            path_str = f"{path_str[:index]}{match_rep}{path_str[index + len(match) :]}"
+
+        # Make sure to remove double forward slashes potentially introduced
+        # by the substitution
+        path_str = re.sub(r"/+", "/", path_str)
+
+        # Now cast to a pathlib.Path() and return
+        return Path(path_str)
 
     @property
     def checkpoint_monitor(self):
@@ -232,20 +323,6 @@ class Config:
         return float(self._config["settings"]["learning_rate"])
 
     @property
-    def include_background(self):
-        include_background = self._config["settings"]["include_background"]
-        return include_background.lower() == "true"
-
-    @property
-    def class_names(self):
-        if "class_names" in self._config["settings"]:
-            class_names = self._config["settings"]["class_names"]
-            class_names = re.sub(r"\s+", "", class_names).split(",")
-            return tuple(class_names)
-        else:
-            return []
-
-    @property
     def max_epochs(self):
         return int(self._config["settings"]["max_epochs"])
 
@@ -311,62 +388,6 @@ class Config:
             voxel_size[i] = float(element)
         return tuple(voxel_size)
 
-    @staticmethod
-    def process_path(path: Union[Path, str, None]) -> Union[Path, None]:
-        """Process a path string with optional environmental variables.
-
-        Parameters
-        ----------
-
-        path: Union[Path, str, None]
-            Full path that can optionally contain environment variables in the
-            for ${ENV_VAR}. For instance: `${HOME}/Documents/qute`. If path is
-            None, None is returned.
-
-            Please notice that ${HOME} will be considered to point to the user path
-            also in Windows, where it is not defined as an environment variable. All
-            other variables, must be defined in os.environ.
-
-        Returns
-        -------
-
-        path: Union[Path, None]
-            Path with expanded environment variables (if present), or None.
-        """
-
-        # Find environment variables of the form ${ENV_VAR} in the string
-        pattern = r"\$\{.+?\}"
-
-        # Make sure to work with a string version of the absolute path
-        # with forward slashes only
-        path_str = str(Path(path))
-        path_str = path_str.replace("\\", "/")
-
-        # Find all substrings
-        matches = re.findall(pattern, path_str)
-
-        # Process matches
-        for match in matches:
-
-            # We treat $HOME specially
-            if match == "${HOME}":
-                match_rep = userpaths.get_profile()
-            else:
-                match_rep = os.getenv(match[2:-1], None)
-                if match_rep is None:
-                    raise ValueError(f"Undefined environment variable {match}.")
-            index = path_str.find(match)
-            if index == -1:
-                raise ValueError(f"Could not find {match} in {path_str}.")
-            path_str = f"{path_str[:index]}{match_rep}{path_str[index + len(match):]}"
-
-        # Make sure to remove double forward slashes potentially introduced
-        # by the substitution
-        path_str = re.sub(r"/+", "/", path_str)
-
-        # Now cast to a pathlib.Path() and return
-        return Path(path_str)
-
     def _validate(self):
         """Validate configuration."""
 
@@ -419,3 +440,38 @@ class Config:
 
         # Return success
         return True
+
+
+class ClassificationConfig(Config):
+    """Classification configuration object."""
+
+    def __init__(self, config_file):
+        super().__init__(config_file)
+
+    @property
+    def class_names(self):
+        if "class_names" in self._config["settings"]:
+            class_names = self._config["settings"]["class_names"]
+            class_names = re.sub(r"\s+", "", class_names).split(",")
+            return tuple(class_names)
+        else:
+            return []
+
+    @property
+    def include_background(self):
+        include_background = self._config["settings"]["include_background"]
+        return include_background.lower() == "true"
+
+
+class RegressionConfig(Config):
+    """Classification configuration object."""
+
+    def __init__(self, config_file):
+        super().__init__(config_file)
+
+
+class SelfSupervisedClassificationConfig(Config):
+    """Classification configuration object."""
+
+    def __init__(self, config_file):
+        raise NotImplementedError("Not implemented yet!")

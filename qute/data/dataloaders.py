@@ -1,5 +1,5 @@
 # ******************************************************************************
-# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 # All rights reserved. This program and the accompanying materials
 # are made available under the terms of the Apache License Version 2.0
 # which accompanies this distribution, and is available at
@@ -195,7 +195,6 @@ class DataModuleLocalFolder(pl.LightningDataModule):
 
         # Write either to file or standard output
         with open_with_fallback(filename) as f:
-
             end = "\n"
 
             f.write(f"Training set ({len(self._train_indices)} image pairs):{end}")

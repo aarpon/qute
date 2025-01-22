@@ -1,5 +1,5 @@
 # ******************************************************************************
-# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 # All rights reserved. This program and the accompanying materials
 # are made available under the terms of the Apache License Version 2.0
 # which accompanies this distribution, and is available at
@@ -72,7 +72,6 @@ def extract_test_transforms_data(tmpdir):
 
 
 def test_label_to_two_class_mask(extract_test_transforms_data):
-
     # Load CellPose dataset (two objects)
     reader = CellposeLabelReader()
     label = reader(Path(__file__).parent / "data" / "cellpose.npy")
@@ -171,7 +170,6 @@ def test_label_to_two_class_mask(extract_test_transforms_data):
 
 
 def test_two_class_mask_to_labels_2d(extract_test_transforms_data):
-
     #
     # 2D
     #
@@ -278,7 +276,6 @@ def test_two_class_mask_to_labels_2d(extract_test_transforms_data):
 
 
 def test_two_class_mask_to_labels_3d(extract_test_transforms_data):
-
     #
     # 3D
     #
@@ -386,7 +383,6 @@ def test_two_class_mask_to_labels_3d(extract_test_transforms_data):
 
 
 def test_custom_tiff_reader(extract_test_transforms_data):
-
     # Load TIFF file with default arguments
     reader = CustomTIFFReader()
     image = reader(Path(__file__).parent / "data" / "labels.tif")
@@ -536,7 +532,6 @@ def test_custom_tiff_reader(extract_test_transforms_data):
 
 
 def test_normalized_distance_transform(extract_test_transforms_data):
-
     # Load TIFF file with (dtype=torch.int32)
     reader = CustomTIFFReader(dtype=torch.int32)
     label = reader(Path(__file__).parent / "data" / "labels.tif")
@@ -589,7 +584,6 @@ def test_normalized_distance_transform(extract_test_transforms_data):
 
 
 def test_normalized_distance_transform_with_seeds(extract_test_transforms_data):
-
     # Load TIFF file with (dtype=torch.int32)
     reader = CustomTIFFReader(dtype=torch.int32)
     label = reader(Path(__file__).parent / "data" / "labels.tif")
@@ -652,7 +646,6 @@ def test_normalized_distance_transform_with_seeds(extract_test_transforms_data):
 
 
 def test_to_label(tmpdir):
-
     # Create 2D label ground truth (classes 0, 1, 2)
     gt_2d = torch.zeros((1, 60, 60), dtype=torch.int32)
     gt_2d[0, :, 20:40] = 1
@@ -731,7 +724,6 @@ def test_to_label(tmpdir):
 
 
 def test_to_label_batch(tmpdir):
-
     # Create batched 2D label ground truth (classes 0, 1, 2)
     gt_2d = torch.zeros((2, 1, 60, 60), dtype=torch.int32)
     gt_2d[0, 0, :, 20:40] = 1
@@ -844,7 +836,6 @@ def test_to_label_batch(tmpdir):
 
 
 def test_watershed(extract_test_transforms_data):
-
     # Load TIFF file with (dtype=torch.int32)
     reader = CustomTIFFReader(dtype=torch.int32, as_meta_tensor=True)
     labels_orig = reader(Path(__file__).parent / "data" / "labels.tif")
@@ -906,7 +897,6 @@ def test_watershed(extract_test_transforms_data):
 
 
 def test_watershed_synth(extract_test_transforms_data):
-
     # Example: Create a 3D volume (substitute this with your actual data)
     image = np.zeros((100, 100, 100), dtype=np.float32)
     image[30:70, 30:70, 30:70] = 1  # Simulate an object
@@ -947,7 +937,6 @@ def test_watershed_synth(extract_test_transforms_data):
 
 
 def test_watershed_and_label(extract_test_transforms_data):
-
     # Load TIFF file with (dtype=torch.int32)
     reader = CustomTIFFReader(dtype=torch.int32, as_meta_tensor=True)
     label_image = reader(Path(__file__).parent / "data" / "labels.tif")
@@ -1017,7 +1006,6 @@ def test_watershed_and_label(extract_test_transforms_data):
 
 
 def test_watershed_and_label_dict_3d(extract_test_transforms_data):
-
     # Load TIFF file with (dtype=torch.int32)
     reader = CustomTIFFReader(dtype=torch.int32, as_meta_tensor=True)
     label_image = reader(Path(__file__).parent / "data" / "labels.tif")
@@ -1101,7 +1089,6 @@ def test_watershed_and_label_dict_3d(extract_test_transforms_data):
 
 
 def test_watershed_and_label_dict_2d(extract_test_transforms_data):
-
     # Load TIFF file with (dtype=torch.int32)
     reader = CustomTIFFReader(dtype=torch.int32, as_meta_tensor=True)
     label_image = reader(Path(__file__).parent / "data" / "labels_2d.tif")

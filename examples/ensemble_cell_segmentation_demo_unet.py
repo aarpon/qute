@@ -1,5 +1,5 @@
 # ******************************************************************************
-# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 # All rights reserved. This program and the accompanying materials
 # are made available under the terms of the Apache License Version 2.0
 # which accompanies this distribution, and is available at
@@ -15,7 +15,6 @@ from pathlib import Path
 from qute.director import EnsembleCellSegmentationDemoDirector
 
 if __name__ == "__main__":
-
     # Configuration file
     config_file = (
         Path(__file__).parent / "ensemble_cell_segmentation_demo_unet_config.ini"

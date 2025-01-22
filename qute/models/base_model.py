@@ -1,5 +1,5 @@
 #  ********************************************************************************
-#  Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+#  Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 #  All rights reserved. This program and the accompanying materials
 #  are made available under the terms of the Apache License Version 2.0
 #  which accompanies this distribution, and is available at
@@ -161,7 +161,6 @@ class BaseModel(pl.LightningModule):
 
             # Do we have more than one output class?
             if self.class_names and len(self.class_names) > 1:
-
                 # Make sure to log the correct class name in case the background is not
                 # considered in the calculation
                 start = len(self.class_names) - mean_val_per_class.shape[0]
@@ -204,7 +203,6 @@ class BaseModel(pl.LightningModule):
 
             # Do we have more than one output class?
             if self.class_names and len(self.class_names) > 1:
-
                 # Make sure to log the correct class name in case the background is not
                 # considered in the calculation
                 start = len(self.class_names) - mean_test_per_class.shape[0]
@@ -334,7 +332,6 @@ class BaseModel(pl.LightningModule):
 
                 # Process one batch at a time
                 for pred in preds:
-
                     # Drop the channel singleton dimension
                     if pred.shape[0] == 1:
                         pred = pred.squeeze(0)
@@ -504,12 +501,10 @@ class BaseModel(pl.LightningModule):
         c = 0
         with torch.no_grad():
             for images in data_loader:
-
                 predictions = [[] for _ in range(len(models))]
 
                 # Not process all models
                 for n, model in enumerate(models):
-
                     # Make sure the model is on the device
                     model.to(device)
 
@@ -527,7 +522,6 @@ class BaseModel(pl.LightningModule):
 
                     stored_preds = []
                     for pred in preds:
-
                         # Drop the channel singleton dimension
                         if pred.shape[0] == 1:
                             pred = pred.squeeze(0)
@@ -545,7 +539,6 @@ class BaseModel(pl.LightningModule):
                 batch_dim = len(predictions[0])
 
                 for b in range(batch_dim):
-
                     # Apply selected voting mechanism
                     if voting_mechanism == "mean":
                         # Apply weighted mean (and rounding) of the predictions per pixel
