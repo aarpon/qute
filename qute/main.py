@@ -17,7 +17,11 @@ import typer
 from qute import __version__
 from qute.cli import config_app, run_app
 
-app = typer.Typer(no_args_is_help=True)
+app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Command-line interface to run various qute jobs.",
+)
 
 
 @app.command()
