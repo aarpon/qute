@@ -159,11 +159,19 @@ config_app = typer.Typer(name="config", help="Manage configuration options.")
 
 @config_app.command()
 def create(
-    category: str = typer.Argument(
-        ..., help="Category of the configuration file to write.", show_default=False
+    category: str = typer.Option(
+        ...,
+        "--category",
+        "-c",
+        help="Category of the configuration file to write.",
+        show_default=False,
     ),
-    target: str = typer.Argument(
-        ..., help="Full path to the configuration file to write.", show_default=False
+    target: str = typer.Option(
+        ...,
+        "--target",
+        "-t",
+        help="Full path to the configuration file to write.",
+        show_default=False,
     ),
 ):
     """Create default project configuration files."""
@@ -172,8 +180,10 @@ def create(
     category_to_template = {
         "classification": "classification_project.ini",
         "c": "classification_project.ini",
+        "segmentation": "classification_project.ini",  # Undocumented category
         "regression": "regression_project.ini",
         "r": "regression_project.ini",
+        "restoration": "regression_project.ini",  # Undocumented category
         "self-supervised-classification": "self_supervised_classification_project.ini",
         "ssc": "self_supervised_classification_project.ini",
     }
