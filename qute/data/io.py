@@ -111,7 +111,7 @@ def get_cell_segmentation_demo_dataset(
 
 
 def get_cell_segmentation_idt_demo_dataset(
-    download_dir: Optional[Union[Path, str]] = None
+    download_dir: Optional[Union[Path, str]] = None,
 ):
     """If not yet present, download and expands segmentation demo dataset.
 

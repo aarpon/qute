@@ -409,9 +409,7 @@ def qute_to_msd_format(
 
 
 if __name__ == "__main__":
-
     if len(sys.argv) == 1:
-
         # Path to qute demo segmentation dataset
         qute_dataset_folder = (
             Path(userpaths.get_my_documents())
@@ -421,12 +419,10 @@ if __name__ == "__main__":
         )
 
     elif len(sys.argv) == 2:
-
         # Check if we have a valid folder as a second argument
         qute_dataset_folder = Path(sys.argv[1])
 
     else:
-
         sys.exit(
             f"Please use: python {sys.argv[0]} [folder_to_process] (omit to use demo dataset)."
         )

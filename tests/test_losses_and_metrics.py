@@ -60,7 +60,6 @@ def extract_test_transforms_data(tmpdir):
 
 
 def test_metrics_3d(extract_test_transforms_data):
-
     # Load TIFF file with (dtype=torch.int32)
     reader = CustomTIFFReader(
         dtype=torch.int32, as_meta_tensor=True, ensure_channel_first=True
@@ -154,7 +153,6 @@ def test_metrics_3d(extract_test_transforms_data):
 
 
 def test_metrics_2d(extract_test_transforms_data):
-
     # Load TIFF file with (dtype=torch.int32)
     reader = CustomTIFFReader(
         dtype=torch.int32, as_meta_tensor=True, ensure_channel_first=True
@@ -247,7 +245,6 @@ def test_metrics_2d(extract_test_transforms_data):
 
 
 def test_losses_3d(extract_test_transforms_data):
-
     # Load TIFF file with (dtype=torch.int32)
     reader = CustomTIFFReader(
         dtype=torch.int32, as_meta_tensor=True, ensure_channel_first=True

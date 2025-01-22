@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Union
 
 import pytorch_lightning as pl
-import torch
 from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
 from pytorch_lightning.callbacks import (
@@ -25,7 +24,6 @@ from pytorch_lightning.callbacks import (
 from torch.nn import MSELoss
 from torch.optim.lr_scheduler import OneCycleLR
 from torchmetrics import MeanAbsoluteError
-from typing_extensions import override
 
 from qute import device
 from qute.campaigns import (
@@ -34,7 +32,7 @@ from qute.campaigns import (
     SegmentationCampaignTransforms3D,
     SelfSupervisedRestorationCampaignTransforms,
 )
-from qute.config import Config, ConfigFactory
+from qute.config import ConfigFactory
 from qute.data.dataloaders import DataModuleLocalFolder
 from qute.data.demos import CellRestorationDemo, CellSegmentationDemo
 from qute.models.attention_unet import AttentionUNet

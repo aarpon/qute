@@ -17,13 +17,13 @@ from pathlib import Path
 
 import pytest
 
-from qute.config import Config
+from qute.config import Config, ConfigFactory
 from qute.mode import TrainerMode
 
 
 def test_reading_classification_conf():
 
-    config = Config(
+    config = ConfigFactory.get_config(
         Path(__file__).parent.parent
         / "config_samples"
         / "classification_project.ini_sample"
@@ -65,7 +65,6 @@ def test_reading_classification_conf():
 
 
 def test_reading_regression_conf():
-
     config = Config(
         Path(__file__).parent.parent
         / "config_samples"
@@ -141,7 +140,6 @@ def test_process_path():
 
         os_name = platform.system()
         if os_name == "Windows":
-
             path = r"${HOME}\Documents\${TEST_ENV}"
             username = os.getenv("USERNAME")
             assert Config.process_path(path) == Path(
@@ -149,7 +147,6 @@ def test_process_path():
             ), "Failed processing path."
 
         elif os_name == "Linux":
-
             path = "${HOME}/Documents/${TEST_ENV}"
             username = os.getenv("USER")
             assert Config.process_path(path) == Path(
@@ -157,7 +154,6 @@ def test_process_path():
             ), "Failed processing path."
 
         elif os_name == "Darwin":
-
             path = "${HOME}/Documents/${TEST_ENV}"
             username = os.getenv("USER")
             assert Config.process_path(path) == Path(

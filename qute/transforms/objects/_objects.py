@@ -128,7 +128,6 @@ class LabelToTwoClassMask(Transform):
 
         # Process all labels serially
         for region in regions:
-
             if region.label == 0:
                 continue
 
@@ -309,7 +308,6 @@ class TwoClassMaskToLabel(Transform):
 
         # Do we need to dilate?
         if self.border_thickness is not None and self.border_thickness > 0:
-
             # Allocate result
             labels_dilated = torch.zeros(data.shape, dtype=torch.int32)
 
@@ -321,7 +319,6 @@ class TwoClassMaskToLabel(Transform):
 
             # Process all labels serially
             for lbl in torch.unique(labels):
-
                 if lbl == 0:
                     continue
 
@@ -636,7 +633,6 @@ class NormalizedDistanceTransform(Transform):
 
         # Process all labels serially
         for region in regions:
-
             if region.label == 0:
                 continue
 

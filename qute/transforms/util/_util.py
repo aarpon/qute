@@ -61,7 +61,6 @@ def scale_dist_transform_by_region(
 
     # Process all regions
     for i in ids:
-
         # Skip background
         if i == 0:
             continue

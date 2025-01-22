@@ -11,14 +11,13 @@
 
 import shutil
 from pathlib import Path
-from typing import Any, Callable, List, Optional, Tuple, Union
+from typing import Optional
 
 import typer
 
 from qute import __version__
 from qute.config import (
     ClassificationConfig,
-    Config,
     ConfigFactory,
     RegressionConfig,
     SelfSupervisedClassificationConfig,
@@ -125,7 +124,7 @@ def version(
         "--detailed",
         help="Show additional version information.",
         show_default=False,
-    )
+    ),
 ):
     """Print (detailed) version information."""
     if detailed:

@@ -195,7 +195,6 @@ class DataModuleLocalFolder(pl.LightningDataModule):
 
         # Write either to file or standard output
         with open_with_fallback(filename) as f:
-
             end = "\n"
 
             f.write(f"Training set ({len(self._train_indices)} image pairs):{end}")

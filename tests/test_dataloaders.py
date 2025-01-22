@@ -16,7 +16,6 @@ from qute.data.demos import CellSegmentationDemo
 
 
 def test_k_folds():
-
     # Initialize default, example Segmentation Campaign Transform
     campaign_transforms = SegmentationCampaignTransforms2D()
 
@@ -40,7 +39,6 @@ def test_k_folds():
 
 
 def test_setup():
-
     # Initialize default, example Segmentation Campaign Transform
     campaign_transforms = SegmentationCampaignTransforms2D()
 

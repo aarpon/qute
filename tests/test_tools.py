@@ -15,7 +15,6 @@ from qute.tools import calculate_receptive_field, num_levels_for_object_size
 
 
 def test_calculate_receptive_field():
-
     rfs = []
     for i in range(1, 6):
         rfs.append(calculate_receptive_field(i))
@@ -24,7 +23,6 @@ def test_calculate_receptive_field():
 
 
 def test_num_levels_for_object_size():
-
     object_size = 31
     assert num_levels_for_object_size(object_size) == 3
 

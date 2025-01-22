@@ -163,7 +163,6 @@ def tune_fn(criterion, metrics, num_samples=10, num_epochs=GLOBAL_CONFIG.max_epo
 
 
 if __name__ == "__main__":
-
     # Seeding
     set_global_rng_seed(GLOBAL_CONFIG.seed, workers=True)
 

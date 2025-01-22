@@ -10,3 +10,6 @@
 # ******************************************************************************
 
 from ._unfreeze import ProgressiveUnfreezeCallback
+
+__doc__ = "Custom PyTorch-Lightning callbacks."
+__all__ = ["ProgressiveUnfreezeCallback"]

@@ -11,7 +11,7 @@
 import configparser
 import os
 import re
-from abc import ABC, abstractmethod
+from abc import ABC
 from pathlib import Path
 from typing import Union
 
@@ -51,7 +51,7 @@ class ConfigFactory:
         elif config["metadata"]["project_type"] == "self-supervised-classification":
             return SelfSupervisedClassificationConfig(config_path)
         else:
-            print(f"Unsupported configuration file!")
+            print("Unsupported configuration file!")
             return None
 
 
@@ -115,7 +115,6 @@ class Config(ABC):
 
         # Process matches
         for match in matches:
-
             # We treat $HOME specially
             if match == "${HOME}":
                 match_rep = userpaths.get_profile()
@@ -126,7 +125,7 @@ class Config(ABC):
             index = path_str.find(match)
             if index == -1:
                 raise ValueError(f"Could not find {match} in {path_str}.")
-            path_str = f"{path_str[:index]}{match_rep}{path_str[index + len(match):]}"
+            path_str = f"{path_str[:index]}{match_rep}{path_str[index + len(match) :]}"
 
         # Make sure to remove double forward slashes potentially introduced
         # by the substitution

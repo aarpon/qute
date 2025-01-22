@@ -15,7 +15,6 @@ from pathlib import Path
 from qute.director import EnsembleCellSegmentationDemoDirector
 
 if __name__ == "__main__":
-
     # Configuration file
     config_file = (
         Path(__file__).parent / "ensemble_cell_segmentation_demo_unet_config.ini"

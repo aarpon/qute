@@ -15,7 +15,6 @@ from qute.transforms.util import compute_2d_flows
 
 
 def test_compute_2d_flow():
-
     label_img = np.zeros((10, 10), dtype=np.uint16)
 
     label_img[2:4, 2:4] = 1
