@@ -144,7 +144,7 @@ class BaseModel(pl.LightningModule):
         self.log(
             "val_loss",
             val_loss,
-            on_step=False,
+            on_step=True,
             on_epoch=True,
             prog_bar=True,
             logger=True,
@@ -174,14 +174,14 @@ class BaseModel(pl.LightningModule):
                     self.log(
                         f"val_metrics_{self.class_names[start + i]}",
                         val_score.detach(),
-                        on_step=False,
+                        on_step=True,
                         on_epoch=True,
                     )
             else:
                 self.log(
                     "val_metrics",
                     mean_val_per_class.mean().detach(),
-                    on_step=False,
+                    on_step=True,
                     on_epoch=True,
                 )
 
