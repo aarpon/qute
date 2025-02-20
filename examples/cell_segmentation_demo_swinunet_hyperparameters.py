@@ -101,6 +101,7 @@ def train_fn(
         learning_rate=optimization_config["learning_rate"],
         lr_scheduler_class=None,  # Disable the LR scheduler
         dropout=optimization_config["dropout"],
+        use_v2=optimization_config["use_v2"],
     )
 
     # Tune report callback
@@ -135,18 +136,19 @@ def tune_fn(criterion, metrics, num_samples=10, num_epochs=GLOBAL_CONFIG.max_epo
     # Create an optimization function with the various parmeters
     # and their (range of) options.
     optimization_config = {
-        "learning_rate": tune.loguniform(0.0005, 0.5),
+        "learning_rate": tune.loguniform(0.005, 0.1),
         "dropout": tune.choice([0, 0.1, 0.25, 0.5]),
         "patch_size": tune.choice([(512, 512), (640, 640)]),
         "num_patches": tune.choice([2]),
         "batch_size": tune.choice([2]),
         "num_heads": tune.choice([(3, 6, 12, 24, 48)]),
         "feature_size": tune.choice([24, 48]),
-        "depths": tune.choice([(2, 2, 2, 2, 2), (3, 3, 3, 3, 3), (4, 4, 4, 4, 4)]),
+        "depths": tune.choice([(2, 2, 2, 2, 2), (3, 3, 3, 3, 3)]),
+        "use_v2": tune.choice([False, True]),
     }
 
-    # Instantiate HyperOptSearch search algorithm
-    search_alg = HyperOptSearch(metric="loss", mode="min")
+    # Instantiate HyperOptSearch search algorithm: we optimize for max val_metrics_membrane
+    search_alg = HyperOptSearch(metric="val_metrics_membrane", mode="max")
 
     # Instantiate a scheduler
     scheduler = ASHAScheduler(max_t=num_epochs, grace_period=1, reduction_factor=2)
@@ -177,8 +179,8 @@ def tune_fn(criterion, metrics, num_samples=10, num_epochs=GLOBAL_CONFIG.max_epo
     tuner = tune.Tuner(
         tune.with_resources(train_fn_with_parameters, resources=resources_per_trial),
         tune_config=tune.TuneConfig(
-            metric="loss",
-            mode="min",
+            metric="dice_membrane",
+            mode="max",
             search_alg=search_alg,
             scheduler=scheduler,
             num_samples=num_samples,
