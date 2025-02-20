@@ -27,7 +27,7 @@ from ray.tune.search.hyperopt import HyperOptSearch
 from qute.campaigns import SegmentationCampaignTransforms2D
 from qute.config import ConfigFactory
 from qute.data.demos import CellSegmentationDemo
-from qute.models.unet import UNet
+from qute.models.swinunetr import SwinUNETR
 from qute.random import set_global_rng_seed
 
 #
@@ -39,7 +39,7 @@ from qute.random import set_global_rng_seed
 
 # Load global configuration
 config_file = (
-    Path(__file__).parent / "cell_segmentation_demo_unet_hyperparameters_config.ini"
+    Path(__file__).parent / "cell_segmentation_demo_swinunet_hyperparameters_config.ini"
 )
 GLOBAL_CONFIG = ConfigFactory.get_config(config_file)
 GLOBAL_CONFIG.parse()
@@ -62,6 +62,13 @@ def train_fn(
 ):
     """Training function."""
 
+    # Only accept valid combination of parameters: in particular,
+    # `num_heads` and `depths` must have the same number of elements.
+    if len(optimization_config["num_heads"]) != len(optimization_config["depths"]):
+        # Return a poor score to mark this as an invalid configuration
+        tune.report(loss=1e6)
+        return
+
     # Initialize Segmentation Campaign Transform
     campaign_transforms = SegmentationCampaignTransforms2D(
         num_classes=GLOBAL_CONFIG.out_channels,
@@ -80,18 +87,19 @@ def train_fn(
     )
 
     # Instantiate the model
-    model = UNet(
+    model = SwinUNETR(
         campaign_transforms=campaign_transforms,
         in_channels=1,
         out_channels=GLOBAL_CONFIG.out_channels,
-        num_res_units=optimization_config["num_res_units"],
         criterion=criterion,
-        channels=optimization_config["channels"],
-        strides=None,
-        class_names=GLOBAL_CONFIG.class_names,
         metrics=metrics,
-        lr_scheduler_class=None,
+        class_names=GLOBAL_CONFIG.class_names,
+        img_size=optimization_config["patch_size"],  # Map patch_size to img_size
+        depths=optimization_config["depths"],
+        num_heads=optimization_config["num_heads"],
+        feature_size=optimization_config["feature_size"],
         learning_rate=optimization_config["learning_rate"],
+        lr_scheduler_class=None,  # Disable the LR scheduler
         dropout=optimization_config["dropout"],
     )
 
@@ -127,13 +135,14 @@ def tune_fn(criterion, metrics, num_samples=10, num_epochs=GLOBAL_CONFIG.max_epo
     # Create an optimization function with the various parmeters
     # and their (range of) options.
     optimization_config = {
-        "num_res_units": tune.choice([0, 1, 2, 3, 4]),
         "learning_rate": tune.loguniform(0.0005, 0.5),
-        "channels": tune.choice([(16, 32), (16, 32, 64), (32, 64), (32, 64, 128)]),
-        "dropout": tune.choice([0, 0.1, 0.2, 0.3, 0.4, 0.5]),
-        "patch_size": tune.choice([(256, 256), (384, 384), (512, 512), (640, 640)]),
-        "num_patches": tune.choice([1, 2, 4, 8]),
-        "batch_size": tune.choice([1, 2, 4, 8]),
+        "dropout": tune.choice([0, 0.1, 0.25, 0.5]),
+        "patch_size": tune.choice([(512, 512), (640, 640)]),
+        "num_patches": tune.choice([2]),
+        "batch_size": tune.choice([2]),
+        "num_heads": tune.choice([(3, 6, 12, 24, 48)]),
+        "feature_size": tune.choice([24, 48]),
+        "depths": tune.choice([(2, 2, 2, 2, 2), (3, 3, 3, 3, 3), (4, 4, 4, 4, 4)]),
     }
 
     # Instantiate HyperOptSearch search algorithm
@@ -144,13 +153,14 @@ def tune_fn(criterion, metrics, num_samples=10, num_epochs=GLOBAL_CONFIG.max_epo
 
     reporter = CLIReporter(
         parameter_columns=[
-            "num_res_units",
             "learning_rate",
-            "channels",
             "dropout",
             "patch_size",
             "num_patches",
             "batch_size",
+            "num_heads",
+            "feature_size",
+            "depths",
         ],
         metric_columns=["loss", "dice_cell", "dice_membrane", "training_iteration"],
     )
