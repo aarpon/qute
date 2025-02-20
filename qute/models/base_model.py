@@ -49,7 +49,9 @@ class BaseModel(pl.LightningModule):
         metrics: monai.metrics,
         learning_rate: float = 1e-2,
         optimizer_class: torch.optim.Optimizer = torch.optim.AdamW,
-        lr_scheduler_class: torch.optim.lr_scheduler = torch.optim.lr_scheduler.LambdaLR,
+        lr_scheduler_class: Optional[
+            torch.optim.lr_scheduler
+        ] = torch.optim.lr_scheduler.LambdaLR,
         lr_scheduler_parameters: Optional[dict] = None,
         class_names: Optional[Tuple[str, ...]] = None,
     ):
@@ -76,7 +78,7 @@ class BaseModel(pl.LightningModule):
             The optimizer class to use.
 
         lr_scheduler_class: torch.optim.lr_scheduler
-            The learning rate scheduler class to use.
+            The learning rate scheduler class to use. Set to None to use a fixed learning rate.
 
         lr_scheduler_parameters: Optional[dict] = None
             Dictionary of scheduler parameters.
@@ -106,6 +108,9 @@ class BaseModel(pl.LightningModule):
     def configure_optimizers(self):
         """Configure and return the optimizer and scheduler."""
         optimizer = self.optimizer_class(self.parameters(), lr=self.learning_rate)
+        if self.lr_scheduler_class is None:
+            return optimizer
+
         scheduler = {
             "scheduler": self.lr_scheduler_class(
                 optimizer, **self.scheduler_parameters
