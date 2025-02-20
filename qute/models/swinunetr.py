@@ -50,6 +50,7 @@ class SwinUNETR(BaseModel):
         num_heads: Tuple[int, ...] = (3, 6, 12, 24),
         feature_size: int = 24,
         dropout: float = 0.0,
+        use_v2: bool = False,
     ):
         """
         Constructor.
@@ -104,6 +105,10 @@ class SwinUNETR(BaseModel):
 
         dropout: float = 0.0
             Dropout ratio.
+
+        use_v2: bool
+            Whether to use version 2 of the underlying MONAI SwinUNETR model
+            (which adds a residual convolution block at the beginning of each SWIN stage).
         """
         super().__init__(
             campaign_transforms=campaign_transforms,
@@ -133,6 +138,7 @@ class SwinUNETR(BaseModel):
             use_checkpoint=False,
             spatial_dims=spatial_dims,
             drop_rate=dropout,
+            use_v2=use_v2,
         )
 
         # Log the hyperparameters
