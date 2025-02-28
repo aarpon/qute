@@ -68,7 +68,7 @@ class Director(ABC):
         self.config = ConfigFactory.get_config(config_file)
 
         # Parse it
-        if not self.config.parse():
+        if self.config is None or not self.config.parse():
             raise Exception("Invalid config file")
 
         # Set up training precision

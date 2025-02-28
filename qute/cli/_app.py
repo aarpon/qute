@@ -190,7 +190,7 @@ def create(
     # Check if the category is valid
     if category not in category_to_template:
         raise ValueError(
-            "The category must be 'classification' or 'regression' for now."
+            "The category must be 'classification', 'regression', or 'self-supervised-classification' for now."
         )
 
     # Determine target path
@@ -220,9 +220,9 @@ def create(
     # Attempt to copy the template file
     try:
         shutil.copy(template_source, target)
-        print(f"Successfully generated {category} configuration file at {target}.")
+        print(f"Successfully generated configuration file at {target}.")
     except Exception as e:
-        print(f"Could not generate {category} configuration file at {target}: {e}")
+        print(f"Could not generate configuration file at {target}: {e}")
 
 
 @config_app.command(name="list")
