@@ -384,7 +384,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             num_workers=self.num_workers,
             collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
-            persistent_workers=True,
+            persistent_workers=True if self.num_workers > 0 else False,
         )
 
     def val_dataloader(self):
@@ -396,7 +396,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             num_workers=self.num_workers,
             collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
-            persistent_workers=True,
+            persistent_workers=True if self.num_workers > 0 else False,
         )
 
     def test_dataloader(self):
@@ -408,7 +408,7 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             num_workers=self.num_workers,
             collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
-            persistent_workers=True,
+            persistent_workers=True if self.num_workers > 0 else False,
         )
 
     def inference_dataloader(
@@ -436,5 +436,5 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             num_workers=self.num_inference_workers,
             collate_fn=list_data_collate,
             pin_memory=self.pin_memory,
-            persistent_workers=True,
+            persistent_workers=True if self.num_workers > 0 else False,
         )
