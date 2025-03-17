@@ -134,19 +134,3 @@ class EfficientNet(BaseModel):
 
         # Log the hyperparameters
         self.save_hyperparameters(ignore=["criterion", "metrics"])
-
-    def forward(self, x):
-        """Forward pass through the network.
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            Input tensor.
-
-        Returns
-        -------
-        y_hat : torch.Tensor
-            Output tensor from the network.
-        """
-        y_hat = self.net(x)
-        return y_hat

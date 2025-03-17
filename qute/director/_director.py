@@ -40,6 +40,7 @@ from qute.data.dataloaders import DataModuleLocalFolder
 from qute.data.demos import CellRestorationDemo, CellSegmentationDemo
 from qute.models.attention_unet import AttentionUNet
 from qute.models.base_model import BaseModel
+from qute.models.dynunet import DynUNet
 from qute.models.swinunetr import SwinUNETR
 from qute.models.unet import UNet
 from qute.project import Project
@@ -544,9 +545,9 @@ class Director(ABC):
 
         # Get and check the model from the configuration
         model_class_name = self.config.model_class
-        if model_class_name not in ["unet", "attention_unet", "swin_unetr"]:
+        if model_class_name not in ["unet", "attention_unet", "swin_unetr", "dynunet"]:
             raise ValueError(
-                "The 'model_class' must be one of 'unet', 'attention_unet', or 'swin_unetr'."
+                "The 'model_class' must be one of 'unet', 'attention_unet', 'swin_unetr', or 'dynunet'."
             )
 
         model_class = self._get_model_class()
@@ -557,7 +558,7 @@ class Director(ABC):
         else:
             class_names = []
 
-        # Prepare model-specific parameters
+        # Prepare common model parameters
         model_params = {
             "campaign_transforms": self.campaign_transforms,
             "spatial_dims": 3 if self.config.is_3d else 2,
@@ -595,6 +596,9 @@ class Director(ABC):
                     "feature_size": self.config.feature_size,
                 }
             )
+        elif model_class_name == "dynunet":
+            # @TODO: add parameters from config
+            pass
 
         # Instantiate the model
         model = model_class(**model_params)
@@ -613,6 +617,8 @@ class Director(ABC):
             return AttentionUNet
         elif self.config.model_class == "swin_unetr":
             return SwinUNETR
+        elif self.config.model_class == "dynunet":
+            return DynUNet
         else:
             raise ValueError(f"Bad value for model type {self.config.model_class};")
 

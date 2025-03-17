@@ -392,9 +392,9 @@ class Config(ABC):
         """Validate configuration."""
 
         # Check the model class
-        if self.model_class not in ["unet", "attention_unet", "swin_unetr"]:
+        if self.model_class not in ["unet", "attention_unet", "swin_unetr", "dynunet"]:
             print(
-                "`model_class` must be one of 'unet', 'attention_unet', or 'swin_unetr'."
+                "`model_class` must be one of 'unet', 'attention_unet', 'swin_unetr', or 'dynunet'."
             )
             return False
 

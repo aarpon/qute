@@ -137,8 +137,3 @@ class UNet(BaseModel):
 
         # Log the hyperparameters
         self.save_hyperparameters(ignore=["criterion", "metrics"])
-
-    def forward(self, x):
-        """Forward pass through the network."""
-        y_hat = self.net(x)
-        return y_hat

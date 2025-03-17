@@ -123,8 +123,20 @@ class BaseModel(pl.LightningModule):
         return [optimizer], [scheduler]
 
     def forward(self, x):
-        """Forward method to be implemented in subclasses."""
-        raise NotImplementedError("Forward method must be implemented in subclasses.")
+        """Forward pass through the network.
+
+        Parameters
+        ----------
+        x: torch.Tensor
+            Input tensor.
+
+        Returns
+        -------
+        y_hat: torch.Tensor
+            Output tensor from the network.
+        """
+        y_hat = self.net(x)
+        return y_hat
 
     def training_step(self, batch, batch_idx):
         """Perform a training step."""

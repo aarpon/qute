@@ -144,22 +144,6 @@ class SwinUNETR(BaseModel):
         # Log the hyperparameters
         self.save_hyperparameters(ignore=["criterion", "metrics"])
 
-    def forward(self, x):
-        """Forward pass through the network.
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            Input tensor.
-
-        Returns
-        -------
-        y_hat : torch.Tensor
-            Output tensor from the network.
-        """
-        y_hat = self.net(x)
-        return y_hat
-
     def save_encoder_weights(self, filename: Union[str, Path]) -> None:
         """Save encoder weights."""
         if self.net is None or self.net.swinViT is None:
