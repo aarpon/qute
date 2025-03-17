@@ -597,8 +597,12 @@ class Director(ABC):
                 }
             )
         elif model_class_name == "dynunet":
-            # @TODO: add parameters from config
-            pass
+            # @TODO: add parameters to (and from) config
+            model_params.update(
+                {
+                    "deep_supervision": True,
+                }
+            )
 
         # Instantiate the model
         model = model_class(**model_params)

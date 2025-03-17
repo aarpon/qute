@@ -73,6 +73,10 @@ class DynUNet(BaseModel):
         if upsample_kernel_size is None:
             upsample_kernel_size = tuple([[2, 2], [2, 2], [2, 2], [2, 2]])
 
+        # Keep track of whether deep_supervision is on
+        self.deep_supervision = deep_supervision
+
+        # Instantiate MONAI's DynUNet model
         self.net = MonaiDynUNet(
             spatial_dims=spatial_dims,
             in_channels=in_channels,
@@ -85,3 +89,30 @@ class DynUNet(BaseModel):
             res_block=True,
             dropout=dropout,
         )
+
+    def training_step(self, batch, batch_idx):
+        """Perform a training step."""
+
+        # If there is no deep supervision, we calculate loss and metrics
+        # as usual
+        if not self.deep_supervision:
+            return super().training_step(batch, batch_idx)
+
+        # In case of supervision, we have a series of predictions
+        x, y = batch
+        y_hat = self.forward(x)
+
+        # Check that the number of dimensions fits
+        assert y_hat.ndim == 5, "Expected predictions dimension not found."
+
+        # Compute the average loss for all feature maps (with uniform weights)
+        # @see https://docs.monai.io/en/stable/networks.html#dynunet
+        preds_unbind = torch.unbind(y_hat, dim=1)
+        loss = 0.0
+        weights = [1.0 / len(preds_unbind)] * len(preds_unbind)
+        for pred, w in zip(preds_unbind, weights):
+            loss += w * self.criterion(pred, y)
+
+        # Log the loss
+        self.log("loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        return {"loss": loss}
