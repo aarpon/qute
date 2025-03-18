@@ -323,6 +323,16 @@ class Config(ABC):
         return float(self._config["settings"]["learning_rate"])
 
     @property
+    def deep_supervision(self):
+        deep_supervision_str = self._config["settings"]["deep_supervision"]
+        return deep_supervision_str.lower() == "true"
+
+    @property
+    def res_block(self):
+        res_block_str = self._config["settings"]["res_block"]
+        return res_block_str.lower() == "true"
+
+    @property
     def max_epochs(self):
         return int(self._config["settings"]["max_epochs"])
 

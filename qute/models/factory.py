@@ -118,10 +118,11 @@ class ModelFactory(ABC):
                 }
             )
         elif config.model_class == "dynunet":
-            # @TODO: add parameters to (and from) config
+            # @TODO: add more parameters to (and from) config
             model_params.update(
                 {
-                    "deep_supervision": True,
+                    "deep_supervision": config.deep_supervision,
+                    "res_block": config.res_block,
                 }
             )
 

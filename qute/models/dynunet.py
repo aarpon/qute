@@ -51,6 +51,7 @@ class DynUNet(BaseModel):
         lr_scheduler_parameters: Optional[dict] = None,
         dropout: float = 0.0,
         deep_supervision: bool = False,
+        res_block: bool = True,
     ):
         super().__init__(
             campaign_transforms=campaign_transforms,
@@ -86,7 +87,7 @@ class DynUNet(BaseModel):
             filters=filters,
             upsample_kernel_size=upsample_kernel_size,
             deep_supervision=deep_supervision,
-            res_block=True,
+            res_block=res_block,
             dropout=dropout,
         )
 
