@@ -38,9 +38,11 @@ from qute.campaigns import (
 from qute.config import ConfigFactory
 from qute.data.dataloaders import DataModuleLocalFolder
 from qute.data.demos import CellRestorationDemo, CellSegmentationDemo
+from qute.data.inference import full_inference, full_inference_ensemble
 from qute.models.attention_unet import AttentionUNet
 from qute.models.base_model import BaseModel
 from qute.models.dynunet import DynUNet
+from qute.models.factory import ModelFactory
 from qute.models.swinunetr import SwinUNETR
 from qute.models.unet import UNet
 from qute.project import Project
@@ -245,7 +247,14 @@ class Director(ABC):
         self._setup_basis_for_training_and_resume()
 
         # Set up model
-        self.model = self._setup_model()
+        self.model = ModelFactory.get_model(
+            config=self.config,
+            campaign_transforms=self.campaign_transforms,
+            criterion=self.criterion,
+            metrics=self.metrics,
+            lr_scheduler_class=self.lr_scheduler_class,
+            lr_scheduler_params=self.lr_scheduler_parameters,
+        )
 
         # Run common training and testing operations for 'train' and 'resume' modes.
         self._run_common_train_and_resume()
@@ -257,7 +266,7 @@ class Director(ABC):
         self._setup_basis_for_training_and_resume()
 
         # Load specified model
-        model_class = self._get_model_class()
+        model_class = ModelFactory.get_model_class(config=self.config)
         self.model = model_class.load_from_checkpoint(
             self.project.selected_model_path,
             criterion=self.criterion,
@@ -310,7 +319,7 @@ class Director(ABC):
             self.metrics = self._setup_default_metrics()
 
         # Load existing model
-        model_class = self._get_model_class()
+        model_class = ModelFactory.get_model_class(config=self.config)
         self.model = model_class.load_from_checkpoint(
             self.config.source_model_path,
             criterion=self.criterion,
@@ -330,7 +339,9 @@ class Director(ABC):
             target_for_prediction = self.config.target_for_prediction
 
         # Run full inference
-        self.model.full_inference(
+        full_inference(
+            self.model,
+            campaign_transforms=self.campaign_transforms,
             data_loader=self.data_module.inference_dataloader(
                 input_folder=self.config.source_for_prediction
             ),
@@ -416,7 +427,7 @@ class Director(ABC):
         self.project.selected_model_path = self.model_checkpoint.best_model_path
 
         # Re-load weights from best model
-        model_class = self._get_model_class()
+        model_class = ModelFactory.get_model_class(config=self.config)
         model = model_class.load_from_checkpoint(
             self.project.selected_model_path,
             strict=False,
@@ -445,7 +456,9 @@ class Director(ABC):
             target_for_prediction = self.config.target_for_prediction
 
         # Run full inference
-        self.model.full_inference(
+        full_inference(
+            self.model,
+            campaign_transforms=self.campaign_transforms,
             data_loader=self.data_module.inference_dataloader(
                 input_folder=self.config.source_for_prediction
             ),
@@ -539,92 +552,6 @@ class Director(ABC):
 
         # Return the trainer
         return trainer
-
-    def _setup_model(self):
-        """Set up the model."""
-
-        # Get and check the model from the configuration
-        model_class_name = self.config.model_class
-        if model_class_name not in ["unet", "attention_unet", "swin_unetr", "dynunet"]:
-            raise ValueError(
-                "The 'model_class' must be one of 'unet', 'attention_unet', 'swin_unetr', or 'dynunet'."
-            )
-
-        model_class = self._get_model_class()
-
-        # In case of a restoration model, we do not have class names
-        if hasattr(self.config, "class_names"):
-            class_names = self.config.class_names
-        else:
-            class_names = []
-
-        # Prepare common model parameters
-        model_params = {
-            "campaign_transforms": self.campaign_transforms,
-            "spatial_dims": 3 if self.config.is_3d else 2,
-            "in_channels": self.config.in_channels,
-            "out_channels": self.config.out_channels,
-            "class_names": class_names,
-            "criterion": self.criterion,
-            "metrics": self.metrics,
-            "learning_rate": self.config.learning_rate,
-            "lr_scheduler_class": self.lr_scheduler_class,
-            "lr_scheduler_parameters": self.lr_scheduler_parameters,
-        }
-
-        # Add additional model-specific parameters
-        if model_class_name == "unet":
-            model_params.update(
-                {
-                    "num_res_units": self.config.num_res_units,
-                    "channels": self.config.channels,
-                    "strides": self.config.strides,
-                }
-            )
-        elif model_class_name == "attention_unet":
-            model_params.update(
-                {
-                    "channels": self.config.channels,
-                    "strides": self.config.strides,
-                }
-            )
-        elif model_class_name == "swin_unetr":
-            model_params.update(
-                {
-                    "depths": self.config.depths,
-                    "num_heads": self.config.num_heads,
-                    "feature_size": self.config.feature_size,
-                }
-            )
-        elif model_class_name == "dynunet":
-            # @TODO: add parameters to (and from) config
-            model_params.update(
-                {
-                    "deep_supervision": True,
-                }
-            )
-
-        # Instantiate the model
-        model = model_class(**model_params)
-
-        # Inform
-        print(f"Using model: {model_class.__name__}")
-
-        # Return the model
-        return model
-
-    def _get_model_class(self):
-        """Return the class of the model being used."""
-        if self.config.model_class == "unet":
-            return UNet
-        elif self.config.model_class == "attention_unet":
-            return AttentionUNet
-        elif self.config.model_class == "swin_unetr":
-            return SwinUNETR
-        elif self.config.model_class == "dynunet":
-            return DynUNet
-        else:
-            raise ValueError(f"Bad value for model type {self.config.model_class};")
 
 
 class EnsembleDirector(Director):
@@ -753,7 +680,14 @@ class EnsembleDirector(Director):
                 )
 
             # Initialize new model
-            self.model = self._setup_model()
+            self.model = ModelFactory.get_model(
+                config=self.config,
+                campaign_transforms=self.campaign_transforms,
+                criterion=self.criterion,
+                metrics=self.metric,
+                lr_scheduler_class=self.lr_scheduler_class,
+                lr_scheduler_params=self.lr_scheduler_parameters,
+            )
 
             # Set up trainer callbacks
             (
@@ -783,7 +717,7 @@ class EnsembleDirector(Director):
             )
 
             # Re-load weights from best model
-            model_class = self._get_model_class()
+            model_class = ModelFactory.get_model_class(config=self.config)
             model = model_class.load_from_checkpoint(
                 self.model_checkpoint.best_model_path,
                 strict=False,
@@ -820,7 +754,7 @@ class EnsembleDirector(Director):
     def _run_ensemble_inference(self, target_for_prediction):
         """Run ensemble inference using the trained models."""
         # Run ensemble prediction
-        self._best_models[0].full_inference_ensemble(
+        full_inference_ensemble(
             models=self._best_models,
             data_loader=self.data_module.inference_dataloader(
                 input_folder=self.config.source_for_prediction
@@ -887,7 +821,7 @@ class EnsembleDirector(Director):
             target_for_prediction = self.config.target_for_prediction
 
         # Run ensemble prediction
-        models[0].full_inference_ensemble(
+        full_inference_ensemble(
             models=models,
             data_loader=self.data_module.inference_dataloader(
                 input_folder=self.config.source_for_prediction
@@ -917,7 +851,7 @@ class EnsembleDirector(Director):
             model_path = model_paths[0]  # Assuming one model per fold
 
             # Load the model
-            model_class = self._get_model_class()
+            model_class = ModelFactory.get_model_class(config=self.config)
             model = model_class.load_from_checkpoint(
                 model_path,
                 criterion=self.criterion,

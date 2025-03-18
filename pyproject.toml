@@ -90,4 +90,4 @@ force_grid_wrap = 0
 use_parentheses = true
 line_length = 88
 combine_as_imports = true
-known_third_party = ["imio", "monai", "natsort", "nd2reader", "numpy", "pytest", "pytorch_lightning", "ray", "requests", "scipy", "skimage", "sklearn", "tifffile", "torch", "torchmetrics", "tqdm", "typer", "typing_extensions", "userpaths"]
+known_third_party = ["imio", "matplotlib", "monai", "natsort", "nd2reader", "numpy", "pytest", "pytorch_lightning", "ray", "requests", "scipy", "skimage", "sklearn", "tifffile", "torch", "torchmetrics", "tqdm", "typer", "typing_extensions", "userpaths"]

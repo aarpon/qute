@@ -30,6 +30,7 @@ from qute.campaigns import (
     SelfSupervisedRestorationCampaignTransforms,
 )
 from qute.data.demos import CellRestorationDemo, CellSegmentationDemo
+from qute.data.inference import full_inference
 from qute.models.swinunetr import SwinUNETR
 from qute.random import set_global_rng_seed
 
@@ -297,7 +298,9 @@ if __name__ == "__main__":
     # -----------------------------------------------------------------------------------------#
 
     # Save the full predictions (on the test set)
-    best_model.full_inference(
+    full_inference(
+        best_model,
+        campaign_transforms=classification_campaign_transforms,
         data_loader=classification_data_module.inference_dataloader(
             classification_data_module.data_dir / "images/"
         ),
