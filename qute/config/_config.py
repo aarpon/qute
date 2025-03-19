@@ -88,7 +88,7 @@ class Config(ABC):
 
         path: Union[Path, str, None]
             Full path that can optionally contain environment variables in the
-            for ${ENV_VAR}. For instance: `${HOME}/Documents/qute`. If path is
+            form ${ENV_VAR}. For instance: `${HOME}/Documents/qute`. If path is
             None, None is returned.
 
             Please notice that ${HOME} will be considered to point to the user path
