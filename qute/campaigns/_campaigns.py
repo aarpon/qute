@@ -157,7 +157,9 @@ class SegmentationCampaignTransforms2D(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
-                RandFlip(prob=0.5, spatial_axis=[0, 1], lazy=False),
+                RandFlipd(
+                    keys=("image", "label"), prob=0.5, spatial_axis=[0, 1], lazy=False
+                ),
                 RandRotated(
                     keys=("image", "label"),
                     prob=0.75,
