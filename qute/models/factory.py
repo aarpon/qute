@@ -143,7 +143,7 @@ class ModelFactory(ABC):
         models = {
             "unet": UNet,
             "attention_unet": AttentionUNet,
-            "swin_unet": SwinUNETR,
+            "swin_unetr": SwinUNETR,
             "dynunet": DynUNet,
         }
         model_class = models.get(config.model_class, None)
