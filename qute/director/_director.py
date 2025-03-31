@@ -376,6 +376,7 @@ class Director(ABC):
         self.steps_per_epoch = len(self.data_module.train_dataloader())
         if self.steps_per_epoch == 0:
             raise ValueError("Number of steps per epoch is zero. Check your data.")
+        print(f"Number of steps per epoch: {self.steps_per_epoch}")
 
         # Print the train, validation, and test sets to file
         self.data_module.print_sets(filename=self.project.run_dir / "image_sets.txt")
