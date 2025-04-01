@@ -22,8 +22,6 @@ from monai.transforms import (
     RandGaussianNoise,
     RandGaussianNoised,
     RandGaussianSmoothd,
-    RandRotate90d,
-    RandRotated,
     RandSpatialCropd,
 )
 
@@ -157,16 +155,6 @@ class SegmentationCampaignTransforms2D(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
-                RandFlipd(
-                    keys=("image", "label"), prob=0.5, spatial_axis=[0, 1], lazy=False
-                ),
-                RandRotated(
-                    keys=("image", "label"),
-                    prob=0.75,
-                    range_x=0.4,
-                    mode=["bilinear", "nearest"],
-                    padding_mode="reflection",
-                ),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
                     label_key="label",
@@ -180,7 +168,12 @@ class SegmentationCampaignTransforms2D(CampaignTransforms):
                     lazy=False,
                 ),
                 ZNormalized(keys=("image",)),
-                RandRotate90d(keys=("image", "label"), prob=0.5, spatial_axes=(-2, -1)),
+                RandFlipd(
+                    keys=("image", "label"), prob=0.5, spatial_axis=[0], lazy=False
+                ),
+                RandFlipd(
+                    keys=("image", "label"), prob=0.5, spatial_axis=[1], lazy=False
+                ),
                 RandGaussianNoised(keys=("image",), prob=0.2),
                 RandGaussianSmoothd(keys=("image",), prob=0.2),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
@@ -291,7 +284,12 @@ class SegmentationCampaignTransformsIDT2D(CampaignTransforms):
                     lazy=False,
                 ),
                 ZNormalized(keys=("image",)),
-                RandRotate90d(keys=("image", "label"), prob=0.5, spatial_axes=(-2, -1)),
+                RandFlipd(
+                    keys=("image", "label"), prob=0.5, spatial_axis=[0], lazy=False
+                ),
+                RandFlipd(
+                    keys=("image", "label"), prob=0.5, spatial_axis=[1], lazy=False
+                ),
                 RandGaussianNoised(keys=("image",), prob=0.2),
                 RandGaussianSmoothd(keys=("image",), prob=0.2),
                 NormalizedDistanceTransformd(
@@ -970,12 +968,11 @@ class SelfSupervisedRestorationCampaignTransforms(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
-                RandRotated(
-                    keys=("image", "target"),
-                    prob=0.75,
-                    range_x=0.4,
-                    mode=["bilinear", "bilinear"],
-                    padding_mode="reflection",
+                RandFlipd(
+                    keys=("image", "label"), prob=0.5, spatial_axis=[0], lazy=False
+                ),
+                RandFlipd(
+                    keys=("image", "label"), prob=0.5, spatial_axis=[1], lazy=False
                 ),
                 ZNormalized(
                     keys=("image", "target"),
