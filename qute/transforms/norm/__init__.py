@@ -12,6 +12,8 @@
 from ._norm import (
     ClippedZNormalize,
     ClippedZNormalized,
+    CustomMinMaxNormalize,
+    CustomMinMaxNormalized,
     MinMaxNormalize,
     MinMaxNormalized,
     Scale,
@@ -24,6 +26,8 @@ __doc__ = "Normalization and scaling transforms."
 __all__ = [
     "ClippedZNormalize",
     "ClippedZNormalized",
+    "CustomMinMaxNormalize",
+    "CustomMinMaxNormalized",
     "MinMaxNormalize",
     "MinMaxNormalized",
     "Scale",
