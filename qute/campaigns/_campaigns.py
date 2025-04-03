@@ -155,6 +155,7 @@ class SegmentationCampaignTransforms2D(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
+                ZNormalized(keys=("image",)),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
                     label_key="label",
@@ -167,7 +168,6 @@ class SegmentationCampaignTransforms2D(CampaignTransforms):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                ZNormalized(keys=("image",)),
                 RandFlipd(
                     keys=("image", "label"), prob=0.5, spatial_axis=[0], lazy=False
                 ),
@@ -191,6 +191,7 @@ class SegmentationCampaignTransforms2D(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
+                ZNormalized(keys=("image",)),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
                     label_key="label",
@@ -203,7 +204,6 @@ class SegmentationCampaignTransforms2D(CampaignTransforms):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                ZNormalized(keys=("image",)),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
                 ToPyTorchLightningOutputd(),
             ]
@@ -271,6 +271,7 @@ class SegmentationCampaignTransformsIDT2D(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
+                ZNormalized(keys=("image",)),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
                     label_key="label",
@@ -283,7 +284,6 @@ class SegmentationCampaignTransformsIDT2D(CampaignTransforms):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                ZNormalized(keys=("image",)),
                 RandFlipd(
                     keys=("image", "label"), prob=0.5, spatial_axis=[0], lazy=False
                 ),
@@ -313,6 +313,7 @@ class SegmentationCampaignTransformsIDT2D(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
+                ZNormalized(keys=("image",)),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
                     label_key="label",
@@ -325,7 +326,6 @@ class SegmentationCampaignTransformsIDT2D(CampaignTransforms):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                ZNormalized(keys=("image",)),
                 NormalizedDistanceTransformd(
                     keys=("label",),
                     reverse=True,
@@ -460,6 +460,7 @@ class SegmentationCampaignTransformsIDT3D(CampaignTransforms):
                     input_voxel_size=self.voxel_size,
                     mode=("trilinear", "nearest"),
                 ),
+                ZNormalized(keys=("image",)),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
                     label_key="label",
@@ -472,7 +473,6 @@ class SegmentationCampaignTransformsIDT3D(CampaignTransforms):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                ZNormalized(keys=("image",)),
                 RandGaussianNoised(keys=("image",), prob=0.2),
                 RandGaussianSmoothd(keys=("image",), prob=0.2),
                 NormalizedDistanceTransformd(
@@ -504,6 +504,7 @@ class SegmentationCampaignTransformsIDT3D(CampaignTransforms):
                     input_voxel_size=self.voxel_size,
                     mode=("trilinear", "nearest"),
                 ),
+                ZNormalized(keys=("image",)),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
                     label_key="label",
@@ -516,7 +517,6 @@ class SegmentationCampaignTransformsIDT3D(CampaignTransforms):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                ZNormalized(keys=("image",)),
                 NormalizedDistanceTransformd(
                     keys=("label",),
                     reverse=True,
@@ -690,6 +690,7 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     input_voxel_size=self.voxel_size,
                     mode=("trilinear", "nearest"),
                 ),
+                ZNormalized(keys=("image",)),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
                     label_key="label",
@@ -703,7 +704,6 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     lazy=False,
                 ),
                 LabelToTwoClassMaskd(keys=("label",), border_thickness=1),
-                ZNormalized(keys=("image",)),
                 RandGaussianNoised(keys=("image",), prob=0.2),
                 RandGaussianSmoothd(keys=("image",), prob=0.2),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
@@ -729,6 +729,7 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     input_voxel_size=self.voxel_size,
                     mode=("trilinear", "nearest"),
                 ),
+                ZNormalized(keys=("image",)),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
                     label_key="label",
@@ -742,7 +743,6 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     lazy=False,
                 ),
                 LabelToTwoClassMaskd(keys=("label",), border_thickness=1),
-                ZNormalized(keys=("image",)),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
                 ToPyTorchLightningOutputd(),
             ]
