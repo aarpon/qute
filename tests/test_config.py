@@ -62,6 +62,7 @@ def test_reading_classification_conf():
     ), "Wrong value for class names."
     assert config.max_epochs == 2000, "Wrong maximum number of eposchs."
     assert config.precision == "16-mixed", "Wrong precision."
+    assert config.use_v2 is False, "Wrong use_v2."
 
 
 def test_reading_regression_conf():
@@ -100,6 +101,7 @@ def test_reading_regression_conf():
     assert config.learning_rate == 0.001, "Wrong learning rate."
     assert config.max_epochs == 2000, "Wrong maximum number of eposchs."
     assert config.precision == "16-mixed", "Wrong precision."
+    assert config.use_v2 is False, "Wrong use_v2."
 
 
 def test_process_path():

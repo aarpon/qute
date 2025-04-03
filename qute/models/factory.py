@@ -115,6 +115,7 @@ class ModelFactory(ABC):
                     "depths": config.depths,
                     "num_heads": config.num_heads,
                     "feature_size": config.feature_size,
+                    "use_v2": config.use_v2,
                 }
             )
         elif config.model_class == "dynunet":

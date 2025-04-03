@@ -389,6 +389,11 @@ class Config(ABC):
         return up_scale_z_str.lower() == "true"
 
     @property
+    def use_v2(self):
+        use_v2_str = self._config["settings"]["use_v2"]
+        return use_v2_str.lower() == "true"
+
+    @property
     def voxel_size(self):
         voxel_size_str = self._config["settings"]["voxel_size"]
         if voxel_size_str == "":

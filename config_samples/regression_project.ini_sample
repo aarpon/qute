@@ -108,6 +108,9 @@ num_heads = 3, 6, 12, 24
 # [swin_unetr] Dimension of network feature size
 feature_size = 24
 
+# [swin_unetr] Whether to use v2 architecture
+use_v2 = False
+
 # [dynunet] Whether to add deep supervision head before output
 deep_supervision = False
 
