@@ -26,11 +26,11 @@ $ uv venv --python 3.12      # Create a virtual environment with Python 3.12
 $ uv sync                    # Install production dependencies
 $ uv sync --group dev        # (Optional) Install development dependencies
 $ uv run pre-commit install  # (Optional) Only if you want to push commits to GitHub
-$ source .venv/bin/activate  # Activate virtual environment on Linux/macOS
-$ .venv\Scripts\activate     # Activate virtual environment on Windows
+$ source .venv/bin/activate  # (Optional) Activate virtual environment on Linux/macOS
+$ .venv\Scripts\activate     # (Optional) Activate virtual environment on Windows
 ```
 
-**For simplicity, all following calls assume that the virtual environment is activated.**
+**For simplicity, all following calls assume that the virtual environment is activated (see above): otherwise, you would prepend `uv run`.**
 
 On Windows, PyTorch with CUDA acceleration has to be explicitly installed:
 
