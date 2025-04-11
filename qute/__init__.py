@@ -23,6 +23,10 @@ if platform.system() == "Darwin" and platform.machine() == "arm64":
     # operations are not supported by MPS.
     os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
+if platform.system() == "Linux":
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
+
 __version__ = "0.5.0"
 __doc__ = f"""
 This is the documentation of the `qute` library (version {__version__}).
