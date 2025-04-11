@@ -9,14 +9,8 @@
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
 
-import multiprocessing as mp
 import os
 import platform
-
-try:
-    mp.set_start_method("fork")
-except RuntimeError:
-    pass
 
 if platform.system() == "Darwin" and platform.machine() == "arm64":
     # Allow falling back to CPU on Apple M1/M2 devices if
