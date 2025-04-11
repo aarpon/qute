@@ -1,5 +1,5 @@
 # ******************************************************************************
-# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 # All rights reserved. This program and the accompanying materials
 # are made available under the terms of the Apache License Version 2.0
 # which accompanies this distribution, and is available at
@@ -9,6 +9,7 @@
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
 
+import math
 import os
 import sys
 from pathlib import Path
@@ -17,13 +18,14 @@ import pytorch_lightning as pl
 from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
 from pytorch_lightning.loggers import TensorBoardLogger
-from ray import air, tune
-from ray.tune import CLIReporter
+from ray import tune
+from ray.tune import Callback, CLIReporter, RunConfig
 from ray.tune.integration.pytorch_lightning import TuneReportCheckpointCallback
 from ray.tune.schedulers import ASHAScheduler
+from ray.tune.search.hyperopt import HyperOptSearch
 
 from qute.campaigns import SegmentationCampaignTransforms2D
-from qute.config import Config
+from qute.config import ConfigFactory
 from qute.data.demos import CellSegmentationDemo
 from qute.models.unet import UNet
 from qute.random import set_global_rng_seed
@@ -39,8 +41,16 @@ from qute.random import set_global_rng_seed
 config_file = (
     Path(__file__).parent / "cell_segmentation_demo_unet_hyperparameters_config.ini"
 )
-GLOBAL_CONFIG = Config(config_file)
+GLOBAL_CONFIG = ConfigFactory.get_config(config_file)
 GLOBAL_CONFIG.parse()
+
+
+class NanLossStopCallback(Callback):
+    def on_trial_result(self, iteration, trials, trial, result, **info):
+        loss = result.get("loss")
+        if loss is not None and (math.isnan(loss) or loss != loss):
+            print(f"Trial {trial.trial_id} encountered NaN loss. Stopping trial.")
+            # @TODO Stop the trial gracefully
 
 
 def train_fn(
@@ -78,14 +88,21 @@ def train_fn(
         criterion=criterion,
         channels=optimization_config["channels"],
         strides=None,
+        class_names=GLOBAL_CONFIG.class_names,
         metrics=metrics,
+        lr_scheduler_class=None,
         learning_rate=optimization_config["learning_rate"],
         dropout=optimization_config["dropout"],
     )
 
     # Tune report callback
     report_callback = TuneReportCheckpointCallback(
-        {"loss": "val_loss", "dice": "val_metrics"}, on="validation_end"
+        {
+            "loss": "val_loss",
+            "dice_cell": "val_metrics_cell",
+            "dice_membrane": "val_metrics_membrane",
+        },
+        on="validation_end",
     )
 
     # Instantiate the Trainer
@@ -119,6 +136,10 @@ def tune_fn(criterion, metrics, num_samples=10, num_epochs=GLOBAL_CONFIG.max_epo
         "batch_size": tune.choice([1, 2, 4, 8]),
     }
 
+    # Instantiate HyperOptSearch search algorithm
+    search_alg = HyperOptSearch(metric="loss", mode="min")
+
+    # Instantiate a scheduler
     scheduler = ASHAScheduler(max_t=num_epochs, grace_period=1, reduction_factor=2)
 
     reporter = CLIReporter(
@@ -131,7 +152,7 @@ def tune_fn(criterion, metrics, num_samples=10, num_epochs=GLOBAL_CONFIG.max_epo
             "num_patches",
             "batch_size",
         ],
-        metric_columns=["loss", "dice", "training_iteration"],
+        metric_columns=["loss", "dice_cell", "dice_membrane", "training_iteration"],
     )
 
     train_fn_with_parameters = tune.with_parameters(
@@ -148,12 +169,14 @@ def tune_fn(criterion, metrics, num_samples=10, num_epochs=GLOBAL_CONFIG.max_epo
         tune_config=tune.TuneConfig(
             metric="loss",
             mode="min",
+            search_alg=search_alg,
             scheduler=scheduler,
             num_samples=num_samples,
         ),
-        run_config=air.RunConfig(
+        run_config=RunConfig(
             name="tune_fn",
             progress_reporter=reporter,
+            callbacks=[NanLossStopCallback()],
         ),
         param_space=optimization_config,
     )
@@ -163,7 +186,6 @@ def tune_fn(criterion, metrics, num_samples=10, num_epochs=GLOBAL_CONFIG.max_epo
 
 
 if __name__ == "__main__":
-
     # Seeding
     set_global_rng_seed(GLOBAL_CONFIG.seed, workers=True)
 

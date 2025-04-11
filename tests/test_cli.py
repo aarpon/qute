@@ -1,5 +1,5 @@
 #  ********************************************************************************
-#  Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+#  Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 #  All rights reserved. This program and the accompanying materials
 #  are made available under the terms of the Apache License Version 2.0
 #  which accompanies this distribution, and is available at
@@ -25,11 +25,18 @@ def test_version():
 
 
 def test_create_classification_config(tmp_path):
-
     # Pass directory
     out_config_dir = tmp_path
     result = runner.invoke(
-        app, ["config", "create", "segmentation", str(out_config_dir)]
+        app,
+        [
+            "config",
+            "create",
+            "--category",
+            "classification",
+            "--target",
+            str(out_config_dir),
+        ],
     )
     assert result.exit_code == 0
     assert Path(out_config_dir / "classification_project.ini").exists()
@@ -37,21 +44,47 @@ def test_create_classification_config(tmp_path):
     # Pass file
     out_config_file = tmp_path / "classification_config.ini"
     result = runner.invoke(
-        app, ["config", "create", "segmentation", str(out_config_file)]
+        app,
+        [
+            "config",
+            "create",
+            "--category",
+            "classification",
+            "--target",
+            str(out_config_file),
+        ],
     )
     assert result.exit_code == 0
     assert Path(out_config_file).exists()
 
     # Pass directory
     out_config_dir = tmp_path
-    result = runner.invoke(app, ["config", "create", "regression", str(out_config_dir)])
+    result = runner.invoke(
+        app,
+        [
+            "config",
+            "create",
+            "--category",
+            "regression",
+            "--target",
+            str(out_config_dir),
+        ],
+    )
     assert result.exit_code == 0
     assert Path(out_config_dir / "regression_project.ini").exists()
 
     # Pass file
     out_config_file = tmp_path / "regression_config.ini"
     result = runner.invoke(
-        app, ["config", "create", "regression", str(out_config_file)]
+        app,
+        [
+            "config",
+            "create",
+            "--category",
+            "regression",
+            "--target",
+            str(out_config_file),
+        ],
     )
     assert result.exit_code == 0
     assert Path(out_config_file).exists()

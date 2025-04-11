@@ -1,5 +1,5 @@
 #  ********************************************************************************
-#  Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+#  Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 #  All rights reserved. This program and the accompanying materials
 #  are made available under the terms of the Apache License Version 2.0
 #  which accompanies this distribution, and is available at
@@ -11,33 +11,38 @@
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 import pytorch_lightning as pl
-import torch
 from monai.losses import DiceCELoss
-from monai.metrics import DiceMetric
+from monai.metrics import DiceMetric, Metric
 from pytorch_lightning.callbacks import (
+    Callback,
+    Checkpoint,
     EarlyStopping,
     LearningRateMonitor,
     ModelCheckpoint,
 )
-from torch.nn import MSELoss
-from torch.optim.lr_scheduler import OneCycleLR
+from torch.nn import Module, MSELoss
+from torch.optim.lr_scheduler import LRScheduler, OneCycleLR
 from torchmetrics import MeanAbsoluteError
-from typing_extensions import override
 
 from qute import device
 from qute.campaigns import (
+    CampaignTransforms,
     RestorationCampaignTransforms,
     SegmentationCampaignTransforms2D,
     SegmentationCampaignTransforms3D,
     SelfSupervisedRestorationCampaignTransforms,
 )
-from qute.config import Config
+from qute.config import ConfigFactory
 from qute.data.dataloaders import DataModuleLocalFolder
 from qute.data.demos import CellRestorationDemo, CellSegmentationDemo
+from qute.data.inference import full_inference, full_inference_ensemble
 from qute.models.attention_unet import AttentionUNet
+from qute.models.base_model import BaseModel
+from qute.models.dynunet import DynUNet
+from qute.models.factory import ModelFactory
 from qute.models.swinunetr import SwinUNETR
 from qute.models.unet import UNet
 from qute.project import Project
@@ -47,7 +52,18 @@ from qute.random import set_global_rng_seed
 class Director(ABC):
     """Abstract base class defining the interface for all directors."""
 
-    def __init__(self, config_file: Union[Path, str], num_workers: int = -1) -> None:
+    def __init__(
+        self,
+        config_file: Union[Path, str],
+        num_workers: int = -1,
+        *,
+        campaign_transforms: Optional[CampaignTransforms] = None,
+        data_module: Optional[pl.LightningDataModule] = None,
+        criterion: Optional[Module] = None,
+        metrics: Optional[Metric] = None,
+        lr_scheduler_class: Optional[LRScheduler] = None,
+        lr_scheduler_parameters: Optional[dict] = None,
+    ) -> None:
         """Constructor.
 
         Parameters
@@ -55,6 +71,27 @@ class Director(ABC):
 
         config_file: Union[Path, str]
             Full path to the configuration file.
+
+        num_workers: int
+            Number of workers to use.
+
+        campaign_transforms: Optional[CampaignTransforms] = None
+            CampaignTransform to use for data transformations.
+
+        data_module: Optional[pl.LightningDataModule] = None
+            Data module to use to load data for training, validation, testing and prediction.
+
+        criterion: Optional[Loss] = None
+            Loss to use for optimization.
+
+        metrics: Optional[Metric] = None
+            Metrics to use for validation.
+
+        lr_scheduler_class: Optional[LRScheduler] = None
+            Learning rate scheduler to use.
+
+        lr_scheduler_parameters: Optional[dict] = None
+            Parameters for learning rate scheduler.
         """
 
         # Store the configuration file
@@ -66,9 +103,11 @@ class Director(ABC):
         else:
             self.num_workers = num_workers
 
+        # Get the proper configuration parser
+        self.config = ConfigFactory.get_config(config_file)
+
         # Parse it
-        self.config = Config(self.config_file)
-        if not self.config.parse():
+        if self.config is None or not self.config.parse():
             raise Exception("Invalid config file")
 
         # Set up training precision
@@ -78,13 +117,15 @@ class Director(ABC):
         # Keep a reference to the project
         self.project = None
 
+        # Set keyword arguments
+        self.campaign_transforms = campaign_transforms
+        self.data_module = data_module
+        self.criterion = criterion
+        self.metrics = metrics
+        self.lr_scheduler_class = lr_scheduler_class
+        self.lr_scheduler_parameters = lr_scheduler_parameters
+
         # Keep references to other important objects
-        self.campaign_transforms = None
-        self.data_module = None
-        self.criterion = None
-        self.metrics = None
-        self.lr_scheduler_class = None
-        self.lr_scheduler_parameters = None
         self.early_stopping = None
         self.model_checkpoint = None
         self.lr_monitor = None
@@ -94,59 +135,84 @@ class Director(ABC):
         self.steps_per_epoch = 0
 
     @abstractmethod
-    def _setup_campaign_transforms(self):
-        """Set up campaign transforms."""
+    def _setup_default_campaign_transforms(self):
+        """Set up default campaign transforms."""
         raise NotImplementedError("Reimplement in child class.")
 
     @abstractmethod
-    def _setup_data_module(self):
-        """Set up data module."""
+    def _setup_default_data_module(self):
+        """Set up default data module."""
         raise NotImplementedError("Reimplement in child class.")
 
     @abstractmethod
-    def _setup_loss(self):
-        """Set up loss function."""
+    def _setup_default_loss(self):
+        """Set up default loss function."""
         raise NotImplementedError("Reimplement in child class.")
 
     @abstractmethod
-    def _setup_metrics(self):
-        """Set up metrics."""
+    def _setup_default_metrics(self):
+        """Set up default metrics."""
         raise NotImplementedError("Reimplement in child class.")
 
     def _set_precision(self):
-        """Set the precision for training based on the accelerator."""
+        """Set the precision for training based on the accelerator.
+
+        One of "32", "16-mixed", "bf16-mixed", "16", "bf16".
+
+        These are fully-supported by PyTorch-Lightning.
+
+        "32":
+            * Full 32-bit floating point precision (default).
+            * Used when no precision argument is specified.
+            * Suitable for tasks requiring high precision or for unsupported hardware configurations.
+
+        "16-mixed":
+            * Mixed precision training using FP16 (16-bit floating point).
+            * Enabled via PyTorch's AMP (Automatic Mixed Precision).
+            * Requires CUDA and supported GPUs (NVIDIA GPUs with Tensor Cores).
+
+        "bf16-mixed":
+            * Mixed precision training using bfloat16 (BF16).
+            * Enabled via PyTorch's AMP.
+            * Supported on NVIDIA Ampere GPUs or later, and some TPUs.
+            * Provides higher range compared to FP16 but slightly lower precision.
+
+        "16" (FP16 Full Precision):
+            * Pure FP16 precision (not mixed).
+            * Rarely used as it is less stable for training compared to "16-mixed".
+            * Suitable for inference on FP16-capable hardware but not recommended for training.
+
+        "bf16" (BF16 Full Precision):
+            * Pure BF16 precision.
+            * Similar to "16", this is typically used for inference rather than training.
+        """
+
+        ALLOWED_PRECISION = ["32", "16-mixed", "bf16-mixed", "16", "bf16"]
+        if self.config.precision not in ALLOWED_PRECISION:
+            raise ValueError(
+                f"Unsupported precision: {self.config.precision}. Allowed values are {ALLOWED_PRECISION}."
+            )
 
         # Device and precision settings
         accelerator = device.get_accelerator()
         if accelerator == "gpu":
-            # Properly enable usage of Tensor Cores on CUDA GPUs
-            if device.cuda_does_gpu_support_16bit_mixed_precision() and (
-                self.config.precision == "16-mixed"
-                or self.config.precision == "bf16-mixed"
-            ):
-                torch.set_float32_matmul_precision("medium")
-                print(
-                    f'PyTorch Lightning Trainer precision = "{self.config.precision}"'
-                )
-                print('PyTorch matrix multiplication precision = "medium"')
-            else:
-                torch.set_float32_matmul_precision("high")
-                print(
-                    f'PyTorch Lightning Trainer precision = "{self.config.precision}"'
-                )
-                print('PyTorch matrix multiplication precision = "high"')
-            # Set trainer_precision for GPU
+            # PyTorch-Lighting will use the passed precision with its Trainer object.
+            # If the hardware does not support it, PyTorch-Lightning will transparently
+            # adapt it.
             trainer_precision = self.config.precision
+            print(f'PyTorch Lightning Trainer precision = "{self.config.precision}"')
+
         elif accelerator == "mps":
-            # MPS backend currently supports only float32 precision
-            trainer_precision = 32
+            # MPS backend currently supports only float32 precision. Override the setting.
+            trainer_precision = "32"
             print("MPS backend detected. Using float32 precision.")
+
         elif accelerator == "cpu":
-            # CPU backend supports only float32 precision efficiently
-            trainer_precision = 32
+            # CPU backend supports only float32 precision efficiently. Override the setting.
+            trainer_precision = "32"
             print("CPU backend detected. Using float32 precision.")
         else:
-            # Other accelerators
+            # Other accelerators - use the passed precision and hope for the best.
             trainer_precision = self.config.precision
             print(f"Using default precision: {trainer_precision}")
 
@@ -181,7 +247,14 @@ class Director(ABC):
         self._setup_basis_for_training_and_resume()
 
         # Set up model
-        self.model = self._setup_model()
+        self.model = ModelFactory.get_model(
+            config=self.config,
+            campaign_transforms=self.campaign_transforms,
+            criterion=self.criterion,
+            metrics=self.metrics,
+            lr_scheduler_class=self.lr_scheduler_class,
+            lr_scheduler_params=self.lr_scheduler_parameters,
+        )
 
         # Run common training and testing operations for 'train' and 'resume' modes.
         self._run_common_train_and_resume()
@@ -193,7 +266,7 @@ class Director(ABC):
         self._setup_basis_for_training_and_resume()
 
         # Load specified model
-        model_class = self._get_model_class()
+        model_class = ModelFactory.get_model_class(config=self.config)
         self.model = model_class.load_from_checkpoint(
             self.project.selected_model_path,
             criterion=self.criterion,
@@ -229,18 +302,24 @@ class Director(ABC):
                 f"The model {self.config.source_model_path} does not exist!"
             )
 
-        # Initialize the campaign transforms
-        self.campaign_transforms = self._setup_campaign_transforms()
+        # If no campaign transforms were passed, set up default
+        if self.campaign_transforms is None:
+            self.campaign_transforms = self._setup_default_campaign_transforms()
 
-        # Initialize data module
-        self.data_module = self._setup_data_module()
+        # If not data module was passed, set up default
+        if self.data_module is None:
+            self.data_module = self._setup_default_data_module()
 
-        # Initialize criterion and metrics
-        self.criterion = self._setup_loss()
-        self.metrics = self._setup_metrics()
+        # If not criterion (loss) was passed, set up default
+        if self.criterion is None:
+            self.metrics = self._setup_default_loss()
+
+        # If not metrics were passed, set up default
+        if self.metrics is None:
+            self.metrics = self._setup_default_metrics()
 
         # Load existing model
-        model_class = self._get_model_class()
+        model_class = ModelFactory.get_model_class(config=self.config)
         self.model = model_class.load_from_checkpoint(
             self.config.source_model_path,
             criterion=self.criterion,
@@ -260,7 +339,9 @@ class Director(ABC):
             target_for_prediction = self.config.target_for_prediction
 
         # Run full inference
-        self.model.full_inference(
+        full_inference(
+            self.model,
+            campaign_transforms=self.campaign_transforms,
             data_loader=self.data_module.inference_dataloader(
                 input_folder=self.config.source_for_prediction
             ),
@@ -278,11 +359,13 @@ class Director(ABC):
         # Set up the project
         self.project = self._setup_project()
 
-        # Set up the transform campaign
-        self.campaign_transforms = self._setup_campaign_transforms()
+        # If no campaign transforms were passed, set up default
+        if self.campaign_transforms is None:
+            self.campaign_transforms = self._setup_default_campaign_transforms()
 
-        # Set up the data module
-        self.data_module = self._setup_data_module()
+        # If not data module was passed, set up default
+        if self.data_module is None:
+            self.data_module = self._setup_default_data_module()
 
         # Inform
         print(f"Working directory: {self.project.run_dir}")
@@ -293,15 +376,18 @@ class Director(ABC):
         self.steps_per_epoch = len(self.data_module.train_dataloader())
         if self.steps_per_epoch == 0:
             raise ValueError("Number of steps per epoch is zero. Check your data.")
+        print(f"Number of steps per epoch: {self.steps_per_epoch}")
 
         # Print the train, validation, and test sets to file
         self.data_module.print_sets(filename=self.project.run_dir / "image_sets.txt")
 
-        # Set up loss function
-        self.criterion = self._setup_loss()
+        # If not criterion (loss) was passed, set up default
+        if self.criterion is None:
+            self.criterion = self._setup_default_loss()
 
-        # Set up metrics
-        self.metrics = self._setup_metrics()
+        # If not metrics were passed, set up default
+        if self.metrics is None:
+            self.metrics = self._setup_default_metrics()
 
         # Set up trainer callbacks
         (
@@ -311,8 +397,11 @@ class Director(ABC):
             self.lr_monitor,
         ) = self._setup_trainer_callbacks()
 
-        # Set up the scheduler
-        self.lr_scheduler_class, self.lr_scheduler_parameters = self._setup_scheduler()
+        # Set up the learning rate scheduler
+        if self.lr_scheduler_class is None:
+            self.lr_scheduler_class, self.lr_scheduler_parameters = (
+                self._setup_default_scheduler()
+            )
 
         # Set up trainer
         self.trainer = self._setup_trainer()
@@ -339,7 +428,7 @@ class Director(ABC):
         self.project.selected_model_path = self.model_checkpoint.best_model_path
 
         # Re-load weights from best model
-        model_class = self._get_model_class()
+        model_class = ModelFactory.get_model_class(config=self.config)
         model = model_class.load_from_checkpoint(
             self.project.selected_model_path,
             strict=False,
@@ -368,7 +457,9 @@ class Director(ABC):
             target_for_prediction = self.config.target_for_prediction
 
         # Run full inference
-        self.model.full_inference(
+        full_inference(
+            self.model,
+            campaign_transforms=self.campaign_transforms,
             data_loader=self.data_module.inference_dataloader(
                 input_folder=self.config.source_for_prediction
             ),
@@ -391,8 +482,8 @@ class Director(ABC):
         # Return the project
         return project
 
-    def _setup_scheduler(self):
-        """Set up scheduler."""
+    def _setup_default_scheduler(self):
+        """Set up default learning rate scheduler and parameters."""
         if self.data_module is None:
             raise Exception("Data module is not set.")
 
@@ -463,77 +554,6 @@ class Director(ABC):
         # Return the trainer
         return trainer
 
-    def _setup_model(self):
-        """Set up the model."""
-
-        # Get and check the model from the configuration
-        model_class_name = self.config.model_class
-        if model_class_name not in ["unet", "attention_unet", "swin_unetr"]:
-            raise ValueError(
-                "The 'model_class' must be one of 'unet', 'attention_unet', or 'swin_unetr'."
-            )
-
-        model_class = self._get_model_class()
-
-        # Prepare model-specific parameters
-        model_params = {
-            "campaign_transforms": self.campaign_transforms,
-            "spatial_dims": 3 if self.config.is_3d else 2,
-            "in_channels": self.config.in_channels,
-            "out_channels": self.config.out_channels,
-            "class_names": self.config.class_names,
-            "criterion": self.criterion,
-            "metrics": self.metrics,
-            "learning_rate": self.config.learning_rate,
-            "lr_scheduler_class": self.lr_scheduler_class,
-            "lr_scheduler_parameters": self.lr_scheduler_parameters,
-        }
-
-        # Add additional model-specific parameters
-        if model_class_name == "unet":
-            model_params.update(
-                {
-                    "num_res_units": self.config.num_res_units,
-                    "channels": self.config.channels,
-                    "strides": self.config.strides,
-                }
-            )
-        elif model_class_name == "attention_unet":
-            model_params.update(
-                {
-                    "channels": self.config.channels,
-                    "strides": self.config.strides,
-                }
-            )
-        elif model_class_name == "swin_unetr":
-            model_params.update(
-                {
-                    "depths": self.config.depths,
-                    "num_heads": self.config.num_heads,
-                    "feature_size": self.config.feature_size,
-                }
-            )
-
-        # Instantiate the model
-        model = model_class(**model_params)
-
-        # Inform
-        print(f"Using model: {model_class.__name__}")
-
-        # Return the model
-        return model
-
-    def _get_model_class(self):
-        """Return the class of the model being used."""
-        if self.config.model_class == "unet":
-            return UNet
-        elif self.config.model_class == "attention_unet":
-            return AttentionUNet
-        elif self.config.model_class == "swin_unetr":
-            return SwinUNETR
-        else:
-            raise ValueError(f"Bad value for model type {self.config.model_class};")
-
 
 class EnsembleDirector(Director):
     """Ensemble Training Director."""
@@ -543,6 +563,13 @@ class EnsembleDirector(Director):
         config_file: Union[Path, str],
         num_folds: int,
         num_workers: int = -1,
+        *,
+        campaign_transforms: Optional[CampaignTransforms] = None,
+        data_module: Optional[pl.LightningDataModule] = None,
+        criterion: Optional[Module] = None,
+        metrics: Optional[Metric] = None,
+        lr_scheduler_class: Optional[LRScheduler] = None,
+        lr_scheduler_parameters: Optional[dict] = None,
     ) -> None:
         """
         Constructor.
@@ -556,7 +583,16 @@ class EnsembleDirector(Director):
         num_workers: int
             Number of workers to use for data loading. Default is -1, which uses all available CPUs.
         """
-        super().__init__(config_file=config_file, num_workers=num_workers)
+        super().__init__(
+            config_file=config_file,
+            num_workers=num_workers,
+            campaign_transforms=campaign_transforms,
+            data_module=data_module,
+            criterion=criterion,
+            metrics=metrics,
+            lr_scheduler_class=lr_scheduler_class,
+            lr_scheduler_parameters=lr_scheduler_parameters,
+        )
         self.num_folds = num_folds
         self.current_fold = -1
 
@@ -638,13 +674,21 @@ class EnsembleDirector(Director):
             if self.steps_per_epoch == 0:
                 raise ValueError("Number of steps per epoch is zero. Check your data.")
 
-            # Reset the learning rate scheduler
-            self.lr_scheduler_class, self.lr_scheduler_parameters = (
-                self._setup_scheduler()
-            )
+            # If no learning rate scheduler pass passed, initialize default
+            if self.lr_scheduler_class is None:
+                self.lr_scheduler_class, self.lr_scheduler_parameters = (
+                    self._setup_default_scheduler()
+                )
 
             # Initialize new model
-            self.model = self._setup_model()
+            self.model = ModelFactory.get_model(
+                config=self.config,
+                campaign_transforms=self.campaign_transforms,
+                criterion=self.criterion,
+                metrics=self.metric,
+                lr_scheduler_class=self.lr_scheduler_class,
+                lr_scheduler_params=self.lr_scheduler_parameters,
+            )
 
             # Set up trainer callbacks
             (
@@ -674,7 +718,7 @@ class EnsembleDirector(Director):
             )
 
             # Re-load weights from best model
-            model_class = self._get_model_class()
+            model_class = ModelFactory.get_model_class(config=self.config)
             model = model_class.load_from_checkpoint(
                 self.model_checkpoint.best_model_path,
                 strict=False,
@@ -711,7 +755,7 @@ class EnsembleDirector(Director):
     def _run_ensemble_inference(self, target_for_prediction):
         """Run ensemble inference using the trained models."""
         # Run ensemble prediction
-        self._best_models[0].full_inference_ensemble(
+        full_inference_ensemble(
             models=self._best_models,
             data_loader=self.data_module.inference_dataloader(
                 input_folder=self.config.source_for_prediction
@@ -750,15 +794,21 @@ class EnsembleDirector(Director):
         # Copy the configuration file to the run folder
         self.project.copy_configuration_file()
 
-        # Initialize the campaign transforms
-        self.campaign_transforms = self._setup_campaign_transforms()
+        # If no campaign transforms were passed, set up default
+        if self.campaign_transforms is None:
+            self.campaign_transforms = self._setup_default_campaign_transforms()
 
-        # Initialize data module
-        self.data_module = self._setup_data_module()
+        # If not data module was passed, set up default
+        if self.data_module is None:
+            self.data_module = self._setup_default_data_module()
 
-        # Initialize criterion and metrics
-        self.criterion = self._setup_loss()
-        self.metrics = self._setup_metrics()
+        # If not criterion (loss) was passed, set up default
+        if self.criterion is None:
+            self.metrics = self._setup_default_loss()
+
+        # If not metrics were passed, set up default
+        if self.metrics is None:
+            self.metrics = self._setup_default_metrics()
 
         # Load all models
         models = self._load_models(models_dir=self.config.source_model_path)
@@ -772,7 +822,7 @@ class EnsembleDirector(Director):
             target_for_prediction = self.config.target_for_prediction
 
         # Run ensemble prediction
-        models[0].full_inference_ensemble(
+        full_inference_ensemble(
             models=models,
             data_loader=self.data_module.inference_dataloader(
                 input_folder=self.config.source_for_prediction
@@ -802,7 +852,7 @@ class EnsembleDirector(Director):
             model_path = model_paths[0]  # Assuming one model per fold
 
             # Load the model
-            model_class = self._get_model_class()
+            model_class = ModelFactory.get_model_class(config=self.config)
             model = model_class.load_from_checkpoint(
                 model_path,
                 criterion=self.criterion,
@@ -826,15 +876,15 @@ class EnsembleDirector(Director):
 class RestorationDirector(Director):
     """Restoration Training Director."""
 
-    def _setup_metrics(self):
+    def _setup_default_metrics(self):
         """Set up metrics for restoration."""
         return MeanAbsoluteError()
 
-    def _setup_loss(self):
+    def _setup_default_loss(self):
         """Set up loss function for restoration."""
         return MSELoss()
 
-    def _setup_data_module(self):
+    def _setup_default_data_module(self):
         """Set up data module for restoration."""
         # Data module
         data_module = DataModuleLocalFolder(
@@ -858,7 +908,7 @@ class RestorationDirector(Director):
         # Return the data module
         return data_module
 
-    def _setup_campaign_transforms(self):
+    def _setup_default_campaign_transforms(self):
         """Set up campaign transforms for restoration."""
         # Initialize default Restoration Campaign Transform
         campaign_transforms = RestorationCampaignTransforms(
@@ -875,7 +925,7 @@ class RestorationDirector(Director):
 class SegmentationDirector(Director):
     """Segmentation Training Director."""
 
-    def _setup_metrics(self):
+    def _setup_default_metrics(self):
         """Set up metrics for segmentation."""
         return DiceMetric(
             include_background=self.config.include_background,
@@ -883,7 +933,7 @@ class SegmentationDirector(Director):
             get_not_nans=False,
         )
 
-    def _setup_loss(self):
+    def _setup_default_loss(self):
         """Set up loss function for segmentation."""
         return DiceCELoss(
             include_background=self.config.include_background,
@@ -891,7 +941,7 @@ class SegmentationDirector(Director):
             softmax=True,
         )
 
-    def _setup_data_module(self):
+    def _setup_default_data_module(self):
         """Set up data module for segmentation."""
         # Data module
         data_module = DataModuleLocalFolder(
@@ -916,7 +966,7 @@ class SegmentationDirector(Director):
         # Return data module
         return data_module
 
-    def _setup_campaign_transforms(self):
+    def _setup_default_campaign_transforms(self):
         """Set up campaign transforms for segmentation."""
         # Consistency check
         if self.config.is_3d:
@@ -936,7 +986,7 @@ class SegmentationDirector(Director):
 class SegmentationDirector3D(SegmentationDirector):
     """Segmentation 3D Training Director."""
 
-    def _setup_campaign_transforms(self):
+    def _setup_default_campaign_transforms(self):
         """Set up campaign transforms for 3D segmentation."""
         # Consistency check
         if not self.config.is_3d:
@@ -959,7 +1009,7 @@ class SegmentationDirector3D(SegmentationDirector):
 class SelfSupervisedDirector(RestorationDirector):
     """Self-Supervised Training Director."""
 
-    def _setup_campaign_transforms(self):
+    def _setup_default_campaign_transforms(self):
         """Set up campaign transforms for self-supervised restoration."""
         return SelfSupervisedRestorationCampaignTransforms()
 
@@ -972,10 +1022,27 @@ class EnsembleSegmentationDirector(EnsembleDirector, SegmentationDirector):
         config_file: Union[Path, str],
         num_folds: int,
         num_workers: int = -1,
+        *,
+        campaign_transforms: Optional[CampaignTransforms] = None,
+        data_module: Optional[pl.LightningDataModule] = None,
+        criterion: Optional[Module] = None,
+        metrics: Optional[Metric] = None,
+        lr_scheduler_class: Optional[LRScheduler] = None,
+        lr_scheduler_parameters: Optional[dict] = None,
     ) -> None:
-        super().__init__(config_file, num_folds, num_workers)
+        super().__init__(
+            config_file,
+            num_folds,
+            num_workers,
+            campaign_transforms=campaign_transforms,
+            data_module=data_module,
+            criterion=criterion,
+            metrics=metrics,
+            lr_scheduler_class=lr_scheduler_class,
+            lr_scheduler_parameters=lr_scheduler_parameters,
+        )
 
-    def _setup_data_module(self):
+    def _setup_default_data_module(self):
         """Set up data module with folds."""
         # Data module
         data_module = DataModuleLocalFolder(
@@ -1014,7 +1081,7 @@ class EnsembleSegmentationDirector(EnsembleDirector, SegmentationDirector):
 class CellRestorationDemoDirector(RestorationDirector):
     """Restoration Demo Training Director."""
 
-    def _setup_data_module(self):
+    def _setup_default_data_module(self):
         """Set up data module for cell restoration demo."""
         # Data module
         data_module = CellRestorationDemo(
@@ -1038,7 +1105,7 @@ class CellRestorationDemoDirector(RestorationDirector):
 class CellSegmentationDemoDirector(SegmentationDirector):
     """Segmentation Demo Training Director."""
 
-    def _setup_data_module(self):
+    def _setup_default_data_module(self):
         """Set up data module for cell segmentation demo."""
         # Data module
         data_module = CellSegmentationDemo(
@@ -1062,7 +1129,7 @@ class CellSegmentationDemoDirector(SegmentationDirector):
 class EnsembleCellSegmentationDemoDirector(EnsembleSegmentationDirector):
     """Ensemble Segmentation Demo Training Director."""
 
-    def _setup_data_module(self):
+    def _setup_default_data_module(self):
         """Set up data module for ensemble cell segmentation demo."""
         # Data module
         data_module = CellSegmentationDemo(

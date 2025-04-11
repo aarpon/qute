@@ -1,5 +1,5 @@
 # ******************************************************************************
-# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 # All rights reserved. This program and the accompanying materials
 # are made available under the terms of the Apache License Version 2.0
 # which accompanies this distribution, and is available at
@@ -137,8 +137,3 @@ class UNet(BaseModel):
 
         # Log the hyperparameters
         self.save_hyperparameters(ignore=["criterion", "metrics"])
-
-    def forward(self, x):
-        """Forward pass through the network."""
-        y_hat = self.net(x)
-        return y_hat

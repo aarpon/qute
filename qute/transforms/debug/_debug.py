@@ -1,5 +1,5 @@
 # ******************************************************************************
-# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 # All rights reserved. This program and the accompanying materials
 # are made available under the terms of the Apache License Version 2.0
 # which accompanies this distribution, and is available at
@@ -44,7 +44,6 @@ class DebugCheckAndFixAffineDimensions(Transform):
                     for key in item.keys():
                         sub_item = item[key]
                         if type(sub_item) is MetaTensor and hasattr(sub_item, "affine"):
-
                             if sub_item.affine.shape != (4, 4):
                                 print(
                                     f"{prefix}Affine matrix needs correcting! Current shape is {sub_item.affine.shape}"
@@ -82,7 +81,6 @@ class DebugCheckAndFixAffineDimensions(Transform):
             for key in data.keys():
                 item = data[key]
                 if type(item) is MetaTensor and hasattr(item, "affine"):
-
                     if item.affine.shape != (4, 4):
                         print(
                             f"{prefix}Affine matrix needs correcting! Current shape is {item.affine.shape}"

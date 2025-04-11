@@ -1,5 +1,5 @@
 # ******************************************************************************
-# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 # All rights reserved. This program and the accompanying materials
 # are made available under the terms of the Apache License Version 2.0
 # which accompanies this distribution, and is available at
@@ -552,13 +552,5 @@ class CustomTIFFReaderd(MapTransform):
 
             # Assign the tensor to the corresponding key
             d[key] = out  # (Meta)Tensor(image)
-
-        # Check
-        expected_size = None
-        for key in self.keys:
-            if expected_size is None:
-                expected_size = d[key].shape
-            else:
-                assert d[key].shape == expected_size
 
         return d

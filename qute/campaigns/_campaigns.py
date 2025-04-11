@@ -1,5 +1,5 @@
 # ******************************************************************************
-# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 # All rights reserved. This program and the accompanying materials
 # are made available under the terms of the Apache License Version 2.0
 # which accompanies this distribution, and is available at
@@ -18,11 +18,10 @@ from monai.transforms import (
     AsDiscreted,
     Compose,
     RandCropByPosNegLabeld,
+    RandFlipd,
     RandGaussianNoise,
     RandGaussianNoised,
     RandGaussianSmoothd,
-    RandRotate90d,
-    RandRotated,
     RandSpatialCropd,
 )
 
@@ -156,13 +155,7 @@ class SegmentationCampaignTransforms2D(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
-                RandRotated(
-                    keys=("image", "label"),
-                    prob=0.75,
-                    range_x=0.4,
-                    mode=["bilinear", "nearest"],
-                    padding_mode="reflection",
-                ),
+                ZNormalized(keys=("image",)),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
                     label_key="label",
@@ -175,8 +168,12 @@ class SegmentationCampaignTransforms2D(CampaignTransforms):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                ZNormalized(keys=("image",)),
-                RandRotate90d(keys=("image", "label"), prob=0.5, spatial_axes=(-2, -1)),
+                RandFlipd(
+                    keys=("image", "label"), prob=0.5, spatial_axis=[0], lazy=False
+                ),
+                RandFlipd(
+                    keys=("image", "label"), prob=0.5, spatial_axis=[1], lazy=False
+                ),
                 RandGaussianNoised(keys=("image",), prob=0.2),
                 RandGaussianSmoothd(keys=("image",), prob=0.2),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
@@ -194,6 +191,7 @@ class SegmentationCampaignTransforms2D(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
+                ZNormalized(keys=("image",)),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
                     label_key="label",
@@ -206,7 +204,6 @@ class SegmentationCampaignTransforms2D(CampaignTransforms):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                ZNormalized(keys=("image",)),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
                 ToPyTorchLightningOutputd(),
             ]
@@ -274,6 +271,7 @@ class SegmentationCampaignTransformsIDT2D(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
+                ZNormalized(keys=("image",)),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
                     label_key="label",
@@ -286,8 +284,12 @@ class SegmentationCampaignTransformsIDT2D(CampaignTransforms):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                ZNormalized(keys=("image",)),
-                RandRotate90d(keys=("image", "label"), prob=0.5, spatial_axes=(-2, -1)),
+                RandFlipd(
+                    keys=("image", "label"), prob=0.5, spatial_axis=[0], lazy=False
+                ),
+                RandFlipd(
+                    keys=("image", "label"), prob=0.5, spatial_axis=[1], lazy=False
+                ),
                 RandGaussianNoised(keys=("image",), prob=0.2),
                 RandGaussianSmoothd(keys=("image",), prob=0.2),
                 NormalizedDistanceTransformd(
@@ -311,6 +313,7 @@ class SegmentationCampaignTransformsIDT2D(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
+                ZNormalized(keys=("image",)),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
                     label_key="label",
@@ -323,7 +326,6 @@ class SegmentationCampaignTransformsIDT2D(CampaignTransforms):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                ZNormalized(keys=("image",)),
                 NormalizedDistanceTransformd(
                     keys=("label",),
                     reverse=True,
@@ -458,6 +460,7 @@ class SegmentationCampaignTransformsIDT3D(CampaignTransforms):
                     input_voxel_size=self.voxel_size,
                     mode=("trilinear", "nearest"),
                 ),
+                ZNormalized(keys=("image",)),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
                     label_key="label",
@@ -470,7 +473,6 @@ class SegmentationCampaignTransformsIDT3D(CampaignTransforms):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                ZNormalized(keys=("image",)),
                 RandGaussianNoised(keys=("image",), prob=0.2),
                 RandGaussianSmoothd(keys=("image",), prob=0.2),
                 NormalizedDistanceTransformd(
@@ -502,6 +504,7 @@ class SegmentationCampaignTransformsIDT3D(CampaignTransforms):
                     input_voxel_size=self.voxel_size,
                     mode=("trilinear", "nearest"),
                 ),
+                ZNormalized(keys=("image",)),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
                     label_key="label",
@@ -514,7 +517,6 @@ class SegmentationCampaignTransformsIDT3D(CampaignTransforms):
                     allow_smaller=False,
                     lazy=False,
                 ),
-                ZNormalized(keys=("image",)),
                 NormalizedDistanceTransformd(
                     keys=("label",),
                     reverse=True,
@@ -688,6 +690,7 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     input_voxel_size=self.voxel_size,
                     mode=("trilinear", "nearest"),
                 ),
+                ZNormalized(keys=("image",)),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
                     label_key="label",
@@ -701,7 +704,6 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     lazy=False,
                 ),
                 LabelToTwoClassMaskd(keys=("label",), border_thickness=1),
-                ZNormalized(keys=("image",)),
                 RandGaussianNoised(keys=("image",), prob=0.2),
                 RandGaussianSmoothd(keys=("image",), prob=0.2),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
@@ -727,6 +729,7 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     input_voxel_size=self.voxel_size,
                     mode=("trilinear", "nearest"),
                 ),
+                ZNormalized(keys=("image",)),
                 RandCropByPosNegLabeld(
                     keys=("image", "label"),
                     label_key="label",
@@ -740,7 +743,6 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
                     lazy=False,
                 ),
                 LabelToTwoClassMaskd(keys=("label",), border_thickness=1),
-                ZNormalized(keys=("image",)),
                 AsDiscreted(keys=["label"], to_onehot=self.num_classes),
                 ToPyTorchLightningOutputd(),
             ]
@@ -966,12 +968,11 @@ class SelfSupervisedRestorationCampaignTransforms(CampaignTransforms):
                     ensure_channel_first=True,
                     dtype=torch.float32,
                 ),
-                RandRotated(
-                    keys=("image", "target"),
-                    prob=0.75,
-                    range_x=0.4,
-                    mode=["bilinear", "bilinear"],
-                    padding_mode="reflection",
+                RandFlipd(
+                    keys=("image", "label"), prob=0.5, spatial_axis=[0], lazy=False
+                ),
+                RandFlipd(
+                    keys=("image", "label"), prob=0.5, spatial_axis=[1], lazy=False
                 ),
                 ZNormalized(
                     keys=("image", "target"),

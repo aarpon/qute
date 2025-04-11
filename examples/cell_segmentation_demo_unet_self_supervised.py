@@ -1,5 +1,5 @@
 # ******************************************************************************
-# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 # All rights reserved. This program and the accompanying materials
 # are made available under the terms of the Apache License Version 2.0
 # which accompanies this distribution, and is available at
@@ -30,6 +30,7 @@ from qute.campaigns import (
     SelfSupervisedRestorationCampaignTransforms,
 )
 from qute.data.demos import CellRestorationDemo, CellSegmentationDemo
+from qute.data.inference import full_inference
 from qute.models.swinunetr import SwinUNETR
 from qute.random import set_global_rng_seed
 
@@ -297,7 +298,9 @@ if __name__ == "__main__":
     # -----------------------------------------------------------------------------------------#
 
     # Save the full predictions (on the test set)
-    best_model.full_inference(
+    full_inference(
+        best_model,
+        campaign_transforms=classification_campaign_transforms,
         data_loader=classification_data_module.inference_dataloader(
             classification_data_module.data_dir / "images/"
         ),

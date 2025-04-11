@@ -1,5 +1,5 @@
 # ******************************************************************************
-# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 # All rights reserved. This program and the accompanying materials
 # are made available under the terms of the Apache License Version 2.0
 # which accompanies this distribution, and is available at
@@ -9,7 +9,21 @@
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
 
-__version__ = "0.4.1"
+import multiprocessing as mp
+import os
+import platform
+
+try:
+    mp.set_start_method("fork")
+except RuntimeError:
+    pass
+
+if platform.system() == "Darwin" and platform.machine() == "arm64":
+    # Allow falling back to CPU on Apple M1/M2 devices if
+    # operations are not supported by MPS.
+    os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+
+__version__ = "0.5.0"
 __doc__ = f"""
 This is the documentation of the `qute` library (version {__version__}).
 

@@ -1,5 +1,5 @@
 # ******************************************************************************
-# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 # All rights reserved. This program and the accompanying materials
 # are made available under the terms of the Apache License Version 2.0
 # which accompanies this distribution, and is available at
@@ -80,7 +80,6 @@ def extract_intensity_stats(
     for image_name, mask_name in tqdm(
         zip(image_list, mask_list), total=len(image_list)
     ):
-
         # Read images
         image = imread(image_name)
         mask = imread(mask_name)
@@ -139,7 +138,6 @@ def extract_median_object_size(label_list: list) -> tuple[float, float, float]:
 
     # Process all images
     for label_name in tqdm(label_list):
-
         # Read images
         label_img = imread(label_name)
 
@@ -178,7 +176,6 @@ def extract_fft_stats(
 
     # Process all images
     for image_name in tqdm(image_list, total=len(image_list)):
-
         # Read image
         image = imread(image_name)
 

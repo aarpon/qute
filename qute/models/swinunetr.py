@@ -1,5 +1,5 @@
 # ******************************************************************************
-# Copyright © 2022 - 2024, ETH Zurich, D-BSSE, Aaron Ponti
+# Copyright © 2022 - 2025, ETH Zurich, D-BSSE, Aaron Ponti
 # All rights reserved. This program and the accompanying materials
 # are made available under the terms of the Apache License Version 2.0
 # which accompanies this distribution, and is available at
@@ -50,6 +50,7 @@ class SwinUNETR(BaseModel):
         num_heads: Tuple[int, ...] = (3, 6, 12, 24),
         feature_size: int = 24,
         dropout: float = 0.0,
+        use_v2: bool = False,
     ):
         """
         Constructor.
@@ -104,6 +105,10 @@ class SwinUNETR(BaseModel):
 
         dropout: float = 0.0
             Dropout ratio.
+
+        use_v2: bool
+            Whether to use version 2 of the underlying MONAI SwinUNETR model
+            (which adds a residual convolution block at the beginning of each SWIN stage).
         """
         super().__init__(
             campaign_transforms=campaign_transforms,
@@ -133,26 +138,11 @@ class SwinUNETR(BaseModel):
             use_checkpoint=False,
             spatial_dims=spatial_dims,
             drop_rate=dropout,
+            use_v2=use_v2,
         )
 
         # Log the hyperparameters
         self.save_hyperparameters(ignore=["criterion", "metrics"])
-
-    def forward(self, x):
-        """Forward pass through the network.
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            Input tensor.
-
-        Returns
-        -------
-        y_hat : torch.Tensor
-            Output tensor from the network.
-        """
-        y_hat = self.net(x)
-        return y_hat
 
     def save_encoder_weights(self, filename: Union[str, Path]) -> None:
         """Save encoder weights."""
