@@ -48,7 +48,6 @@ def run(
         False,
         "--ensemble",
         "-e",
-        is_flag=True,
         help="Set to run an ensemble pipeline with specified number of folds.",
         show_default=True,
     ),
