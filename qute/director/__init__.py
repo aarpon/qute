@@ -19,6 +19,7 @@ from ._director import (
     RestorationDirector,
     SegmentationDirector,
     SegmentationDirector3D,
+    SelfSupervisedDirector,
 )
 
 __doc__ = "Training directors."
@@ -33,4 +34,5 @@ __all__ = [
     "RestorationDirector",
     "SegmentationDirector",
     "SegmentationDirector3D",
+    "SelfSupervisedDirector",
 ]
