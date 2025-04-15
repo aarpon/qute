@@ -233,17 +233,23 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             # Data is already prepared
             return
 
-        # Scan the "images" and "labels" folders
-        self._all_images = np.array(
-            natsorted(
-                list((self.data_dir / self.source_images_sub_folder).glob("*.tif"))
-            )
+        # Scan the "images" and "labels" folders and clean them
+        image_candidates = list(
+            (self.data_dir / self.source_images_sub_folder).glob("*.tif")
         )
-        self._all_labels = np.array(
-            natsorted(
-                list((self.data_dir / self.target_images_sub_folder).glob("*.tif"))
-            )
+        image_candidates = [
+            image for image in image_candidates if not str(image).startswith("._")
+        ]
+        label_candidates = list(
+            (self.data_dir / self.target_images_sub_folder).glob("*.tif")
         )
+        label_candidates = [
+            label for label in label_candidates if not str(label).startswith("._")
+        ]
+
+        # Store them
+        self._all_images = np.array(natsorted(image_candidates))
+        self._all_labels = np.array(natsorted(label_candidates))
 
         # Check that we found some images
         if len(self._all_images) == 0:
