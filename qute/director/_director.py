@@ -336,7 +336,10 @@ class Director(ABC):
             target_for_prediction = self.project.run_dir / "predictions"
             print(f"Defaulting to {target_for_prediction}")
         else:
-            target_for_prediction = self.config.target_for_prediction
+            # Append the run name
+            target_for_prediction = (
+                self.config.target_for_prediction / self.project.run_dir.name
+            )
 
         # Run full inference
         full_inference(
@@ -454,7 +457,10 @@ class Director(ABC):
             target_for_prediction = self.project.run_dir / "predictions"
             print(f"Defaulting to {target_for_prediction}")
         else:
-            target_for_prediction = self.config.target_for_prediction
+            # Append the run name
+            target_for_prediction = (
+                self.config.target_for_prediction / self.project.run_dir.name
+            )
 
         # Run full inference
         full_inference(
@@ -819,7 +825,10 @@ class EnsembleDirector(Director):
             target_for_prediction = self.project.run_dir / "predictions"
             print(f"Defaulting to {target_for_prediction}")
         else:
-            target_for_prediction = self.config.target_for_prediction
+            # Append the run name
+            target_for_prediction = (
+                self.config.target_for_prediction / self.project.run_dir.name
+            )
 
         # Run ensemble prediction
         full_inference_ensemble(
