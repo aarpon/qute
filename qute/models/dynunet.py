@@ -51,6 +51,7 @@ class DynUNet(BaseModel):
         lr_scheduler_parameters: Optional[dict] = None,
         dropout: float = 0.0,
         deep_supervision: bool = False,
+        deep_supr_num: int = 1,
         res_block: bool = True,
     ):
         super().__init__(
@@ -87,6 +88,7 @@ class DynUNet(BaseModel):
             filters=filters,
             upsample_kernel_size=upsample_kernel_size,
             deep_supervision=deep_supervision,
+            deep_supr_num=deep_supr_num,
             res_block=res_block,
             dropout=dropout,
         )
