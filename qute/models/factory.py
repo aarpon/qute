@@ -123,6 +123,7 @@ class ModelFactory(ABC):
             model_params.update(
                 {
                     "deep_supervision": config.deep_supervision,
+                    "deep_supr_num": config.deep_supr_num,
                     "res_block": config.res_block,
                 }
             )

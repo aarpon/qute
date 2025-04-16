@@ -328,6 +328,10 @@ class Config(ABC):
         return deep_supervision_str.lower() == "true"
 
     @property
+    def deep_supr_num(self):
+        return int(self._config["settings"]["deep_supr_num"])
+
+    @property
     def res_block(self):
         res_block_str = self._config["settings"]["res_block"]
         return res_block_str.lower() == "true"
