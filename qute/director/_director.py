@@ -685,7 +685,7 @@ class EnsembleDirector(Director):
                 config=self.config,
                 campaign_transforms=self.campaign_transforms,
                 criterion=self.criterion,
-                metrics=self.metric,
+                metrics=self.metrics,
                 lr_scheduler_class=self.lr_scheduler_class,
                 lr_scheduler_params=self.lr_scheduler_parameters,
             )
