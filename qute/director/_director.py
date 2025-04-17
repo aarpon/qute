@@ -767,7 +767,7 @@ class EnsembleDirector(Director):
                 input_folder=self.config.source_for_prediction
             ),
             target_folder=target_for_prediction,
-            post_full_inference_transforms=self.config.post_full_inference_transforms,
+            post_full_inference_transforms=self.campaign_transforms.get_post_inference_transforms(),
             roi_size=self.config.patch_size,
             batch_size=self.config.inference_batch_size,
             transpose=False,
@@ -818,7 +818,7 @@ class EnsembleDirector(Director):
             self.metrics = self._setup_default_metrics()
 
         # Load all models
-        models = self._load_models(models_dir=self.config.source_model_path)
+        self._best_models = self._load_models(models_dir=self.config.source_model_path)
 
         # Determine target folder for predictions
         if self.config.target_for_prediction is None:
