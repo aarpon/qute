@@ -382,7 +382,10 @@ class Director(ABC):
         print(f"Number of steps per epoch: {self.steps_per_epoch}")
 
         # Print the train, validation, and test sets to file
-        self.data_module.print_sets(filename=self.project.run_dir / "image_sets.txt")
+        if not isinstance(self, EnsembleDirector):
+            self.data_module.print_sets(
+                filename=self.project.run_dir / "image_sets.txt"
+            )
 
         # If not criterion (loss) was passed, set up default
         if self.criterion is None:
