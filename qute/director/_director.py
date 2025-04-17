@@ -767,6 +767,7 @@ class EnsembleDirector(Director):
                 input_folder=self.config.source_for_prediction
             ),
             target_folder=target_for_prediction,
+            post_full_inference_transforms=self.config.post_full_inference_transforms,
             roi_size=self.config.patch_size,
             batch_size=self.config.inference_batch_size,
             transpose=False,
@@ -831,21 +832,7 @@ class EnsembleDirector(Director):
             )
 
         # Run ensemble prediction
-        full_inference_ensemble(
-            models=models,
-            data_loader=self.data_module.inference_dataloader(
-                input_folder=self.config.source_for_prediction
-            ),
-            target_folder=target_for_prediction,
-            roi_size=self.config.patch_size,
-            batch_size=self.config.inference_batch_size,
-            transpose=False,
-            save_individual_preds=True,
-            voting_mechanism="mode",
-            weights=None,
-            prefix="",
-            output_dtype=self.config.output_dtype,
-        )
+        self._run_ensemble_inference(target_for_prediction)
 
     def _load_models(self, models_dir: Path):
         """Reload all models found in the model folds."""
