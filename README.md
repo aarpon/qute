@@ -15,7 +15,7 @@ Framework to support deep-learning based computer-vision research in microscopy 
   * Windows: https://developer.nvidia.com/cuda-downloads?target_os=Windows&target_arch=x86_64
   * macOS does not support CUDA; PyTorch will use `mps` on M1/M2 processors.
 
-* Install **uv** by Astral: hhttps://docs.astral.sh/uv/#getting-started
+* Install **uv** by Astral: https://docs.astral.sh/uv/#getting-started
 
 ### Install qute
 
@@ -31,12 +31,6 @@ $ .venv\Scripts\activate     # (Optional) Activate virtual environment on Window
 ```
 
 **For simplicity, all following calls assume that the virtual environment is activated (see above): otherwise, you would prepend `uv run`.**
-
-On Windows, PyTorch with CUDA acceleration has to be explicitly installed:
-
-```bash
-$ python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-```
 
 ### Test if GPU acceleration is available
 
