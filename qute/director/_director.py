@@ -767,7 +767,7 @@ class EnsembleDirector(Director):
         full_inference_ensemble(
             models=self._best_models,
             data_loader=self.data_module.inference_dataloader(
-                input_folder=self.config.source_for_prediction
+                input_folder=self.config.source_for_prediction,
             ),
             target_folder=target_for_prediction,
             post_full_inference_transforms=self.campaign_transforms.get_post_inference_transforms(),

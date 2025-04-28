@@ -435,12 +435,25 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             label_transform=None,
         )
 
+        # If there are fewer images than workers do not pin memory and do not
+        # fire up more workers than necessary.
+        pin_memory = self.pin_memory
+        inference_batch_size = self.inference_batch_size
+        num_inference_workers = self.num_inference_workers
+        persistent_workers = True if self.num_inference_workers > 0 else False
+        n_images = len(image_names)
+        if n_images <= self.inference_batch_size:
+            pin_memory = False
+            inference_batch_size = n_images
+            num_inference_workers = n_images
+            persistent_workers = False
+
         # Return the DataLoader
         return DataLoader(
             inference_dataset,
-            batch_size=self.inference_batch_size,
-            num_workers=self.num_inference_workers,
+            batch_size=inference_batch_size,
+            num_workers=num_inference_workers,
             collate_fn=list_data_collate,
-            pin_memory=self.pin_memory,
-            persistent_workers=True if self.num_workers > 0 else False,
+            pin_memory=pin_memory,
+            persistent_workers=persistent_workers,
         )
