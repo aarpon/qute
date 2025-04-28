@@ -36,7 +36,7 @@ dependencies = [
     "monai>=1.4.0,<2.0.0",
     "typer<1.0.0,>=0.13.0",
     "ruff>=0.8.0",
-    "torch>=2.5.1",
+    "torch>=2.5.1,<2.7.0",
     "torchvision>=0.20.1",
     "hyperopt>=0.2.7",
     "protobuf>=3.20.3",
@@ -52,6 +52,19 @@ dev = [
     "pre-commit<4.0.0,>=3.7.1",
     "pdoc3<1.0.0,>=0.11.1",
 ]
+
+# Define the CUDA-124 PyTorch index but make it explicit:
+# packages must be pinned to be pulled from here
+[[tool.uv.index]]
+name     = "pytorch-cu124"
+url      = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+# Pin torch to the "pytorch-cu124" index for Linux and Windows: macOS will fall back
+# to pypi
+[tool.uv.sources]
+torch = [{index = "pytorch-cu124", marker = "sys_platform == 'linux' or sys_platform == 'win32'"}]
+torchvision = [{index = "pytorch-cu124", marker = "sys_platform == 'linux' or sys_platform == 'win32'"}]
 
 [project.scripts]
 qute = "qute.main:app"
