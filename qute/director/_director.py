@@ -336,7 +336,10 @@ class Director(ABC):
             target_for_prediction = self.project.run_dir / "predictions"
             print(f"Defaulting to {target_for_prediction}")
         else:
-            target_for_prediction = self.config.target_for_prediction
+            # Append the run name
+            target_for_prediction = (
+                self.config.target_for_prediction / self.project.run_dir.name
+            )
 
         # Run full inference
         full_inference(
@@ -379,7 +382,10 @@ class Director(ABC):
         print(f"Number of steps per epoch: {self.steps_per_epoch}")
 
         # Print the train, validation, and test sets to file
-        self.data_module.print_sets(filename=self.project.run_dir / "image_sets.txt")
+        if not isinstance(self, EnsembleDirector):
+            self.data_module.print_sets(
+                filename=self.project.run_dir / "image_sets.txt"
+            )
 
         # If not criterion (loss) was passed, set up default
         if self.criterion is None:
@@ -454,7 +460,10 @@ class Director(ABC):
             target_for_prediction = self.project.run_dir / "predictions"
             print(f"Defaulting to {target_for_prediction}")
         else:
-            target_for_prediction = self.config.target_for_prediction
+            # Append the run name
+            target_for_prediction = (
+                self.config.target_for_prediction / self.project.run_dir.name
+            )
 
         # Run full inference
         full_inference(
@@ -685,7 +694,7 @@ class EnsembleDirector(Director):
                 config=self.config,
                 campaign_transforms=self.campaign_transforms,
                 criterion=self.criterion,
-                metrics=self.metric,
+                metrics=self.metrics,
                 lr_scheduler_class=self.lr_scheduler_class,
                 lr_scheduler_params=self.lr_scheduler_parameters,
             )
@@ -758,9 +767,10 @@ class EnsembleDirector(Director):
         full_inference_ensemble(
             models=self._best_models,
             data_loader=self.data_module.inference_dataloader(
-                input_folder=self.config.source_for_prediction
+                input_folder=self.config.source_for_prediction,
             ),
             target_folder=target_for_prediction,
+            post_full_inference_transforms=self.campaign_transforms.get_post_inference_transforms(),
             roi_size=self.config.patch_size,
             batch_size=self.config.inference_batch_size,
             transpose=False,
@@ -811,7 +821,7 @@ class EnsembleDirector(Director):
             self.metrics = self._setup_default_metrics()
 
         # Load all models
-        models = self._load_models(models_dir=self.config.source_model_path)
+        self._best_models = self._load_models(models_dir=self.config.source_model_path)
 
         # Determine target folder for predictions
         if self.config.target_for_prediction is None:
@@ -819,24 +829,13 @@ class EnsembleDirector(Director):
             target_for_prediction = self.project.run_dir / "predictions"
             print(f"Defaulting to {target_for_prediction}")
         else:
-            target_for_prediction = self.config.target_for_prediction
+            # Append the run name
+            target_for_prediction = (
+                self.config.target_for_prediction / self.project.run_dir.name
+            )
 
         # Run ensemble prediction
-        full_inference_ensemble(
-            models=models,
-            data_loader=self.data_module.inference_dataloader(
-                input_folder=self.config.source_for_prediction
-            ),
-            target_folder=target_for_prediction,
-            roi_size=self.config.patch_size,
-            batch_size=self.config.inference_batch_size,
-            transpose=False,
-            save_individual_preds=True,
-            voting_mechanism="mode",
-            weights=None,
-            prefix="",
-            output_dtype=self.config.output_dtype,
-        )
+        self._run_ensemble_inference(target_for_prediction)
 
     def _load_models(self, models_dir: Path):
         """Reload all models found in the model folds."""

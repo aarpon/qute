@@ -17,6 +17,7 @@ from monai.data import MetaTensor
 from monai.transforms import MapTransform, Transform
 from nd2reader import ND2Reader
 from tifffile import imread
+from tifffile.tifffile import TiffFileError
 
 
 class CellposeLabelReader(Transform):
@@ -392,8 +393,8 @@ class CustomTIFFReader(Transform):
 
     def __init__(
         self,
-        ensure_channel_first: bool = True,
         dtype: torch.dtype = torch.float32,
+        geometry: str = "yx",
         as_meta_tensor: bool = False,
         voxel_size: Optional[tuple] = None,
     ) -> None:
@@ -402,11 +403,16 @@ class CustomTIFFReader(Transform):
         Parameters
         ----------
 
-        ensure_channel_first: bool
-            Ensure that the image is in the channel first format.
-
         dtype: torch.dtype = torch.float32
             Type of the image.
+
+        geometry: str
+            String representing the geometry of the image. The accepted geometry strings are:
+                * "yx"
+                * "cyx"
+                * "yxc" or "rgb" (alias)
+                * "zyx"
+                " "czyx"
 
         as_meta_tensor: bool (default = False)
             Set to True to return a MONAI MetaTensor, set to False for a PyTorch Tensor.
@@ -418,10 +424,9 @@ class CustomTIFFReader(Transform):
             True; otherwise it is ignored).
             If both `as_meta_tensor` is True and `voxel_size` is specified, `ensure_channel_first`
             must be True.
-
         """
         super().__init__()
-        self.ensure_channel_first = ensure_channel_first
+        self.geometry = geometry
         self.dtype = dtype
         self.as_meta_tensor = as_meta_tensor
         self.voxel_size = tuple(voxel_size) if voxel_size is not None else None
@@ -443,19 +448,58 @@ class CustomTIFFReader(Transform):
             Tensor with requested type and shape.
         """
 
-        # Check the consistency of the input arguments
-        if self.as_meta_tensor and self.voxel_size is not None:
-            if not self.ensure_channel_first:
-                raise ValueError(
-                    "If both `as_meta_tensor` is True and `voxel_size` is specified,"
-                    "`ensure_channel_first` must be True."
-                )
-
         # File path
         image_path = str(Path(file_name).resolve())
 
+        # Load the image
+        try:
+            image = imread(image_path)
+        except (FileNotFoundError, TiffFileError, OSError, KeyError, ValueError) as e:
+            print(f"File {image_path} could not be opened: {e}.")
+            raise e
+
+        # Process the image based on geometry
+        if image.ndim == 2:
+            if self.geometry != "yx":
+                raise ValueError(
+                    f"Image is 2D but the requested geometry is {self.geometry}."
+                )
+            ensure_channel_first = True
+
+        elif image.ndim == 3:
+
+            if self.geometry == "cyx":
+                ensure_channel_first = False  # Channel is already the first dimension
+            elif self.geometry == "cyx" or self.geometry == "rgb":
+                if image.shape[-1] != 3:
+                    raise ValueError("The image does not appear to be RGB.")
+                image = np.transpose(image, axes=(2, 0, 1))
+                ensure_channel_first = False  # Channel is already the first dimension
+            elif self.geometry == "zyx":
+                ensure_channel_first = True
+            else:
+                raise ValueError(
+                    f"Geometry '{self.geometry}' is incompatible with a 3D image."
+                )
+
+        elif image.ndim == 4:
+            if self.geometry != "czyx":
+                raise ValueError(
+                    f"Image is D but the requested geometry is {self.geometry}."
+                )
+            ensure_channel_first = False
+
+        else:
+            raise ValueError(f"Unsupported number of image dimensions ({image.ndim}).")
+
+        # Consistency check
+        if ensure_channel_first is None:
+            raise ValueError(
+                f"Unexpected combination of image dimensions ({image.ndim}) and geometry ({self.geometry})."
+            )
+
         # Load and process image
-        data = torch.Tensor(imread(image_path).astype(np.float32))
+        data = torch.Tensor(image.astype(np.float32))
         if self.as_meta_tensor:
             if self.voxel_size is not None:
                 if data.ndim != len(self.voxel_size):
@@ -477,7 +521,7 @@ class CustomTIFFReader(Transform):
             )
             data = MetaTensor(data, affine=affine)
 
-        if self.ensure_channel_first:
+        if ensure_channel_first:
             data = data.unsqueeze(0)
         if self.dtype is not None:
             data = data.to(self.dtype)
@@ -490,8 +534,8 @@ class CustomTIFFReaderd(MapTransform):
     def __init__(
         self,
         keys: tuple[str, ...] = ("image", "label"),
-        ensure_channel_first: bool = True,
         dtype: torch.dtype = torch.float32,
+        geometries: Optional[dict] = {"image": "yx", "label": "yx"},
         as_meta_tensor: bool = False,
         voxel_size: Optional[tuple] = None,
     ) -> None:
@@ -503,11 +547,18 @@ class CustomTIFFReaderd(MapTransform):
         keys: tuple[str]
             Keys for the data dictionary.
 
-        ensure_channel_first: bool
-            Ensure that the image is in the channel first format.
-
         dtype: torch.dtype = torch.float32
             Type of the image.
+
+        geometries: Optional[dict] = {"image": "yx", "label": "yx"}
+            Set to a dictionary with keys matching those in `keys` and a string representing the geometry
+            of the images.
+            The accepted geometry strings are:
+                * "yx"
+                * "cyx"
+                * "yxc" or "rgb" (alias)
+                * "zyx"
+                " "czyx"
 
         as_meta_tensor: bool (default = False)
             Set to True to return a MONAI MetaTensor, set to False for a PyTorch Tensor.
@@ -522,12 +573,10 @@ class CustomTIFFReaderd(MapTransform):
         """
         super().__init__(keys=keys)
         self.keys = keys
-        self.tensor_reader = CustomTIFFReader(
-            ensure_channel_first=ensure_channel_first,
-            dtype=dtype,
-            as_meta_tensor=as_meta_tensor,
-            voxel_size=voxel_size,
-        )
+        self.geometries = geometries
+        self.dtype = dtype
+        self.as_meta_tensor = as_meta_tensor
+        self.voxel_size = tuple(voxel_size) if voxel_size is not None else None
 
     def __call__(self, data: dict) -> dict:
         """
@@ -547,8 +596,16 @@ class CustomTIFFReaderd(MapTransform):
             # Get arguments
             image_path = str(Path(str(d[key])).resolve())
 
+            # Initialize reader
+            reader = CustomTIFFReader(
+                dtype=self.dtype,
+                geometry=self.geometries[key],
+                as_meta_tensor=self.as_meta_tensor,
+                voxel_size=self.voxel_size,
+            )
+
             # Use the single tensor reader
-            out = self.tensor_reader(image_path)
+            out = reader(image_path)
 
             # Assign the tensor to the corresponding key
             d[key] = out  # (Meta)Tensor(image)

@@ -14,6 +14,7 @@ from ._debug import (
     DebugExtractChannel,
     DebugInformer,
     DebugMinNumVoxelCheckerd,
+    DebugSaveTransformToDiskd,
 )
 
 __doc__ = "Debugging transforms."
@@ -22,4 +23,5 @@ __all__ = [
     "DebugExtractChannel",
     "DebugInformer",
     "DebugMinNumVoxelCheckerd",
+    "DebugSaveTransformToDiskd",
 ]

@@ -233,17 +233,23 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             # Data is already prepared
             return
 
-        # Scan the "images" and "labels" folders
-        self._all_images = np.array(
-            natsorted(
-                list((self.data_dir / self.source_images_sub_folder).glob("*.tif"))
-            )
+        # Scan the "images" and "labels" folders and clean them
+        image_candidates = list(
+            (self.data_dir / self.source_images_sub_folder).glob("*.tif")
         )
-        self._all_labels = np.array(
-            natsorted(
-                list((self.data_dir / self.target_images_sub_folder).glob("*.tif"))
-            )
+        image_candidates = [
+            image for image in image_candidates if not str(image).startswith("._")
+        ]
+        label_candidates = list(
+            (self.data_dir / self.target_images_sub_folder).glob("*.tif")
         )
+        label_candidates = [
+            label for label in label_candidates if not str(label).startswith("._")
+        ]
+
+        # Store them
+        self._all_images = np.array(natsorted(image_candidates))
+        self._all_labels = np.array(natsorted(label_candidates))
 
         # Check that we found some images
         if len(self._all_images) == 0:
@@ -429,12 +435,25 @@ class DataModuleLocalFolder(pl.LightningDataModule):
             label_transform=None,
         )
 
+        # If there are fewer images than workers do not pin memory and do not
+        # fire up more workers than necessary.
+        pin_memory = self.pin_memory
+        inference_batch_size = self.inference_batch_size
+        num_inference_workers = self.num_inference_workers
+        persistent_workers = True if self.num_inference_workers > 0 else False
+        n_images = len(image_names)
+        if n_images <= self.inference_batch_size:
+            pin_memory = False
+            inference_batch_size = n_images
+            num_inference_workers = n_images
+            persistent_workers = False
+
         # Return the DataLoader
         return DataLoader(
             inference_dataset,
-            batch_size=self.inference_batch_size,
-            num_workers=self.num_inference_workers,
+            batch_size=inference_batch_size,
+            num_workers=num_inference_workers,
             collate_fn=list_data_collate,
-            pin_memory=self.pin_memory,
-            persistent_workers=True if self.num_workers > 0 else False,
+            pin_memory=pin_memory,
+            persistent_workers=persistent_workers,
         )

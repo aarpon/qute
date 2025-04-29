@@ -119,7 +119,7 @@ def test_label_to_two_class_mask(extract_test_transforms_data):
     assert torch.all(mask == data["label"]), "Unexpected result of the bw input."
 
     # Load 3D labels dataset (many objects)
-    reader = CustomTIFFReader(dtype=torch.int32)
+    reader = CustomTIFFReader(dtype=torch.int32, geometry="zyx")
     label = reader(Path(__file__).parent / "data" / "labels.tif")
     assert label.shape == (1, 26, 300, 300), "Unexpected image size."
 
@@ -141,7 +141,7 @@ def test_label_to_two_class_mask(extract_test_transforms_data):
 
     # Same as before but with BW mask (notice that the re-labeling will create
     # a slightly different set of starting objects)
-    reader = CustomTIFFReader(dtype=torch.int32)
+    reader = CustomTIFFReader(dtype=torch.int32, geometry="zyx")
     label = reader(Path(__file__).parent / "data" / "labels.tif")
     assert label.shape == (1, 26, 300, 300), "Unexpected image size."
 
@@ -282,7 +282,7 @@ def test_two_class_mask_to_labels_3d(extract_test_transforms_data):
     #
 
     # Load 3D labels image
-    reader = CustomTIFFReader(dtype=torch.int32)
+    reader = CustomTIFFReader(dtype=torch.int32, geometry="zyx")
     labels = reader(Path(__file__).parent / "data" / "labels.tif")
     assert labels.shape == (1, 26, 300, 300), "Unexpected image size."
     assert len(np.unique(labels)) - 1 == 68, "Unexpected number of labels."
@@ -385,21 +385,14 @@ def test_two_class_mask_to_labels_3d(extract_test_transforms_data):
 
 def test_custom_tiff_reader(extract_test_transforms_data):
     # Load TIFF file with default arguments
-    reader = CustomTIFFReader()
+    reader = CustomTIFFReader(geometry="zyx")
     image = reader(Path(__file__).parent / "data" / "labels.tif")
     assert image.shape == (1, 26, 300, 300), "Unexpected image shape."
     assert not hasattr(image, "meta"), "Metadata should not be present."
     assert not hasattr(image, "affine"), "'affine' property should not be present."
 
-    # Load TIFF file with (ensure_channel_first=False)
-    reader = CustomTIFFReader(ensure_channel_first=False)
-    image = reader(Path(__file__).parent / "data" / "labels.tif")
-    assert image.shape == (26, 300, 300), "Unexpected image shape."
-    assert not hasattr(image, "meta"), "Metadata should not be present."
-    assert not hasattr(image, "affine"), "'affine' property should not be present."
-
-    # Load TIFF file with (ensure_channel_first=True, as_meta_tensor=True)
-    reader = CustomTIFFReader(ensure_channel_first=True, as_meta_tensor=True)
+    # Load TIFF file with (as_meta_tensor=True)
+    reader = CustomTIFFReader(geometry="zyx", as_meta_tensor=True)
     image = reader(Path(__file__).parent / "data" / "labels.tif")
     assert image.shape == (1, 26, 300, 300), "Unexpected image shape."
     assert hasattr(image, "meta"), "Missing metadata."
@@ -412,23 +405,9 @@ def test_custom_tiff_reader(extract_test_transforms_data):
     ), "Wrong voxel size."
     assert image.meta["affine"].shape == (4, 4), "Unexpected affine shape."
 
-    # Load TIFF file with (ensure_channel_first=False, as_meta_tensor=True)
-    reader = CustomTIFFReader(ensure_channel_first=False, as_meta_tensor=True)
-    image = reader(Path(__file__).parent / "data" / "labels.tif")
-    assert image.shape == (26, 300, 300), "Unexpected image shape."
-    assert hasattr(image, "meta"), "Missing metadata."
-    assert hasattr(image, "affine"), "'affine' property missing."
-    assert torch.all(
-        image.affine == image.meta["affine"]
-    ), "Inconsistent affine matrices."
-    assert torch.all(
-        image.meta["affine"].diag() == torch.tensor((1.0, 1.0, 1.0, 1.0))
-    ), "Wrong voxel size."
-    assert image.meta["affine"].shape == (4, 4), "Unexpected affine shape."
-
-    # Load TIFF file with (ensure_channel_first=True, as_meta_tensor=True, voxel_size=(0.5, 0.1, 0.1))
+    # Load TIFF file with (voxel_size=(0.5, 0.1, 0.1))
     reader = CustomTIFFReader(
-        ensure_channel_first=True, as_meta_tensor=True, voxel_size=(0.5, 0.1, 0.1)
+        geometry="zyx", as_meta_tensor=True, voxel_size=(0.5, 0.1, 0.1)
     )
     image = reader(Path(__file__).parent / "data" / "labels.tif")
     assert image.shape == (1, 26, 300, 300), "Unexpected image shape."
@@ -445,18 +424,18 @@ def test_custom_tiff_reader(extract_test_transforms_data):
     ), "Wrong voxel size."
     assert image.meta["affine"].shape == (4, 4), "Unexpected affine shape."
 
-    # Load TIFF file with (ensure_channel_first=True, as_meta_tensor=False, voxel_size=(0.5, 0.1, 0.1))
+    # Load TIFF file with (as_meta_tensor=False, voxel_size=(0.5, 0.1, 0.1))
     reader = CustomTIFFReader(
-        ensure_channel_first=True, as_meta_tensor=False, voxel_size=(0.5, 0.1, 0.1)
+        geometry="zyx", as_meta_tensor=False, voxel_size=(0.5, 0.1, 0.1)
     )
     image = reader(Path(__file__).parent / "data" / "labels.tif")
     assert image.shape == (1, 26, 300, 300), "Unexpected image shape."
     assert not hasattr(image, "meta"), "Metadata should not be present."
     assert not hasattr(image, "affine"), "'affine' property should not be present."
 
-    # Load TIFF file with (ensure_channel_first=True, as_meta_tensor=True, voxel_size=(0.5, 0.1, 0.1), dtype=torch.int32)
+    # Load TIFF file with (as_meta_tensor=True, voxel_size=(0.5, 0.1, 0.1), dtype=torch.int32)
     reader = CustomTIFFReader(
-        ensure_channel_first=True,
+        geometry="zyx",
         as_meta_tensor=True,
         voxel_size=(0.5, 0.1, 0.1),
         dtype=torch.int32,
@@ -534,7 +513,7 @@ def test_custom_tiff_reader(extract_test_transforms_data):
 
 def test_custom_normalizer(extract_test_transforms_data):
     # Load TIFF file with default arguments
-    reader = CustomTIFFReader()
+    reader = CustomTIFFReader(geometry="zyx")
     image = reader(Path(__file__).parent / "data" / "labels.tif")
 
     # torch.min, torch.max
@@ -611,7 +590,7 @@ def test_custom_normalizer(extract_test_transforms_data):
 
 def test_normalized_distance_transform(extract_test_transforms_data):
     # Load TIFF file with (dtype=torch.int32)
-    reader = CustomTIFFReader(dtype=torch.int32)
+    reader = CustomTIFFReader(dtype=torch.int32, geometry="zyx")
     label = reader(Path(__file__).parent / "data" / "labels.tif")
     assert label.shape == (1, 26, 300, 300), "Unexpected image shape."
     assert not hasattr(label, "meta"), "Metadata should not be present."
@@ -644,7 +623,7 @@ def test_normalized_distance_transform(extract_test_transforms_data):
     #
 
     # Load TIFF file with (dtype=torch.int32)
-    reader = CustomTIFFReader(dtype=torch.int32, as_meta_tensor=True)
+    reader = CustomTIFFReader(dtype=torch.int32, geometry="zyx", as_meta_tensor=True)
     label = reader(Path(__file__).parent / "data" / "labels.tif")
 
     # Transform the image
@@ -663,7 +642,7 @@ def test_normalized_distance_transform(extract_test_transforms_data):
 
 def test_normalized_distance_transform_with_seeds(extract_test_transforms_data):
     # Load TIFF file with (dtype=torch.int32)
-    reader = CustomTIFFReader(dtype=torch.int32)
+    reader = CustomTIFFReader(dtype=torch.int32, geometry="zyx")
     label = reader(Path(__file__).parent / "data" / "labels.tif")
     assert label.shape == (1, 26, 300, 300), "Unexpected image shape."
     assert not hasattr(label, "meta"), "Metadata should not be present."
@@ -703,7 +682,7 @@ def test_normalized_distance_transform_with_seeds(extract_test_transforms_data):
     #
 
     # Load TIFF file with (dtype=torch.int32)
-    reader = CustomTIFFReader(dtype=torch.int32, as_meta_tensor=True)
+    reader = CustomTIFFReader(dtype=torch.int32, geometry="zyx", as_meta_tensor=True)
     label = reader(Path(__file__).parent / "data" / "labels.tif")
 
     # Transform the image
@@ -915,7 +894,7 @@ def test_to_label_batch(tmpdir):
 
 def test_watershed(extract_test_transforms_data):
     # Load TIFF file with (dtype=torch.int32)
-    reader = CustomTIFFReader(dtype=torch.int32, as_meta_tensor=True)
+    reader = CustomTIFFReader(dtype=torch.int32, geometry="zyx", as_meta_tensor=True)
     labels_orig = reader(Path(__file__).parent / "data" / "labels.tif")
     num_labels_before = len(np.unique(labels_orig)) - 1
     assert num_labels_before == 68, "Unexpected number of labels in start image."
@@ -1016,7 +995,7 @@ def test_watershed_synth(extract_test_transforms_data):
 
 def test_watershed_and_label(extract_test_transforms_data):
     # Load TIFF file with (dtype=torch.int32)
-    reader = CustomTIFFReader(dtype=torch.int32, as_meta_tensor=True)
+    reader = CustomTIFFReader(dtype=torch.int32, geometry="zyx", as_meta_tensor=True)
     label_image = reader(Path(__file__).parent / "data" / "labels.tif")
     num_labels_before = len(np.unique(label_image)) - 1
     assert num_labels_before == 68, "Unexpected number of labels in start image."
@@ -1085,7 +1064,7 @@ def test_watershed_and_label(extract_test_transforms_data):
 
 def test_watershed_and_label_dict_3d(extract_test_transforms_data):
     # Load TIFF file with (dtype=torch.int32)
-    reader = CustomTIFFReader(dtype=torch.int32, as_meta_tensor=True)
+    reader = CustomTIFFReader(dtype=torch.int32, geometry="zyx", as_meta_tensor=True)
     label_image = reader(Path(__file__).parent / "data" / "labels.tif")
     num_labels_before = len(np.unique(label_image)) - 1
     assert num_labels_before == 68, "Unexpected number of labels in start image."
@@ -1168,7 +1147,7 @@ def test_watershed_and_label_dict_3d(extract_test_transforms_data):
 
 def test_watershed_and_label_dict_2d(extract_test_transforms_data):
     # Load TIFF file with (dtype=torch.int32)
-    reader = CustomTIFFReader(dtype=torch.int32, as_meta_tensor=True)
+    reader = CustomTIFFReader(dtype=torch.int32, geometry="yx", as_meta_tensor=True)
     label_image = reader(Path(__file__).parent / "data" / "labels_2d.tif")
     num_labels_before = len(np.unique(label_image)) - 1
     assert num_labels_before == 14, "Unexpected number of labels in start image."

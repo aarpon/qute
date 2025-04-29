@@ -8,10 +8,14 @@
 # Contributors:
 #   Aaron Ponti - initial API and implementation
 # ******************************************************************************
-import pathlib
+import random
+import string
+from pathlib import Path, PosixPath
+from typing import Union
 
 import numpy as np
 import torch
+import userpaths
 from monai.data import MetaTensor
 from monai.transforms import MapTransform, Transform
 from typing_extensions import Unpack
@@ -232,7 +236,7 @@ class DebugInformer(Transform):
                         )
                 elif t is dict:
                     print(f"'{key}': dict;", end=" ")
-                elif t is pathlib.PosixPath:
+                elif t is PosixPath:
                     print(f"'{key}': path={str(data[key].name)};", end=" ")
                 else:
                     print(f"'{key}': {t};", end=" ")
@@ -366,3 +370,53 @@ class DebugExtractChannel(Transform):
             out[out <= self.mask_threshold] = 0
 
         return out
+
+
+class DebugSaveTransformToDiskd(Transform):
+    """
+    Save current data to disk.
+    """
+
+    def __init__(
+        self,
+        keys: tuple = ("image", "label"),
+        out_folder: Union[str, Path] = userpaths.get_desktop(),
+    ):
+        """Constructor.
+
+        Parameters
+        ----------
+
+        keys: tuple
+            Keys to process from the data dictionary.
+
+        out_folder: Path
+            Folder where to save the tensors.
+        """
+        super().__init__()
+        self.keys = keys
+        self.out_folder = Path(out_folder)
+
+    def generate_random_string(self, length: int = 8):
+        """Generates a random string of fixed length."""
+        characters = string.ascii_letters + string.digits
+        random_string = "".join(random.choices(characters, k=length))
+        return random_string
+
+    def __call__(self, data):
+        """Call the Transform."""
+
+        # Make sure the output folder exists
+        self.out_folder.mkdir(parents=True, exist_ok=True)
+
+        # Make a copy of the input dictionary
+        d = dict(data)
+
+        for key in self.keys:
+            tensor = d[key]
+            torch.save(
+                tensor, self.out_folder / f"{self.generate_random_string(12)}_{key}.pt"
+            )
+
+        # Return the tensor
+        return d

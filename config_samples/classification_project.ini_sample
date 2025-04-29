@@ -119,6 +119,10 @@ use_v2 = False
 # [dynunet] Whether to add deep supervision head before output
 deep_supervision = False
 
+# [dynunet] Number of feature maps output during deep supervision
+# Ignored if deep_supervision is False
+deep_supr_num = 1
+
 # [dynunet] Whether to use residual connection based convolution blocks
 res_block = True
 

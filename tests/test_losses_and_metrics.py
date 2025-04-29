@@ -61,9 +61,7 @@ def extract_test_transforms_data(tmpdir):
 
 def test_metrics_3d(extract_test_transforms_data):
     # Load TIFF file with (dtype=torch.int32)
-    reader = CustomTIFFReader(
-        dtype=torch.int32, as_meta_tensor=True, ensure_channel_first=True
-    )
+    reader = CustomTIFFReader(dtype=torch.int32, as_meta_tensor=True, geometry="zyx")
     label_image = reader(Path(__file__).parent / "data" / "labels.tif")
     num_labels_before = len(np.unique(label_image)) - 1
     assert num_labels_before == 68, "Unexpected number of labels in start image."
@@ -154,9 +152,7 @@ def test_metrics_3d(extract_test_transforms_data):
 
 def test_metrics_2d(extract_test_transforms_data):
     # Load TIFF file with (dtype=torch.int32)
-    reader = CustomTIFFReader(
-        dtype=torch.int32, as_meta_tensor=True, ensure_channel_first=True
-    )
+    reader = CustomTIFFReader(dtype=torch.int32, as_meta_tensor=True, geometry="yx")
     label_image = reader(Path(__file__).parent / "data" / "labels_2d.tif")
     num_labels_before = len(np.unique(label_image)) - 1
     assert num_labels_before == 14, "Unexpected number of labels in start image."
@@ -246,9 +242,7 @@ def test_metrics_2d(extract_test_transforms_data):
 
 def test_losses_3d(extract_test_transforms_data):
     # Load TIFF file with (dtype=torch.int32)
-    reader = CustomTIFFReader(
-        dtype=torch.int32, as_meta_tensor=True, ensure_channel_first=True
-    )
+    reader = CustomTIFFReader(dtype=torch.int32, as_meta_tensor=True, geometry="zyx")
     label_image = reader(Path(__file__).parent / "data" / "labels.tif")
     num_labels_before = len(np.unique(label_image)) - 1
     assert num_labels_before == 68, "Unexpected number of labels in start image."

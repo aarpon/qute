@@ -152,7 +152,7 @@ class SegmentationCampaignTransforms2D(CampaignTransforms):
             [
                 CustomTIFFReaderd(
                     keys=("image", "label"),
-                    ensure_channel_first=True,
+                    geometries={"image": "yx", "label": "yx"},
                     dtype=torch.float32,
                 ),
                 ZNormalized(keys=("image",)),
@@ -188,7 +188,7 @@ class SegmentationCampaignTransforms2D(CampaignTransforms):
             [
                 CustomTIFFReaderd(
                     keys=("image", "label"),
-                    ensure_channel_first=True,
+                    geometries={"image": "yx", "label": "yx"},
                     dtype=torch.float32,
                 ),
                 ZNormalized(keys=("image",)),
@@ -219,7 +219,7 @@ class SegmentationCampaignTransforms2D(CampaignTransforms):
         inference_transforms = Compose(
             [
                 CustomTIFFReader(
-                    ensure_channel_first=True,
+                    geometry="yx",
                     dtype=torch.float32,
                 ),
                 ZNormalize(),
@@ -268,7 +268,7 @@ class SegmentationCampaignTransformsIDT2D(CampaignTransforms):
             [
                 CustomTIFFReaderd(
                     keys=("image", "label"),
-                    ensure_channel_first=True,
+                    geometries={"image": "yx", "label": "yx"},
                     dtype=torch.float32,
                 ),
                 ZNormalized(keys=("image",)),
@@ -310,7 +310,7 @@ class SegmentationCampaignTransformsIDT2D(CampaignTransforms):
             [
                 CustomTIFFReaderd(
                     keys=("image", "label"),
-                    ensure_channel_first=True,
+                    geometries={"image": "yx", "label": "yx"},
                     dtype=torch.float32,
                 ),
                 ZNormalized(keys=("image",)),
@@ -347,7 +347,7 @@ class SegmentationCampaignTransformsIDT2D(CampaignTransforms):
         inference_transforms = Compose(
             [
                 CustomTIFFReader(
-                    ensure_channel_first=True,
+                    geometry="yx",
                     dtype=torch.float32,
                 ),
                 ZNormalize(),
@@ -449,7 +449,7 @@ class SegmentationCampaignTransformsIDT3D(CampaignTransforms):
             [
                 CustomTIFFReaderd(
                     keys=("image", "label"),
-                    ensure_channel_first=True,
+                    geometries={"image": "zyx", "label": "zyx"},
                     dtype=torch.float32,
                     as_meta_tensor=True,
                     voxel_size=self.voxel_size,
@@ -493,7 +493,7 @@ class SegmentationCampaignTransformsIDT3D(CampaignTransforms):
             [
                 CustomTIFFReaderd(
                     keys=("image", "label"),
-                    ensure_channel_first=True,
+                    geometries={"image": "zyx", "label": "zyx"},
                     dtype=torch.float32,
                     as_meta_tensor=True,
                     voxel_size=self.voxel_size,
@@ -538,7 +538,7 @@ class SegmentationCampaignTransformsIDT3D(CampaignTransforms):
         inference_transforms = Compose(
             [
                 CustomTIFFReader(
-                    ensure_channel_first=True,
+                    geometries={"image": "zyx", "label": "zyx"},
                     dtype=torch.float32,
                     as_meta_tensor=True,
                     voxel_size=self.voxel_size,
@@ -679,7 +679,7 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
             [
                 CustomTIFFReaderd(
                     keys=("image", "label"),
-                    ensure_channel_first=True,
+                    geometries={"image": "zyx", "label": "zyx"},
                     dtype=torch.float32,
                     as_meta_tensor=True,
                     voxel_size=self.voxel_size,
@@ -718,7 +718,7 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
             [
                 CustomTIFFReaderd(
                     keys=("image", "label"),
-                    ensure_channel_first=True,
+                    geometries={"image": "zyx", "label": "zyx"},
                     dtype=torch.float32,
                     as_meta_tensor=True,
                     voxel_size=self.voxel_size,
@@ -758,7 +758,7 @@ class SegmentationCampaignTransforms3D(CampaignTransforms):
         inference_transforms = Compose(
             [
                 CustomTIFFReader(
-                    ensure_channel_first=True,
+                    geometry="zyx",
                     dtype=torch.float32,
                     as_meta_tensor=True,
                     voxel_size=self.voxel_size,
@@ -844,7 +844,7 @@ class RestorationCampaignTransforms(CampaignTransforms):
             [
                 CustomTIFFReaderd(
                     keys=("image", "target"),
-                    ensure_channel_first=True,
+                    geometries={"image": "yx", "label": "yx"},
                     dtype=torch.float32,
                 ),
                 RandSpatialCropd(
@@ -873,7 +873,7 @@ class RestorationCampaignTransforms(CampaignTransforms):
             [
                 CustomTIFFReaderd(
                     keys=("image", "target"),
-                    ensure_channel_first=True,
+                    geometries={"image": "yx", "label": "yx"},
                     dtype=torch.float32,
                 ),
                 RandSpatialCropd(
@@ -905,7 +905,7 @@ class RestorationCampaignTransforms(CampaignTransforms):
         inference_transforms = Compose(
             [
                 CustomTIFFReader(
-                    ensure_channel_first=True,
+                    geometry="yx",
                     dtype=torch.float32,
                 ),
                 MinMaxNormalize(
@@ -965,7 +965,7 @@ class SelfSupervisedRestorationCampaignTransforms(CampaignTransforms):
             [
                 CustomTIFFReaderd(
                     keys=("image", "target"),
-                    ensure_channel_first=True,
+                    geometries={"image": "yx", "label": "yx"},
                     dtype=torch.float32,
                 ),
                 RandFlipd(
@@ -1004,7 +1004,7 @@ class SelfSupervisedRestorationCampaignTransforms(CampaignTransforms):
             [
                 CustomTIFFReaderd(
                     keys=("image", "target"),
-                    ensure_channel_first=True,
+                    geometries={"image": "yx", "label": "yx"},
                     dtype=torch.float32,
                 ),
                 ZNormalized(
@@ -1040,7 +1040,7 @@ class SelfSupervisedRestorationCampaignTransforms(CampaignTransforms):
         inference_transforms = Compose(
             [
                 CustomTIFFReader(
-                    ensure_channel_first=True,
+                    geometry="yx",
                     dtype=torch.float32,
                 ),
                 ZNormalize(),
