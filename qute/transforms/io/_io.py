@@ -17,6 +17,7 @@ from monai.data import MetaTensor
 from monai.transforms import MapTransform, Transform
 from nd2reader import ND2Reader
 from tifffile import imread
+from tifffile.tifffile import TiffFileError
 
 
 class CellposeLabelReader(Transform):
@@ -451,7 +452,11 @@ class CustomTIFFReader(Transform):
         image_path = str(Path(file_name).resolve())
 
         # Load the image
-        image = imread(image_path)
+        try:
+            image = imread(image_path)
+        except (FileNotFoundError, TiffFileError, OSError, KeyError, ValueError) as e:
+            print(f"File {image_path} could not be opened: {e}.")
+            raise e
 
         # Process the image based on geometry
         if image.ndim == 2:
