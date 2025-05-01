@@ -8,6 +8,7 @@
 #  Contributors:
 #    Aaron Ponti - initial API and implementation
 #  ******************************************************************************
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -112,7 +113,7 @@ class Project:
 
     def new_run(self):
         """Create a new run with model and results subfolders."""
-        name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        name = f"{self._config.trainer_mode.value}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         self._run_dir = self._runs_dir / name
         self._models_dir = self._run_dir / "models"
         self._models_dir.mkdir(parents=True)
@@ -167,22 +168,22 @@ class Project:
     def _is_valid_run_name(self, run) -> bool:
         """Check whether the run has a valid name."""
         # Check run directory name format
-        name = run.name
-        len_correct = len(name) == 15
-        try:
-            _ = int(name[:8])
-            date_correct = True
-        except ValueError:
-            date_correct = False
-        try:
-            _ = int(name[-6:])
-            time_correct = True
-        except ValueError:
-            time_correct = False
-        if not len_correct or not date_correct or not time_correct:
+        match = re.match(
+            r"^(?:(?P<name>[^_]+)_)?(?P<date>\d{8})_(?P<time>\d{6})$", run.name
+        )
+        if match:
+            return True
+        else:
             return False
 
-        return True
+    def mark_as_successful(self):
+        """Mark the run as successful."""
+        marker_file = self._run_dir / ".success"
+        try:
+            with open(marker_file, "w") as file:
+                file.write(f"")
+        except (FileNotFoundError, PermissionError) as e:
+            print(f"Could not mark run as successful: {e}")
 
     def clean(self):
         """Clean incomplete runs and predictions."""
@@ -202,21 +203,28 @@ class Project:
                 # This is current run and won't have any models or results yet
                 continue
 
-            models_dir = Path(run) / "models"
-            if not models_dir.is_dir():
-                to_clean = True
+            # For back-compatibility, we will not delete a run folder
+            # only based on the absence of a .success marker file; but
+            # if we find it, we immediately mark it against deletion
+            if (Path(run) / ".success").is_file():
+                to_clean = False
             else:
-                models_found = list(models_dir.rglob("*.ckpt"))
-                if len(models_found) == 0:
+                # Check explicitly
+                models_dir = Path(run) / "models"
+                if not models_dir.is_dir():
                     to_clean = True
+                else:
+                    models_found = list(models_dir.rglob("*.ckpt"))
+                    if len(models_found) == 0:
+                        to_clean = True
 
-            results_dir = Path(run) / "results"
-            if not results_dir.is_dir():
-                to_clean = True
-            else:
-                logs_found = list(results_dir.rglob("*version*"))
-                if len(logs_found) == 0:
+                results_dir = Path(run) / "results"
+                if not results_dir.is_dir():
                     to_clean = True
+                else:
+                    logs_found = list(results_dir.rglob("*version*"))
+                    if len(logs_found) == 0:
+                        to_clean = True
 
             if to_clean:
                 # Remove folder recursively

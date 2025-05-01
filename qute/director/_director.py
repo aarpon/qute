@@ -240,6 +240,9 @@ class Director(ABC):
                 "Trainer mode must be one of 'train', 'resume', or 'predict'."
             )
 
+        # Flag the run as successful
+        self.project.mark_as_successful()
+
     def _train(self):
         """Run a training from scratch."""
 
