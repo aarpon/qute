@@ -9,6 +9,7 @@
 #    Aaron Ponti - initial API and implementation
 #  ******************************************************************************
 import os
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional, Union
@@ -16,6 +17,7 @@ from typing import Optional, Union
 import pytorch_lightning as pl
 from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric, Metric
+from natsort import natsorted
 from pytorch_lightning.callbacks import (
     Callback,
     Checkpoint,
@@ -841,13 +843,23 @@ class EnsembleDirector(Director):
         self._run_ensemble_inference(target_for_prediction)
 
     def _load_models(self, models_dir: Path):
-        """Reload all models found in the model folds."""
+        """Reload all models found in the model folds.
+
+        The subfolders must be named fold_#, or ther will be skipped.
+        """
         # Re-load all (best) models
         models = []
-        fold = 0
-        while True:
+
+        # We consider all subfolders with name strictly matching "fold_#" where # can
+        # be any number of digits.
+        p = re.compile(r"^fold_\d+$")
+        matches = natsorted(
+            [d for d in models_dir.iterdir() if d.is_dir() and p.match(d.name)]
+        )
+
+        for match in matches:
             # Look for the model for current fold
-            model_paths = list((models_dir / f"fold_{fold}").glob("*.ckpt"))
+            model_paths = list(match.glob("*.ckpt"))
             if not model_paths:
                 break  # No more models
 
@@ -866,10 +878,7 @@ class EnsembleDirector(Director):
             models.append(model)
 
             # Inform
-            print(f"Fold {fold}: re-loaded model = {model_path}")
-
-            # Increase fold number
-            fold += 1
+            print(f"Re-loaded model = {model_path}")
 
         print(f"Loaded {len(models)} trained models.")
         return models
